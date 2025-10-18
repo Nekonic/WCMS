@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Woosuk Computer Management System{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+        .container { display: flex; min-height: 100vh; }
+
+        /* 사이드바 스타일 */
+        .sidebar {
+            width: 220px;
+            background: linear-gradient(180deg, #2d2d2d 0%, #1f1f1f 100%);
+            padding: 1.5em 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border-right: 1px solid #333;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+        }
+        .sidebar .logo {
+            padding: 0 1.5em;
+            margin-bottom: 2em;
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #4a9eff;
+        }
+        .sidebar .rooms { flex: 1; }
+        .sidebar a, .sidebar button {
+            display: block;
+            color: #b0b0b0;
+            text-decoration: none;
+            padding: 0.9em 1.5em;
+            margin: 0.3em 0.8em;
+            border: none;
+            background: none;
+            text-align: left;
+            width: calc(100% - 1.6em);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 0.95em;
+        }
+        .sidebar a:hover, .sidebar button:hover {
+            background: rgba(74, 158, 255, 0.15);
+            color: #4a9eff;
+            transform: translateX(3px);
+        }
+        .sidebar a.active {
+            background: rgba(74, 158, 255, 0.25);
+            color: #4a9eff;
+            font-weight: 600;
+            border-left: 3px solid #4a9eff;
+        }
+        .sidebar .divider {
+            height: 1px;
+            background: #333;
+            margin: 1em 1em;
+        }
+        .sidebar button {
+            color: #ff6b6b;
+            margin-top: 0.5em;
+        }
+        .sidebar button:hover {
+            background: rgba(255, 107, 107, 0.15);
+            color: #ff6b6b;
+        }
+
+        /* 메인 영역 */
+        .main {
+            flex: 1;
+            padding: 2.5em;
+            overflow-y: auto;
+        }
+        .main h2 {
+            margin-bottom: 1.5em;
+            font-size: 1.8em;
+            color: #fff;
+        }
+
+        /* PC 그리드 */
+        .pc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.2em;
+        }
+        .pc-card {
+            background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%);
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            padding: 1.2em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #333;
+        }
+        .pc-card:hover {
+            background: linear-gradient(135deg, #333 0%, #252525 100%);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(74, 158, 255, 0.3);
+            border-color: #4a9eff;
+        }
+        .pc-card .pc-name {
+            font-weight: 600;
+            margin-bottom: 0.8em;
+            font-size: 1.15em;
+        }
+        .pc-card .offline { color: #666; }
+        .pc-card .online { color: #4ade80; }
+        .pc-card .summary {
+            font-size: 0.88em;
+            line-height: 1.7;
+            color: #999;
+        }
+        .pc-card .summary div {
+            display: flex;
+            justify-content: space-between;
+            margin: 0.3em 0;
+        }
+        .pc-card .summary .label {
+            color: #777;
+        }
+        .pc-card .summary .value {
+            color: #ccc;
+            font-weight: 500;
+        }
+
+        /* 모달 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+        }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content {
+            background: #2a2a2a;
+            border-radius: 12px;
+            padding: 2em;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid #444;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5em;
+            padding-bottom: 1em;
+            border-bottom: 1px solid #444;
+        }
+        .modal-header h2 { margin: 0; color: #4a9eff; }
+        .modal-close {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 1.8em;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: #fff; }
+        .modal-body { margin: 1em 0; }
+        .modal-body .detail-row {
+            display: flex;
+            margin: 0.8em 0;
+            padding: 0.5em 0;
+        }
+        .modal-body .detail-label {
+            font-weight: 600;
+            width: 120px;
+            color: #888;
+        }
+        .modal-body .detail-value { color: #e0e0e0; }
+        .modal-footer {
+            margin-top: 2em;
+            display: flex;
+            gap: 0.8em;
+            padding-top: 1em;
+            border-top: 1px solid #444;
+        }
+        .btn {
+            padding: 0.8em 1.8em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        .btn-warning {
+            background: #f59e0b;
+            color: #fff;
+        }
+        .btn-warning:hover {
+            background: #d97706;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <nav class="sidebar">
+        <div>
+            <div class="logo">Woosuk Computer Management System</div>
+            <div class="rooms">
+                <a href="{{ url_for('index', room='1실습실') }}" {% if room=='1실습실' %}class="active"{% endif %}>실습실 1</a>
+                <a href="{{ url_for('index', room='2실습실') }}" {% if room=='2실습실' %}class="active"{% endif %}>실습실 2</a>
+            </div>
+        </div>
+        <div>
+            <div class="divider"></div>
+            {% if session.get('admin') %}
+                <form action="{{ url_for('logout') }}" method="post">
+                    <button type="submit">🔓 로그아웃</button>
+                </form>
+            {% else %}
+                <a href="{{ url_for('login') }}">🔐 로그인</a>
+            {% endif %}
+        </div>
+    </nav>
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+<!-- 모달 -->
+<div id="pcModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">PC 상세 정보</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+            로딩 중...
+        </div>
+        <div class="modal-footer" id="modalFooter">
+            <!-- 로그인 시 버튼 표시 -->
+        </div>
+    </div>
+</div>
+
+<script>
+function openModal(pcId) {
+    const modal = document.getElementById('pcModal');
+    modal.classList.add('show');
+
+    fetch(`/api/pc/${pcId}`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('modalTitle').textContent = `${data.hostname} 상세 정보`;
+
+            const body = document.getElementById('modalBody');
+            body.innerHTML = `
+                <div class="detail-row"><span class="detail-label">실습실:</span><span class="detail-value">${data.room_name}</span></div>
+                <div class="detail-row"><span class="detail-label">좌석:</span><span class="detail-value">${data.seat_number}</span></div>
+                <div class="detail-row"><span class="detail-label">상태:</span><span class="detail-value">${data.is_online ? '온라인' : '오프라인'}</span></div>
+                <div class="detail-row"><span class="detail-label">CPU:</span><span class="detail-value">${data.cpu_model || 'N/A'}</span></div>
+                <div class="detail-row"><span class="detail-label">RAM:</span><span class="detail-value">${data.ram_total || 0}MB</span></div>
+                <div class="detail-row"><span class="detail-label">디스크:</span><span class="detail-value">${data.disk_info || 'N/A'}</span></div>
+                <div class="detail-row"><span class="detail-label">OS:</span><span class="detail-value">${data.os_edition || 'N/A'}</span></div>
+                <div class="detail-row"><span class="detail-label">IP:</span><span class="detail-value">${data.ip_address || 'N/A'}</span></div>
+                <div class="detail-row"><span class="detail-label">MAC:</span><span class="detail-value">${data.mac_address || 'N/A'}</span></div>
+            `;
+
+            const footer = document.getElementById('modalFooter');
+            const isAdmin = {% if session.get('admin') %}true{% else %}false{% endif %};
+
+            if (isAdmin) {
+                footer.innerHTML = `
+                    <button class="btn btn-danger" onclick="shutdownPC(${pcId})">종료</button>
+                    <button class="btn btn-warning" onclick="rebootPC(${pcId})">재시작</button>
+                `;
+            } else {
+                footer.innerHTML = '<p style="color: #666;">제어 기능은 로그인 후 사용 가능합니다.</p>';
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            document.getElementById('modalBody').innerHTML = '<p style="color: #f00;">데이터를 불러올 수 없습니다.</p>';
+        });
+}
+
+function closeModal() {
+    document.getElementById('pcModal').classList.remove('show');
+}
+
+function shutdownPC(pcId) {
+    if (!confirm('정말 이 PC를 종료하시겠습니까?')) return;
+    fetch(`/api/pc/${pcId}/shutdown`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message || '종료 명령 전송 완료');
+            closeModal();
+        })
+        .catch(err => alert('오류 발생: ' + err));
+}
+
+function rebootPC(pcId) {
+    if (!confirm('정말 이 PC를 재시작하시겠습니까?')) return;
+    fetch(`/api/pc/${pcId}/reboot`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message || '재시작 명령 전송 완료');
+            closeModal();
+        })
+        .catch(err => alert('오류 발생: ' + err));
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('pcModal');
+    if (event.target === modal) closeModal();
+}
+</script>
+</body>
+</html>

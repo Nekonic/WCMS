@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ room or '실습실' }} PC 목록{% endblock %}
+{% block content %}
+<h2>{{ room or '실습실' }} PC 목록</h2>
+<div class="pc-grid">
+    {% for pc in pcs %}
+    <div class="pc-card" onclick="openModal({{ pc['id'] }})">
+        <div class="pc-name {{ 'online' if pc['is_online'] else 'offline' }}">{{ pc['hostname'] }}</div>
+        <div class="summary">
+            <div>OS: {{ pc['os_edition'] or 'N/A' }}</div>
+            <div>CPU: {{ pc['cpu_model'] or 'N/A' }}</div>
+            <div>RAM: {{ pc['ram_total'] or 0 }}MB</div>
+            <div>DISK: {{ pc['disk_info'] or 'N/A' }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

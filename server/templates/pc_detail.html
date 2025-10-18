@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ pc['hostname'] }} 상세 정보{% endblock %}
+{% block content %}
+<h2>{{ pc['hostname'] }} 상세 정보</h2>
+<ul>
+    <li>실습실: {{ pc['room_name'] }}</li>
+    <li>좌석: {{ pc['seat_number'] }}</li>
+    <li>온라인: {{ '예' if pc['is_online'] else '아니오' }}</li>
+    <li>OS: {{ pc['os_edition'] }}</li>
+    <li>CPU: {{ pc['cpu_model'] }}</li>
+    <li>RAM: {{ pc['ram_total'] }}MB</li>
+    <li>DISK: {{ pc['disk_info'] }}</li>
+</ul>
+{% if message %}
+    <div style="color: #0f0;">{{ message }}</div>
+{% endif %}
+{% if session.get('admin') %}
+    <form method="post" style="margin-top:1em;">
+        <button type="submit" name="action" value="shutdown">종료</button>
+        <button type="submit" name="action" value="reboot">재시작</button>
+    </form>
+{% else %}
+    <div style="color:#888; margin-top:1em;">로그인하면 원격 제어 기능을 사용할 수 있습니다.</div>
+{% endif %}
+<a href="{{ url_for('index', room=pc['room_name']) }}">목록으로</a>
+{% endblock %}
