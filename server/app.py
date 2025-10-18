@@ -64,5 +64,65 @@ def api_pc_reboot(pc_id):
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({'message': f'PC {pc_id} 재시작 명령 전송됨'})
 
+
+# 클라이언트 등록
+@app.route('/api/client/register', methods=['POST'])
+def api_client_register():
+    data = request.json
+    db = get_db()
+    try:
+        db.execute('''
+                   INSERT INTO pc_info (machine_id, hostname, room_name, seat_number, is_online)
+                   VALUES (?, ?, ?, ?, 1)
+                   ''', (data['machine_id'], data['hostname'], data['room_name'], data['seat_number']))
+        db.commit()
+        return jsonify({'status': 'success', 'message': '등록 완료'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# 클라이언트 상태 업데이트 (heartbeat)
+@app.route('/api/client/heartbeat', methods=['POST'])
+def api_client_heartbeat():
+    data = request.json
+    db = get_db()
+
+    # pc_info 업데이트
+    pc = db.execute('SELECT id FROM pc_info WHERE machine_id=?', (data['machine_id'],)).fetchone()
+    if not pc:
+        return jsonify({'status': 'error', 'message': 'PC not registered'}), 404
+
+    db.execute('UPDATE pc_info SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE machine_id=?', (data['machine_id'],))
+
+    # pc_status 삽입
+    info = data.get('system_info', {})
+    db.execute('''
+               INSERT INTO pc_status (pc_id, cpu_model, cpu_cores, cpu_threads, cpu_usage,
+                                      ram_total, ram_used, ram_usage_percent, ram_type,
+                                      disk_info, os_edition, os_version, os_build, os_activated,
+                                      ip_address, mac_address, gpu_model, gpu_vram,
+                                      current_user, uptime)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ''', (
+                   pc['id'],
+                   info.get('cpu_model'), info.get('cpu_cores'), info.get('cpu_threads'), info.get('cpu_usage'),
+                   info.get('ram_total'), info.get('ram_used'), info.get('ram_usage_percent'), info.get('ram_type'),
+                   info.get('disk_info'), info.get('os_edition'), info.get('os_version'), info.get('os_build'),
+                   info.get('os_activated'),
+                   info.get('ip_address'), info.get('mac_address'), info.get('gpu_model'), info.get('gpu_vram'),
+                   info.get('current_user'), info.get('uptime')
+               ))
+    db.commit()
+
+    return jsonify({'status': 'success', 'message': 'Heartbeat received'})
+
+
+# 명령 확인 (폴링)
+@app.route('/api/client/command', methods=['GET'])
+def api_client_command():
+    machine_id = request.args.get('machine_id')
+    # TODO: 명령 큐 구현 (나중에)
+    return jsonify({'command': None})
+
 if __name__ == '__main__':
     app.run(debug=True)
