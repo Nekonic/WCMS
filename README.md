@@ -2,7 +2,9 @@
 Woosuk Computer Management System
 
 ## Server
+
 ### 프로젝트 구조
+
 ```
 server/
 ├── app.py
@@ -33,7 +35,7 @@ server/
 [관리자 → 서버 → 클라이언트]
   1. 관리자: 종료 버튼 클릭
   2. 서버: 명령 큐에 저장
-  3. 클라이언트: GET /api/client/command (30초마다 폴링)
+  3. 클라이언트: GET /api/client/command (5초마다 폴링)
   4. 클라이언트: 명령 실행
   5. 클라이언트: POST /api/client/command/result
 ```
@@ -56,3 +58,11 @@ client/
 | pywin32 | background |
 | requests | server api |
 | pyinstaller | build exe |
+
+| PC | PC | PC | PC | 복도 | PC | PC | PC | PC |
+|----|----|----|----|----|----|----|----|----|
+| PC | PC | PC | PC |    | PC | PC | PC | PC |
+| PC | PC | PC | PC |    | PC | PC | PC | PC |
+| PC | PC | PC | PC |    | PC | PC | PC | PC |
+| PC | PC | PC | PC |    | PC | PC | PC | PC |
+| PC | PC | PC | PC |    | PC | PC | PC | PC |

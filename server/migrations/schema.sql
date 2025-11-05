@@ -97,6 +97,35 @@ CREATE TABLE admin_logs (
     FOREIGN KEY (pc_id) REFERENCES pc_info(id)
 );
 
+-- 좌석 배치 설정
+DROP TABLE IF EXISTS seat_layout;
+CREATE TABLE seat_layout (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_name TEXT UNIQUE NOT NULL,
+    columns INTEGER DEFAULT 10,
+    rows INTEGER DEFAULT 4,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 좌석 배치 맵핑
+DROP TABLE IF EXISTS seat_map;
+CREATE TABLE seat_map (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_name TEXT NOT NULL,
+    row INTEGER NOT NULL,
+    col INTEGER NOT NULL,
+    pc_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (pc_id) REFERENCES pc_info(id) ON DELETE SET NULL,
+    UNIQUE(room_name, row, col)
+);
+
+-- 초기 데이터
+INSERT INTO seat_layout (room_name, columns, rows) VALUES ('1실습실', 10, 4);
+INSERT INTO seat_layout (room_name, columns, rows) VALUES ('2실습실', 10, 4);
+
 --- 테스트 데이터
 
 -- 비밀번호: admin

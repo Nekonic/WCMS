@@ -1,18 +1,153 @@
 {% extends "base.html" %}
 {% block title %}{{ room or '실습실' }} PC 목록{% endblock %}
 {% block content %}
-<h2>{{ room or '실습실' }} PC 목록</h2>
-<div class="pc-grid">
-    {% for pc in pcs %}
-    <div class="pc-card" onclick="openModal({{ pc['id'] }})">
-        <div class="pc-name {{ 'online' if pc['is_online'] else 'offline' }}">{{ pc['hostname'] }}</div>
-        <div class="summary">
-            <div>OS: {{ pc['os_edition'] or 'N/A' }}</div>
-            <div>CPU: {{ pc['cpu_model'] or 'N/A' }}</div>
-            <div>RAM: {{ pc['ram_total'] or 0 }}MB</div>
-            <div>DISK: {{ pc['disk_info'] or 'N/A' }}</div>
-        </div>
-    </div>
-    {% endfor %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
+    <h2 style="margin: 0;">{{ room or '실습실' }} PC 목록</h2>
+    {% if admin %}
+    <a href="/layout/editor?room={{ room }}" style="
+        background: #4a9eff;
+        color: white;
+        padding: 0.7em 1.5em;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s;
+    " onmouseover="this.style.background='#3a8eef'" onmouseout="this.style.background='#4a9eff'">
+        ⚙️ 배치 편집
+    </a>
+    {% endif %}
 </div>
+
+<!-- 범례 -->
+<div style="display: flex; gap: 2em; margin-bottom: 2em; padding: 1em; background: #2a2a2a; border-radius: 8px; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 0.5em;">
+        <div style="width: 30px; height: 30px; background: #10b981; border-radius: 4px;"></div>
+        <span>정상 (CPU < 75%)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5em;">
+        <div style="width: 30px; height: 30px; background: #f59e0b; border-radius: 4px;"></div>
+        <span>경고 (CPU 75~90%)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5em;">
+        <div style="width: 30px; height: 30px; background: #dc2626; border-radius: 4px;"></div>
+        <span>위험 (CPU > 90%)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5em;">
+        <div style="width: 30px; height: 30px; background: #555; border-radius: 4px;"></div>
+        <span>오프라인</span>
+    </div>
+</div>
+
+<!-- 좌석 배치도 (그리드) -->
+<div style="margin-bottom: 2em; background: #2a2a2a; padding: 2em; border-radius: 10px; width: fit-content;">
+    <div id="layoutGrid" style="
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 0.5em;
+        width: fit-content;
+    ">
+        <!-- JavaScript에서 동적 생성 -->
+    </div>
+</div>
+
+<style>
+.seat-cell {
+    width: 80px;
+    height: 80px;
+    background: #1a1a1a;
+    border: 2px solid #444;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    padding: 0.5em;
+    text-align: center;
+    font-size: 0.8em;
+    box-sizing: border-box;
+}
+
+.seat-cell.occupied {
+    background: #10b981;
+    border: 2px solid #10b981;
+}
+
+.seat-cell.empty {
+    background: #2a2a2a;
+    border: 2px dashed #666;
+}
+
+.seat-cell:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.5);
+}
+</style>
+
+<script>
+const room = "{{ room }}";
+const allPCs = {{ pcs|tojson }};
+
+function renderLayout() {
+    fetch(`/api/layout/map/${room}`)
+        .then(res => res.json())
+        .then(data => {
+            const grid = document.getElementById('layoutGrid');
+            grid.style.gridTemplateColumns = `repeat(${data.cols}, 1fr)`;
+            grid.innerHTML = '';
+
+            // PC 맵 생성
+            const pcMap = {};
+            allPCs.forEach(pc => {
+                pcMap[pc.id] = pc;
+            });
+
+            // 셀 렌더링
+            for (let row = 0; row < data.rows; row++) {
+                for (let col = 0; col < data.cols; col++) {
+                    const seat = data.seats.find(s => s.row === row && s.col === col);
+                    const pc = seat && seat.pc_id ? pcMap[seat.pc_id] : null;
+
+                    const div = document.createElement('div');
+                    div.className = `seat-cell ${pc ? 'occupied' : 'empty'}`;
+
+                    if (pc) {
+                        const color = !pc.is_online ? '#555' :
+                                     (pc.cpu_usage && pc.cpu_usage > 90) ? '#dc2626' :
+                                     (pc.cpu_usage && pc.cpu_usage > 75) ? '#f59e0b' : '#10b981';
+
+                        div.style.background = color;
+                        div.style.borderColor = color;
+
+                        div.innerHTML = `
+                            <div style="font-weight: bold; color: white; font-size: 0.9em;">
+                                ${pc.seat_number}
+                            </div>
+                            <div style="font-size: 0.75em; color: #ddd;">
+                                ${pc.hostname}
+                            </div>
+                            <div style="font-size: 0.65em; color: #ccc;">
+                                ${!pc.is_online ? '오프라인' :
+                                  pc.cpu_usage ? `CPU: ${Math.round(pc.cpu_usage)}%` : '온라인'}
+                            </div>
+                        `;
+
+                        div.onclick = () => openModal(pc.id);
+                    } else {
+                        div.innerHTML = '<div style="color: #666; font-size: 0.8em;">빈 칸</div>';
+                    }
+
+                    grid.appendChild(div);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading layout:', error);
+            alert('배치를 불러올 수 없습니다.');
+        });
+}
+
+renderLayout();
+</script>
 {% endblock %}

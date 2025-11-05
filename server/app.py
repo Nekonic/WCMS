@@ -3,60 +3,145 @@ import sqlite3, bcrypt, os
 
 app = Flask(__name__)
 app.secret_key = 'woosuk25'
+
 DB_PATH = os.path.join(os.path.dirname(__file__), 'db.sqlite3')
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+
 @app.route('/')
 def index():
     room = request.args.get('room', '1실습실')
     db = get_db()
+
+    # pc_info와 최신 pc_status JOIN
     pcs_raw = db.execute('SELECT * FROM pc_info WHERE room_name=?', (room,)).fetchall()
     pcs = []
     for pc in pcs_raw:
         p = dict(pc)
-        status = db.execute('SELECT * FROM pc_status WHERE pc_id=? ORDER BY created_at DESC LIMIT 1', (pc['id'],)).fetchone()
-        for key in ['cpu_model','ram_total','disk_info','os_edition']:
-            p[key] = status[key] if status and key in status.keys() else None
-        pcs.append(p)
-    return render_template('index.html', pcs=pcs, room=room)
+        status = db.execute(
+            'SELECT * FROM pc_status WHERE pc_id=? ORDER BY created_at DESC LIMIT 1',
+            (pc['id'],)
+        ).fetchone()
 
-@app.route('/login', methods=['GET','POST'])
+        if status:
+            for key in ['cpu_usage', 'ram_total', 'ram_used', 'disk_info', 'os_edition']:
+                p[key] = status[key] if key in status.keys() else None
+        else:
+            p.update({
+                'cpu_usage': None,
+                'ram_total': 0,
+                'ram_used': 0,
+                'disk_info': None,
+                'os_edition': None
+            })
+
+        pcs.append(p)
+
+    return render_template('index.html', pcs=pcs, room=room, admin=session.get('admin'))
+
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username, password = request.form['username'], request.form['password']
         db = get_db()
         admin = db.execute('SELECT * FROM admins WHERE username=?', (username,)).fetchone()
+
         if admin and bcrypt.checkpw(password.encode(), admin['password_hash'].encode()):
             session['admin'] = username
             return redirect(url_for('index'))
+
         return render_template('login.html', error='아이디 또는 비밀번호가 올바르지 않습니다.')
+
     return render_template('login.html')
+
 
 @app.route('/logout', methods=['POST'])
 def logout():
     session.pop('admin', None)
     return redirect(url_for('index'))
 
+
+@app.route('/layout/editor')
+def layout_editor():
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+
+    room = request.args.get('room', '1실습실')
+    db = get_db()
+    pcs = db.execute('SELECT * FROM pc_info WHERE room_name=?', (room,)).fetchall()
+    return render_template('layout_editor.html', room=room, pcs=[dict(pc) for pc in pcs])
+
+
+@app.route('/api/layout/map/<room_name>', methods=['GET', 'POST'])
+def manage_layout_map(room_name):
+    if request.method == 'POST':
+        if not session.get('admin'):
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        data = request.json
+        db = get_db()
+
+        # 기존 배치 삭제
+        db.execute('DELETE FROM seat_map WHERE room_name=?', (room_name,))
+
+        # 새 배치 저장
+        for seat in data.get('seats', []):
+            if seat.get('pc_id'):
+                db.execute('''
+                           INSERT INTO seat_map (room_name, row, col, pc_id)
+                           VALUES (?, ?, ?, ?)
+                           ''', (room_name, seat['row'], seat['col'], seat['pc_id']))
+
+        # 레이아웃 설정 업데이트
+        db.execute('''
+            INSERT OR REPLACE INTO seat_layout (room_name, columns, rows)
+            VALUES (?, ?, ?)
+        ''', (room_name, data['cols'], data['rows']))
+
+        db.commit()
+        return jsonify({'status': 'success', 'message': '배치 저장 완료'})
+
+    else:  # GET 요청
+        db = get_db()
+        layout = db.execute('SELECT * FROM seat_layout WHERE room_name=?', (room_name,)).fetchone()
+        seats = db.execute('SELECT * FROM seat_map WHERE room_name=?', (room_name,)).fetchall()
+
+        if not layout:
+            return jsonify({'error': 'Layout not found'}), 404
+
+        return jsonify({
+            'rows': layout['rows'],
+            'cols': layout['columns'],
+            'seats': [dict(s) for s in seats]
+        })
+
+
 @app.route('/api/pc/<int:pc_id>')
 def api_pc_detail(pc_id):
     db = get_db()
     pc = db.execute('SELECT * FROM pc_info WHERE id=?', (pc_id,)).fetchone()
     status = db.execute('SELECT * FROM pc_status WHERE pc_id=? ORDER BY created_at DESC LIMIT 1', (pc_id,)).fetchone()
+
     result = dict(pc) if pc else {}
     if status:
-        for key in ['cpu_model','ram_total','disk_info','os_edition','ip_address','mac_address']:
+        for key in ['cpu_model', 'ram_total', 'disk_info', 'os_edition', 'ip_address', 'mac_address']:
             result[key] = status[key] if key in status.keys() else None
+
     return jsonify(result)
+
 
 @app.route('/api/pc/<int:pc_id>/shutdown', methods=['POST'])
 def api_pc_shutdown(pc_id):
     if not session.get('admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({'message': f'PC {pc_id} 종료 명령 전송됨'})
+
 
 @app.route('/api/pc/<int:pc_id>/reboot', methods=['POST'])
 def api_pc_reboot(pc_id):
@@ -65,11 +150,11 @@ def api_pc_reboot(pc_id):
     return jsonify({'message': f'PC {pc_id} 재시작 명령 전송됨'})
 
 
-# 클라이언트 등록
 @app.route('/api/client/register', methods=['POST'])
 def api_client_register():
     data = request.json
     db = get_db()
+
     try:
         db.execute('''
                    INSERT INTO pc_info (machine_id, hostname, room_name, seat_number, is_online)
@@ -81,7 +166,6 @@ def api_client_register():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-# 클라이언트 상태 업데이트 (heartbeat)
 @app.route('/api/client/heartbeat', methods=['POST'])
 def api_client_heartbeat():
     data = request.json
@@ -113,16 +197,15 @@ def api_client_heartbeat():
                    info.get('current_user'), info.get('uptime')
                ))
     db.commit()
-
     return jsonify({'status': 'success', 'message': 'Heartbeat received'})
 
 
-# 명령 확인 (폴링)
-@app.route('/api/client/command', methods=['GET'])
+@app.route('/api/client/command')
 def api_client_command():
     machine_id = request.args.get('machine_id')
     # TODO: 명령 큐 구현 (나중에)
     return jsonify({'command': None})
 
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5050, debug=True)
