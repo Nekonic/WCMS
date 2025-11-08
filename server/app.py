@@ -19,7 +19,6 @@ def index():
     room = request.args.get('room', '1실습실')
     db = get_db()
 
-    # pc_info와 최신 pc_status JOIN
     pcs_raw = db.execute('SELECT * FROM pc_info WHERE room_name=?', (room,)).fetchall()
     pcs = []
 
@@ -81,6 +80,60 @@ def layout_editor():
     return render_template('layout_editor.html', room=room, pcs=[dict(pc) for pc in pcs])
 
 
+# ==================== 대기 중인 PC 관리 ====================
+
+@app.route('/admin/pending')
+def admin_pending_list():
+    """관리자: 대기 중인 PC 목록"""
+    if not session.get('admin'):
+        return redirect(url_for('login'))
+
+    db = get_db()
+    pending = db.execute('''
+                         SELECT *
+                         FROM pc_pending
+                         WHERE assigned = 0
+                         ORDER BY created_at DESC
+                         ''').fetchall()
+
+    return render_template('admin_pending.html', pending=pending)
+
+
+@app.route('/admin/assign/<int:pending_id>', methods=['POST'])
+def admin_assign_pc(pending_id):
+    """관리자: PC에 실습실/좌석 배정"""
+    if not session.get('admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.json
+    db = get_db()
+
+    pending = db.execute('SELECT * FROM pc_pending WHERE id=?', (pending_id,)).fetchone()
+
+    if not pending:
+        return jsonify({'error': 'Not found'}), 404
+
+    try:
+        db.execute('''
+                   INSERT INTO pc_info (machine_id, hostname, room_name, seat_number, ip_address, is_online)
+                   VALUES (?, ?, ?, ?, ?, 1)
+                   ''', (
+                       pending['machine_id'],
+                       pending['hostname'],
+                       data['room_name'],
+                       data['seat_number'],
+                       pending['ip_address']
+                   ))
+
+        db.execute('UPDATE pc_pending SET assigned=1 WHERE id=?', (pending_id,))
+        db.commit()
+
+        return jsonify({'status': 'success', 'message': '배정 완료'})
+
+    except sqlite3.IntegrityError:
+        return jsonify({'error': '해당 좌석은 이미 사용 중입니다.'}), 409
+
+
 # ==================== 레이아웃 API ====================
 
 @app.route('/api/layout/map/<room_name>', methods=['GET', 'POST'])
@@ -92,10 +145,8 @@ def manage_layout_map(room_name):
         data = request.json
         db = get_db()
 
-        # 기존 배치 삭제
         db.execute('DELETE FROM seat_map WHERE room_name=?', (room_name,))
 
-        # 새 배치 저장
         for seat in data.get('seats', []):
             if seat.get('pc_id'):
                 db.execute('''
@@ -103,7 +154,6 @@ def manage_layout_map(room_name):
                            VALUES (?, ?, ?, ?)
                            ''', (room_name, seat['row'], seat['col'], seat['pc_id']))
 
-        # 레이아웃 설정 업데이트
         db.execute('''
             INSERT OR REPLACE INTO seat_layout (room_name, cols, rows)
             VALUES (?, ?, ?)
@@ -112,7 +162,7 @@ def manage_layout_map(room_name):
         db.commit()
         return jsonify({'status': 'success', 'message': '배치 저장 완료'})
 
-    else:  # GET 요청
+    else:
         db = get_db()
         layout = db.execute('SELECT * FROM seat_layout WHERE room_name=?', (room_name,)).fetchone()
         seats = db.execute('SELECT * FROM seat_map WHERE room_name=?', (room_name,)).fetchall()
@@ -135,7 +185,7 @@ def api_pc_command(pc_id):
         return jsonify({'error': 'Unauthorized'}), 401
 
     data = request.json
-    cmd_type = data.get('type')  # 'shutdown', 'reboot', 'install', 'execute'
+    cmd_type = data.get('type')
     cmd_data = data.get('data', {})
 
     db = get_db()
@@ -201,12 +251,10 @@ def api_client_command():
     timeout = int(request.args.get('timeout', 30))
     db = get_db()
 
-    # machine_id로 pc_id 조회
     pc = db.execute('SELECT id FROM pc_info WHERE machine_id=?', (machine_id,)).fetchone()
     if not pc:
         return jsonify({'command_type': None, 'command_data': None})
 
-    # Long-polling: timeout 동안 명령 대기
     start_time = time.time()
     while time.time() - start_time < timeout:
         cmd = db.execute(
@@ -222,27 +270,49 @@ def api_client_command():
                 'command_data': cmd['command_data']
             })
 
-        time.sleep(1)  # 1초 대기 후 다시 확인
+        time.sleep(1)
 
-    # 타임아웃: 명령 없음
     return jsonify({'command_type': None, 'command_data': None})
 
 
 @app.route('/api/client/register', methods=['POST'])
 def api_client_register():
+    """클라이언트 등록 요청 → 대기 목록에 추가"""
     data = request.json
     db = get_db()
 
+    # 이미 등록된 PC인지 확인
+    existing = db.execute(
+        'SELECT id, room_name, seat_number FROM pc_info WHERE machine_id=?',
+        (data['machine_id'],)
+    ).fetchone()
+
+    if existing:
+        return jsonify({
+            'status': 'already_registered',
+            'room_name': existing['room_name'],
+            'seat_number': existing['seat_number']
+        })
+
+    # 대기 목록에 추가
     try:
         db.execute('''
-                   INSERT INTO pc_info (machine_id, hostname, room_name, seat_number, is_online)
-                   VALUES (?, ?, ?, ?, 1)
-                   ''', (data['machine_id'], data['hostname'], data['room_name'], data['seat_number']))
+                   INSERT INTO pc_pending (machine_id, hostname, ip_address)
+                   VALUES (?, ?, ?)
+                   ''', (data['machine_id'], data.get('hostname'), data.get('ip_address')))
         db.commit()
 
-        return jsonify({'status': 'success', 'message': '등록 완료'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return jsonify({
+            'status': 'pending',
+            'message': '관리자 승인 대기 중입니다.'
+        }), 202
+
+    except sqlite3.IntegrityError:
+        # 이미 대기 목록에 있음
+        return jsonify({
+            'status': 'pending',
+            'message': '관리자 승인 대기 중입니다.'
+        }), 202
 
 
 @app.route('/api/client/heartbeat', methods=['POST'])
@@ -250,14 +320,12 @@ def api_client_heartbeat():
     data = request.json
     db = get_db()
 
-    # pc_info 업데이트
     pc = db.execute('SELECT id FROM pc_info WHERE machine_id=?', (data['machine_id'],)).fetchone()
     if not pc:
         return jsonify({'status': 'error', 'message': 'PC not registered'}), 404
 
     db.execute('UPDATE pc_info SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE machine_id=?', (data['machine_id'],))
 
-    # pc_status 삽입
     info = data.get('system_info', {})
 
     db.execute('''

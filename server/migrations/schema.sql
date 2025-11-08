@@ -59,6 +59,15 @@ CREATE TABLE pc_command (
     FOREIGN KEY (pc_id) REFERENCES pc_info(id) ON DELETE CASCADE
 );
 
+CREATE TABLE pc_pending (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    machine_id TEXT UNIQUE NOT NULL,
+    hostname TEXT,
+    ip_address TEXT,
+    assigned BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE installed_programs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pc_id INTEGER NOT NULL,

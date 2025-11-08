@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import json
@@ -17,36 +18,33 @@ print(f"[*] Machine ID: {MACHINE_ID}")
 
 
 def register_or_heartbeat():
-    """5초마다 heartbeat 전송 (상태 유지 + 등록)"""
+    """5초마다 heartbeat 전송"""
     data = {
         "machine_id": MACHINE_ID,
         "system_info": collect_system_info()
     }
     try:
-        r = requests.post(f"{SERVER_URL}api/client/heartbeat", json=data)
+        r = requests.post(f"{SERVER_URL}api/client/heartbeat", json=data, timeout=5)
 
         if r.status_code == 404:
-            print("[!] 미등록 PC → 등록 시작")
-            for seat in range(1, 41):
-                reg_data = {
-                    "machine_id": MACHINE_ID,
-                    "hostname": "WCMS-CLIENT",
-                    "room_name": "1실습실",
-                    "seat_number": seat
-                }
-                r = requests.post(f"{SERVER_URL}api/client/register", json=reg_data)
-                if r.status_code == 200:
-                    print(f"[+] 좌석 {seat}에 등록 성공")
-                    break
-                elif r.status_code != 409:  # 409 = UNIQUE constraint
-                    break
+            # 미등록 PC → 간단한 등록 요청
+            print("[!] 미등록 PC → 서버에 등록 요청")
+            reg_data = {
+                "machine_id": MACHINE_ID,
+                "hostname": os.getenv('COMPUTERNAME', 'WCMS-CLIENT'),
+                "ip_address": collect_system_info().get('ip_address')
+            }
+
+            r = requests.post(f"{SERVER_URL}api/client/register", json=reg_data, timeout=5)
+            if r.status_code == 200:
+                result = r.json()
+                print(f"[+] 등록 성공: {result.get('room_name')} - {result.get('seat_number')}번")
+            elif r.status_code == 202:
+                print("[-] 등록 대기 중... (관리자 승인 필요)")
         elif r.status_code == 200:
-            print(f"[+] Heartbeat: OK")
-        else:
-            print(f"[-] Heartbeat 오류: {r.status_code}")
+            print("[+] Heartbeat: OK")
     except Exception as e:
         print(f"[-] Heartbeat 오류: {e}")
-
 
 def poll_command():
     """Long-polling으로 명령 대기 (이벤트 기반)"""
