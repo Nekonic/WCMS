@@ -1,0 +1,86 @@
+name: Build WCMS Client EXE
+
+on:
+  push:
+    tags:
+      - 'client-v*'  # client-v0.1, client-v0.2 등
+    paths:
+      - 'client/**'
+      - '.github/workflows/build-client.yml'
+  workflow_dispatch:  # 수동 실행 허용
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      working-directory: ./client
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build EXE with PyInstaller
+      working-directory: ./client
+      run: |
+        pyinstaller --onefile --windowed --name WCMS-Client main.py
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        $tag = "${{ github.ref }}"
+        $version = $tag -replace 'refs/tags/client-v', ''
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: WCMS Client v${{ steps.version.outputs.version }}
+        body: |
+          # WCMS Client Beta v${{ steps.version.outputs.version }}
+          
+          ## 설치 방법
+          1. `WCMS-Client.exe` 다운로드
+          2. Windows 환경에서 실행
+          3. 서버 주소 입력 후 시작
+          
+          ## 변경 사항
+          - 시스템 정보 수집 개선
+          - 네트워크 정보 실제 값 조회
+          - Long-polling으로 실시간 명령 실행
+          
+          ## 요구사항
+          - Windows 10/11
+          - Python 3.9+ (포함됨)
+        draft: false
+        prerelease: true
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./client/dist/WCMS-Client.exe
+        asset_name: WCMS-Client-v${{ steps.version.outputs.version }}.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload as Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: WCMS-Client-v${{ steps.version.outputs.version }}
+        path: ./client/dist/WCMS-Client.exe
+        retention-days: 30

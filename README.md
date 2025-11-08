@@ -42,10 +42,8 @@ server/
 ### 프로젝트 구조
 ```
 client/
-├── config.py           # 설정 (서버 URL, 기기 정보)
 ├── main.py            # 메인 실행 파일
 ├── collector.py       # 시스템 정보 수집
-├── api.py             # 서버 통신
 ├── executor.py        # 명령 실행 (종료/재시작/CMD)
 ├── requirements.txt
 └── build.spec         # PyInstaller 설정
