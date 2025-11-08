@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g
 import sqlite3, bcrypt, os, json, time
 
 app = Flask(__name__)
@@ -7,16 +7,29 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'db.sqlite3')
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if 'db' not in g:
+        g.db = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute('PRAGMA journal_mode=WAL')
+        g.db.execute('PRAGMA busy_timeout=5000')
+    return g.db
 
 
-# ==================== 웹 UI 라우트 ====================
+@app.teardown_appcontext
+def close_db(error):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
 
 @app.route('/')
 def index():
-    room = request.args.get('room', '1실습실')
+    room = request.args.get('room')  # 기본값 제거
+
+    if not room:
+        # room 파라미터 없으면 전체 PC 표시
+        return redirect(url_for('index', room='1실습실'))
+
     db = get_db()
 
     pcs_raw = db.execute('SELECT * FROM pc_info WHERE room_name=?', (room,)).fetchall()
@@ -33,13 +46,7 @@ def index():
             for key in ['cpu_usage', 'ram_total', 'ram_used', 'disk_info', 'os_edition']:
                 p[key] = status[key] if key in status.keys() else None
         else:
-            p.update({
-                'cpu_usage': None,
-                'ram_total': 0,
-                'ram_used': 0,
-                'disk_info': None,
-                'os_edition': None
-            })
+            p.update({'cpu_usage': None, 'ram_total': 0, 'ram_used': 0, 'disk_info': None, 'os_edition': None})
         pcs.append(p)
 
     return render_template('index.html', pcs=pcs, room=room, admin=session.get('admin'))
@@ -73,102 +80,74 @@ def layout_editor():
     if not session.get('admin'):
         return redirect(url_for('login'))
 
-    room = request.args.get('room', '1실습실')
+    room = request.args.get('room')  # 기본값 제거
+
+    if not room:
+        return redirect(url_for('layout_editor', room='1실습실'))
+
     db = get_db()
+
+    # 해당 실습실에 배치된 PC
     pcs = db.execute('SELECT * FROM pc_info WHERE room_name=?', (room,)).fetchall()
 
-    return render_template('layout_editor.html', room=room, pcs=[dict(pc) for pc in pcs])
+    # 미배치 PC (room_name이 NULL)
+    unassigned = db.execute('SELECT * FROM pc_info WHERE room_name IS NULL').fetchall()
 
+    return render_template('layout_editor.html',
+                           room=room,
+                           pcs=[dict(pc) for pc in pcs],
+                           unassigned=[dict(pc) for pc in unassigned])
 
-# ==================== 대기 중인 PC 관리 ====================
-
-@app.route('/admin/pending')
-def admin_pending_list():
-    """관리자: 대기 중인 PC 목록"""
-    if not session.get('admin'):
-        return redirect(url_for('login'))
-
-    db = get_db()
-    pending = db.execute('''
-                         SELECT *
-                         FROM pc_pending
-                         WHERE assigned = 0
-                         ORDER BY created_at DESC
-                         ''').fetchall()
-
-    return render_template('admin_pending.html', pending=pending)
-
-
-@app.route('/admin/assign/<int:pending_id>', methods=['POST'])
-def admin_assign_pc(pending_id):
-    """관리자: PC에 실습실/좌석 배정"""
-    if not session.get('admin'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    data = request.json
-    db = get_db()
-
-    pending = db.execute('SELECT * FROM pc_pending WHERE id=?', (pending_id,)).fetchone()
-
-    if not pending:
-        return jsonify({'error': 'Not found'}), 404
-
-    try:
-        db.execute('''
-                   INSERT INTO pc_info (machine_id, hostname, room_name, seat_number, ip_address, is_online)
-                   VALUES (?, ?, ?, ?, ?, 1)
-                   ''', (
-                       pending['machine_id'],
-                       pending['hostname'],
-                       data['room_name'],
-                       data['seat_number'],
-                       pending['ip_address']
-                   ))
-
-        db.execute('UPDATE pc_pending SET assigned=1 WHERE id=?', (pending_id,))
-        db.commit()
-
-        return jsonify({'status': 'success', 'message': '배정 완료'})
-
-    except sqlite3.IntegrityError:
-        return jsonify({'error': '해당 좌석은 이미 사용 중입니다.'}), 409
-
-
-# ==================== 레이아웃 API ====================
 
 @app.route('/api/layout/map/<room_name>', methods=['GET', 'POST'])
 def manage_layout_map(room_name):
+    db = get_db()
+
     if request.method == 'POST':
         if not session.get('admin'):
             return jsonify({'error': 'Unauthorized'}), 401
 
         data = request.json
-        db = get_db()
 
+        # 1. 기존 배치 삭제
         db.execute('DELETE FROM seat_map WHERE room_name=?', (room_name,))
 
+        # 2. 해당 실습실에 있던 PC들을 미배치로 변경
+        db.execute('UPDATE pc_info SET room_name=NULL WHERE room_name=?', (room_name,))
+
+        # 3. 새로운 배치 저장
         for seat in data.get('seats', []):
             if seat.get('pc_id'):
+                # seat_map에 저장
                 db.execute('''
                            INSERT INTO seat_map (room_name, row, col, pc_id)
                            VALUES (?, ?, ?, ?)
                            ''', (room_name, seat['row'], seat['col'], seat['pc_id']))
 
+                # pc_info 테이블 업데이트 (중요!)
+                db.execute('''
+                           UPDATE pc_info
+                           SET room_name=?
+                           WHERE id = ?
+                           ''', (room_name, seat['pc_id']))
+
+        # 4. 레이아웃 저장
         db.execute('''
             INSERT OR REPLACE INTO seat_layout (room_name, cols, rows)
             VALUES (?, ?, ?)
-        ''', (room_name, data['cols'], data['rows']))
+        ''', (room_name, data.get('cols', 8), data.get('rows', 5)))
 
         db.commit()
-        return jsonify({'status': 'success', 'message': '배치 저장 완료'})
+        return jsonify({'status': 'success'})
 
     else:
-        db = get_db()
         layout = db.execute('SELECT * FROM seat_layout WHERE room_name=?', (room_name,)).fetchone()
         seats = db.execute('SELECT * FROM seat_map WHERE room_name=?', (room_name,)).fetchall()
 
         if not layout:
-            return jsonify({'error': 'Layout not found'}), 404
+            db.execute('INSERT INTO seat_layout (room_name, rows, cols) VALUES (?, 5, 8)', (room_name,))
+            db.commit()
+            layout = {'rows': 5, 'cols': 8}
 
         return jsonify({
             'rows': layout['rows'],
@@ -176,79 +155,26 @@ def manage_layout_map(room_name):
             'seats': [dict(s) for s in seats]
         })
 
-
-# ==================== PC 제어 API ====================
-
 @app.route('/api/pc/<int:pc_id>/command', methods=['POST'])
 def api_pc_command(pc_id):
     if not session.get('admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     data = request.json
-    cmd_type = data.get('type')
-    cmd_data = data.get('data', {})
-
     db = get_db()
     db.execute(
         'INSERT INTO pc_command (pc_id, command_type, command_data) VALUES (?, ?, ?)',
-        (pc_id, cmd_type, json.dumps(cmd_data))
+        (pc_id, data.get('type'), json.dumps(data.get('data', {})))
     )
     db.commit()
 
-    return jsonify({'message': f'명령 저장됨: {cmd_type}'})
+    return jsonify({'message': '명령 저장됨'})
 
-
-@app.route('/api/pc/<int:pc_id>/shutdown', methods=['POST'])
-def api_pc_shutdown(pc_id):
-    if not session.get('admin'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    db = get_db()
-    db.execute(
-        'INSERT INTO pc_command (pc_id, command_type, command_data) VALUES (?, ?, ?)',
-        (pc_id, 'shutdown', json.dumps({}))
-    )
-    db.commit()
-
-    return jsonify({'message': f'PC {pc_id} 종료 명령 저장됨'})
-
-
-@app.route('/api/pc/<int:pc_id>/reboot', methods=['POST'])
-def api_pc_reboot(pc_id):
-    if not session.get('admin'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    db = get_db()
-    db.execute(
-        'INSERT INTO pc_command (pc_id, command_type, command_data) VALUES (?, ?, ?)',
-        (pc_id, 'reboot', json.dumps({}))
-    )
-    db.commit()
-
-    return jsonify({'message': f'PC {pc_id} 재시작 명령 저장됨'})
-
-
-@app.route('/api/pc/<int:pc_id>', methods=['GET'])
-def api_pc_detail(pc_id):
-    db = get_db()
-    pc = db.execute('SELECT * FROM pc_info WHERE id=?', (pc_id,)).fetchone()
-    status = db.execute('SELECT * FROM pc_status WHERE pc_id=? ORDER BY created_at DESC LIMIT 1', (pc_id,)).fetchone()
-
-    result = dict(pc) if pc else {}
-
-    if status:
-        for key in ['cpu_model', 'ram_total', 'disk_info', 'os_edition', 'ip_address', 'mac_address']:
-            result[key] = status[key] if key in status.keys() else None
-
-    return jsonify(result)
-
-
-# ==================== 클라이언트 API ====================
 
 @app.route('/api/client/command')
 def api_client_command():
     machine_id = request.args.get('machine_id')
-    timeout = int(request.args.get('timeout', 30))
+    timeout = int(request.args.get('timeout', 10))
     db = get_db()
 
     pc = db.execute('SELECT id FROM pc_info WHERE machine_id=?', (machine_id,)).fetchone()
@@ -265,55 +191,39 @@ def api_client_command():
         if cmd:
             db.execute('UPDATE pc_command SET executed=1 WHERE id=?', (cmd['id'],))
             db.commit()
-            return jsonify({
-                'command_type': cmd['command_type'],
-                'command_data': cmd['command_data']
-            })
+            return jsonify({'command_type': cmd['command_type'], 'command_data': cmd['command_data']})
 
-        time.sleep(1)
+        time.sleep(0.5)
 
     return jsonify({'command_type': None, 'command_data': None})
 
 
 @app.route('/api/client/register', methods=['POST'])
 def api_client_register():
-    """클라이언트 등록 요청 → 대기 목록에 추가"""
+    """클라이언트 등록 → 미배치 상태로"""
     data = request.json
     db = get_db()
 
-    # 이미 등록된 PC인지 확인
-    existing = db.execute(
-        'SELECT id, room_name, seat_number FROM pc_info WHERE machine_id=?',
-        (data['machine_id'],)
-    ).fetchone()
+    existing = db.execute('SELECT id, room_name, seat_number FROM pc_info WHERE machine_id=?',
+                          (data['machine_id'],)).fetchone()
 
     if existing:
         return jsonify({
             'status': 'already_registered',
             'room_name': existing['room_name'],
             'seat_number': existing['seat_number']
-        })
+        }), 200
 
-    # 대기 목록에 추가
-    try:
-        db.execute('''
-                   INSERT INTO pc_pending (machine_id, hostname, ip_address)
-                   VALUES (?, ?, ?)
-                   ''', (data['machine_id'], data.get('hostname'), data.get('ip_address')))
-        db.commit()
+    # 미배치 상태로 등록
+    db.execute('''
+               INSERT INTO pc_info (machine_id, hostname, ip_address, is_online, room_name, seat_number)
+               VALUES (?, ?, ?, 1, NULL, NULL)
+               ''', (data['machine_id'], data.get('hostname'), data.get('ip_address')))
+    db.commit()
 
-        return jsonify({
-            'status': 'pending',
-            'message': '관리자 승인 대기 중입니다.'
-        }), 202
+    print(f"[+] PC 등록 (미배치): {data['machine_id']}")
 
-    except sqlite3.IntegrityError:
-        # 이미 대기 목록에 있음
-        return jsonify({
-            'status': 'pending',
-            'message': '관리자 승인 대기 중입니다.'
-        }), 202
-
+    return jsonify({'status': 'success', 'message': '등록 완료 (관리자가 배치해야 합니다)'}), 200
 
 @app.route('/api/client/heartbeat', methods=['POST'])
 def api_client_heartbeat():
@@ -327,26 +237,19 @@ def api_client_heartbeat():
     db.execute('UPDATE pc_info SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE machine_id=?', (data['machine_id'],))
 
     info = data.get('system_info', {})
-
     db.execute('''
-               INSERT INTO pc_status (pc_id, cpu_model, cpu_cores, cpu_threads, cpu_usage,
-                                      ram_total, ram_used, ram_usage_percent, ram_type,
-                                      disk_info, os_edition, os_version, os_build, os_activated,
-                                      ip_address, mac_address, gpu_model, gpu_vram,
-                                      current_user, uptime)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               INSERT INTO pc_status (pc_id, cpu_model, cpu_usage, ram_total, ram_used, disk_info,
+                                      os_edition, ip_address, mac_address, current_user)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ''', (
-                   pc['id'],
-                   info.get('cpu_model'), info.get('cpu_cores'), info.get('cpu_threads'), info.get('cpu_usage'),
-                   info.get('ram_total'), info.get('ram_used'), info.get('ram_usage_percent'), info.get('ram_type'),
-                   info.get('disk_info'), info.get('os_edition'), info.get('os_version'), info.get('os_build'),
-                   info.get('os_activated'),
-                   info.get('ip_address'), info.get('mac_address'), info.get('gpu_model'), info.get('gpu_vram'),
-                   info.get('current_user'), info.get('uptime')
+                   pc['id'], info.get('cpu_model'), info.get('cpu_usage'),
+                   info.get('ram_total'), info.get('ram_used'), info.get('disk_info'),
+                   info.get('os_edition'), info.get('ip_address'), info.get('mac_address'),
+                   info.get('current_user')
                ))
 
     db.commit()
-    return jsonify({'status': 'success', 'message': 'Heartbeat received'})
+    return jsonify({'status': 'success'})
 
 
 if __name__ == '__main__':

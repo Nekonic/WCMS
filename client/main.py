@@ -9,7 +9,7 @@ from executor import CommandExecutor
 
 SERVER_URL = "http://10.211.55.2:5050/"
 MACHINE_ID = next(
-    (addr.address.replace(':', '') for interface, addrs in psutil.net_if_addrs().items()
+    (addr.address.replace(':', '').replace('-', '') for interface, addrs in psutil.net_if_addrs().items()
      for addr in addrs if addr.family == psutil.AF_LINK),
     "MACHINE-DEFAULT"
 )
@@ -23,28 +23,31 @@ def register_or_heartbeat():
         "machine_id": MACHINE_ID,
         "system_info": collect_system_info()
     }
+
     try:
         r = requests.post(f"{SERVER_URL}api/client/heartbeat", json=data, timeout=5)
-
         if r.status_code == 404:
-            # 미등록 PC → 간단한 등록 요청
+            # 미등록 PC → 간단한 등록 요청 (room_name 없이)
             print("[!] 미등록 PC → 서버에 등록 요청")
             reg_data = {
                 "machine_id": MACHINE_ID,
-                "hostname": os.getenv('COMPUTERNAME', 'WCMS-CLIENT'),
+                "hostname": os.getenv('COMPUTERNAME', 'WCMS-client'),
                 "ip_address": collect_system_info().get('ip_address')
             }
 
             r = requests.post(f"{SERVER_URL}api/client/register", json=reg_data, timeout=5)
             if r.status_code == 200:
                 result = r.json()
-                print(f"[+] 등록 성공: {result.get('room_name')} - {result.get('seat_number')}번")
-            elif r.status_code == 202:
-                print("[-] 등록 대기 중... (관리자 승인 필요)")
+                # room_name이 None이면 미배치
+                if result.get('room_name'):
+                    print(f"[+] 등록 성공: {result.get('room_name')} - {result.get('seat_number')}번")
+                else:
+                    print(f"[+] 등록 성공 (미배치 상태 - 관리자가 배치해야 합니다)")
         elif r.status_code == 200:
             print("[+] Heartbeat: OK")
     except Exception as e:
         print(f"[-] Heartbeat 오류: {e}")
+
 
 def poll_command():
     """Long-polling으로 명령 대기 (이벤트 기반)"""
@@ -60,15 +63,10 @@ def poll_command():
                 cmd_data = r.json()
                 cmd_type = cmd_data.get('command_type')
                 cmd_params = json.loads(cmd_data.get('command_data', '{}'))
-
                 if cmd_type:
                     print(f"\n[>>>] 명령 수신: {cmd_type} | 파라미터: {cmd_params}")
                     result = CommandExecutor.execute_command(cmd_type, cmd_params)
                     print(f"[<<<] 결과: {result}\n")
-
-                    # 실행 결과 서버에 전송 (옵션)
-                    # send_command_result(cmd_id, result)
-
         except requests.exceptions.Timeout:
             # 타임아웃은 정상 (명령 없음)
             continue

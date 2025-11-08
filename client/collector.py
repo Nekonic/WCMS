@@ -92,6 +92,7 @@ def get_disk_types():
             print(f"[-] 드라이브 타입 매핑 실패: {e}")
 
         return drive_types
+
     except Exception as e:
         print(f"[-] WMI 디스크 정보 오류: {e}")
         return {}
@@ -107,13 +108,15 @@ def collect_system_info():
         disk_info = {}
         try:
             for partition in psutil.disk_partitions():
-                drive = partition.mountpoint
-                usage = psutil.disk_usage(drive)
-                disk_info[drive] = {
-                    'total': int(usage.total / (1024 * 1024)),  # MB 단위
-                    'used': int(usage.used / (1024 * 1024)),
-                    'free': int(usage.free / (1024 * 1024))
-                }
+                try:
+                    usage = psutil.disk_usage(partition.mountpoint)
+                    disk_info[partition.device] = {
+                        'total': usage.total,
+                        'used': usage.used,
+                        'free': usage.free,
+                    }
+                except (PermissionError, OSError) as e:
+                    continue
         except Exception as e:
             print(f"[-] 디스크 정보 수집 오류: {e}")
             disk_info = {}
