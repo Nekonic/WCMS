@@ -1,26 +1,140 @@
 {% extends "base.html" %}
-{% block title %}{{ pc['hostname'] }} 상세 정보{% endblock %}
+
+{% block title %}{{ pc.hostname or 'PC 상세 정보' }}{% endblock %}
+
 {% block content %}
-<h2>{{ pc['hostname'] }} 상세 정보</h2>
-<ul>
-    <li>실습실: {{ pc['room_name'] }}</li>
-    <li>좌석: {{ pc['seat_number'] }}</li>
-    <li>온라인: {{ '예' if pc['is_online'] else '아니오' }}</li>
-    <li>OS: {{ pc['os_edition'] }}</li>
-    <li>CPU: {{ pc['cpu_model'] }}</li>
-    <li>RAM: {{ pc['ram_total'] }}MB</li>
-    <li>DISK: {{ pc['disk_info'] }}</li>
-</ul>
-{% if message %}
-    <div style="color: #0f0;">{{ message }}</div>
-{% endif %}
-{% if session.get('admin') %}
-    <form method="post" style="margin-top:1em;">
-        <button type="submit" name="action" value="shutdown">종료</button>
-        <button type="submit" name="action" value="reboot">재시작</button>
-    </form>
-{% else %}
-    <div style="color:#888; margin-top:1em;">로그인하면 원격 제어 기능을 사용할 수 있습니다.</div>
-{% endif %}
-<a href="{{ url_for('index', room=pc['room_name']) }}">목록으로</a>
+<div class="container mt-4">
+    <h2>{{ pc.hostname or 'PC-' + pc.id|string }} 상세 정보</h2>
+
+    {% if pc %}
+    <div class="card mt-3">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">기본 정보</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th width="30%">호스트명</th>
+                    <td>{{ pc.hostname or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>실습실</th>
+                    <td>{{ pc.room_name or '미배치' }}</td>
+                </tr>
+                <tr>
+                    <th>좌석 번호</th>
+                    <td>{{ pc.seat_number or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>IP 주소</th>
+                    <td>{{ pc.ip_address or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>MAC 주소</th>
+                    <td>{{ pc.mac_address or pc.machine_id or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>온라인 상태</th>
+                    <td>
+                        {% if pc.is_online %}
+                        <span class="badge bg-success">온라인</span>
+                        {% else %}
+                        <span class="badge bg-secondary">오프라인</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">시스템 정보</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th width="30%">CPU 모델</th>
+                    <td>{{ pc.cpu_model or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>CPU 사용률</th>
+                    <td>
+                        {% if pc.cpu_usage is not none %}
+                        {{ pc.cpu_usage }}%
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>RAM 전체</th>
+                    <td>
+                        {% if pc.ram_total %}
+                        {{ (pc.ram_total / 1024 / 1024 / 1024)|round(2) }} GB
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>RAM 사용</th>
+                    <td>
+                        {% if pc.ram_used and pc.ram_total %}
+                        {{ (pc.ram_used / 1024 / 1024 / 1024)|round(2) }} GB ({{ ((pc.ram_used / pc.ram_total) * 100)|round(1) }}%)
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>디스크 정보</th>
+                    <td>{{ pc.disk_info or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>OS 버전</th>
+                    <td>{{ pc.os_edition or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>현재 사용자</th>
+                    <td>{{ pc.current_user or 'N/A' }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button class="btn btn-secondary" onclick="history.back()">돌아가기</button>
+
+        {% if admin %}
+        <button class="btn btn-danger" onclick="sendCommand('shutdown')">종료</button>
+        <button class="btn btn-warning" onclick="sendCommand('restart')">재시작</button>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <div class="alert alert-danger mt-3">
+        데이터를 불러올 수 없습니다.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function sendCommand(type) {
+    if (!confirm(`정말로 ${type === 'shutdown' ? '종료' : '재시작'}하시겠습니까?`)) return;
+
+    fetch('/api/{{ pc.id }}/command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({type: type, data: {}})
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(data.message || '명령 전송 완료');
+    })
+    .catch(err => {
+        alert('오류 발생: ' + err);
+    });
+}
+</script>
 {% endblock %}

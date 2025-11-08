@@ -83,22 +83,24 @@ GET /api/pc/<pc_id>
 **응답 (200)**:
 ```json
 {
-"id": 1,
-"machine_id": "MACHINE-101",
-"room_name": "1실습실",
-"seat_number": 1,
-"hostname": "PC-101",
-"is_online": true,
-"cpu_model": "Intel i5-10400",
-"cpu_cores": 6,
-"cpu_threads": 12,
-"ram_total": 8192,
-"ram_used": 4096,
-"disk_info": "{"C:": {"total": 500, "used": 250, "type": "SSD"}}",
-"os_edition": "Windows 10 Pro",
-"os_version": "22H2",
-"ip_address": "192.168.1.101",
-"mac_address": "AA:BB:CC:DD:EE:01"
+  "cpu_model": "ARMv8 (64-bit) Family 8 Model 0 Revision   0,  ",
+  "cpu_usage": 2.3,
+  "created_at": "2025-11-08 15:30:05",
+  "current_user": "nekonic",
+  "disk_info": "{\"C:\\\\\": {\"total\": 273351176192, \"used\": 62261075968, \"free\": 211090100224}}",
+  "hostname": "TEST123123",
+  "id": 20,
+  "ip_address": "10.211.55.3",
+  "is_online": 1,
+  "last_seen": "2025-11-08 15:30:05",
+  "mac_address": "00-1C-42-FA-D6-D4",
+  "machine_id": "001C42FAD6D4",
+  "os_edition": "Windows-10-10.0.26100-SP0",
+  "pc_id": 1,
+  "ram_total": 8186,
+  "ram_used": 3991,
+  "room_name": "1\uc2e4\uc2b5\uc2e4",
+  "seat_number": "1, 1"
 }
 ```
 **응답 (404)**:

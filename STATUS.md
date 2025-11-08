@@ -59,6 +59,7 @@
 | disk_info 직렬화 오류 | JSON 변환 |
 | IP/MAC 주소 고정값 | 실제 값 조회 |
 | DB 스키마 오류 | FOREIGN KEY, 인덱싱 추가 |
+| **좌석번호 null 문제** | **좌석 배치 저장시 pc_info.seat_number 자동 업데이트 추가** |
 
 ---
 

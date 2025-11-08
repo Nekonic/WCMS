@@ -8,12 +8,13 @@ Woosuk Computer Management System
 ```
 server/
 ├── app.py
-├── migrations/
-│   └── schema.sql
+├── schema.sql
 ├── templates/
-│   ├── base.html
-│   ├── index.html
-│   └── ...
+│   ├── base.html           # 공통 레이아웃 + 모달
+│   ├── index.html          # PC 카드 목록
+│   ├── layout_editor.html  # 좌석 배치 편집기
+│   ├── pc_detail.html      # PC 상세정보 (모달 템플릿)
+│   └── login.html          # 로그인 페이지
 └── db.sqlite3
 ```
 ### dependancy

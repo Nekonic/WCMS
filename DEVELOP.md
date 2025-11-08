@@ -42,9 +42,12 @@
 | 파일 | 역할 |
 |------|------|
 | `app.py` | Flask 라우트 (PC 조회, 로그인, 원격 제어) |
-| `migrations/schema.sql` | DB 테이블 정의 |
-| `templates/base.html` | UI 프레임워크 + 모달 |
-| `templates/index.html` | 좌석 배치도 + PC 카드 |
+| `schema.sql` | DB 테이블 정의 |
+| `templates/base.html` | UI 프레임워크 + PC 상세정보 모달 |
+| `templates/index.html` | PC 카드 목록 (실습실별) |
+| `templates/layout_editor.html` | 드래그&드롭 좌석 배치 편집기 |
+| `templates/pc_detail.html` | PC 상세정보 모달 템플릿 (참조용) |
+| `templates/login.html` | 관리자 로그인 페이지 |
 
 ### 클라이언트
 | 파일 | 역할 |
@@ -123,11 +126,12 @@ python test_api.py
 ### 웹 → 서버
 | Method | Endpoint | 용도 |
 |--------|----------|------|
-| GET | `/` | PC 목록 조회 |
-| GET | `/api/pc/<id>` | PC 상세 정보 |
+| GET | `/?room=실습실명` | PC 목록 조회 (기본: 1실습실) |
+| GET | `/api/pc/<id>` | PC 상세 정보 (JSON, 모달용) |
 | POST | `/api/pc/<id>/shutdown` | 원격 종료 |
 | POST | `/api/pc/<id>/reboot` | 원격 재시작 |
-
+| GET | `/layout_editor?room=실습실명` | 좌석 배치 편집기 |
+| POST | `/api/layout/map/<room_name>` | 좌석 배치 저장 |
 ---
 
 ## 데이터베이스 구조
