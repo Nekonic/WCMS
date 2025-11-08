@@ -26,6 +26,13 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
+    - name: Verify installations
+      working-directory: ./client
+      run: |
+        python -c "import psutil; print('psutil:', psutil.__version__)"
+        python -c "import requests; print('requests:', requests.__version__)"
+        python -c "import wmi; print('wmi OK')"
+
     - name: Build EXE with PyInstaller
       working-directory: ./client
       run: |
@@ -42,23 +49,21 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref }}
         name: WCMS Client v${{ steps.version.outputs.version }}
         body: |
           # WCMS Client Beta v${{ steps.version.outputs.version }}
-
+          
           ## 설치 방법
           1. `WCMS-Client.exe` 다운로드
           2. Windows 환경에서 관리자 권한으로 실행
           3. 서버 주소 확인 후 자동 등록
-
+          
           ## 주요 기능
-          - 시스템 정보 자동 수집 (CPU, RAM, 디스크)
+          - 시스템 정보 자동 수집
           - 실제 IP/MAC 주소 조회
-          - Long-polling 방식 명령 수신
+          - Long-polling 명령 수신
           - 원격 종료/재시작
-          - 범용 명령 실행
-
+          
           ## 요구사항
           - Windows 10/11
           - 관리자 권한

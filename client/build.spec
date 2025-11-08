@@ -7,6 +7,7 @@ a = Analysis(
     hiddenimports=[
         'psutil',
         'psutil._pswindows',
+        'psutil._psutil_windows',
         'wmi',
         'win32com',
         'win32com.client',
