@@ -89,31 +89,46 @@ def collect_static_info():
 def collect_running_processes():
     """설치된 프로그램 위주의 실행 중인 프로세스 목록 수집"""
     interesting_processes = set()
-    system_paths = [
-        os.environ.get('SystemRoot', 'C:\\Windows').lower(),
-        os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)').lower(),
-        os.environ.get('ProgramFiles', 'C:\\Program Files').lower()
-    ]
-    # 제외할 특정 시스템 프로세스
+    # C:\Windows 경로만 시스템 경로로 간주
+    system_root = os.environ.get('SystemRoot', 'C:\\Windows').lower()
+
+    # 제외할 특정 시스템 프로세스 이름
     exclude_list = {
+        # 셸 및 시스템 호스트
         'explorer.exe', 'svchost.exe', 'conhost.exe', 'runtimebroker.exe',
-        'onedrive.exe', 'ctfmon.exe', 'fontdrhost.exe', 'sihost.exe',
-        'startmenuexperiencehost.exe', 'searchapp.exe', 'taskhostw.exe',
-        'memcompression', 'mpdefendercoreservice.exe', 'msmpeng.exe', 'nissrv.exe', 'registry'
+        'sihost.exe', 'taskhostw.exe', 'ctfmon.exe', 'fontdrhost.exe',
+        # 윈도우 UI
+        'startmenuexperiencehost.exe', 'searchapp.exe', 'shellexperiencehost.exe',
+        # 시스템 및 가상 프로세스
+        'system', 'registry', 'memcompression',
+        # 디펜더 및 보안
+        'msmpeng.exe', 'nissrv.exe', 'mpdefendercoreservice.exe', 'securityhealthservice.exe',
+        # 기타
+        'onedrive.exe',
+        # 클라이언트 자신
+        'python.exe', 'wcms-client.exe'
     }
 
-    for proc in psutil.process_iter(['name', 'exe']):
+    current_pid = os.getpid()
+
+    for proc in psutil.process_iter(['pid', 'name', 'exe']):
         try:
+            # 자기 자신은 제외
+            if proc.info['pid'] == current_pid:
+                continue
+
             proc_name = proc.info['name']
             proc_exe = proc.info['exe']
 
+            # 실행 파일 경로가 없거나, 이름이 제외 목록에 있으면 무시
             if not proc_exe or proc_name.lower() in exclude_list:
                 continue
 
-            # 시스템 경로에 포함되지 않는 프로세스만 선택
-            is_system_proc = any(proc_exe.lower().startswith(p) for p in system_paths)
-            if not is_system_proc:
-                interesting_processes.add(proc_name)
+            # C:\Windows 폴더 하위에서 실행되는 프로세스는 제외
+            if proc_exe.lower().startswith(system_root):
+                continue
+
+            interesting_processes.add(proc_name)
 
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
