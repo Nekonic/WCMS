@@ -191,25 +191,16 @@
             font-size: 0.95em;
             font-weight: 600;
             transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
         }
-        .btn-danger {
-            background: #ef4444;
-            color: #fff;
-        }
-        .btn-danger:hover {
-            background: #dc2626;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-        }
-        .btn-warning {
-            background: #f59e0b;
-            color: #fff;
-        }
-        .btn-warning:hover {
-            background: #d97706;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-        }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-warning { background: #f59e0b; color: #fff; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-info { background: #3b82f6; color: #fff; }
+        .btn-info:hover { background: #2563eb; }
     </style>
 </head>
 <body>
@@ -266,8 +257,8 @@ function openModal(pcId) {
 
             const body = document.getElementById('modalBody');
             body.innerHTML = `
-                <div class="detail-row"><span class="detail-label">실습실:</span><span class="detail-value">${data.room_name}</span></div>
-                <div class="detail-row"><span class="detail-label">좌석:</span><span class="detail-value">${data.seat_number}</span></div>
+                <div class="detail-row"><span class="detail-label">실습실:</span><span class="detail-value">${data.room_name || '미배치'}</span></div>
+                <div class="detail-row"><span class="detail-label">좌석:</span><span class="detail-value">${data.seat_number || 'N/A'}</span></div>
                 <div class="detail-row"><span class="detail-label">상태:</span><span class="detail-value">${data.is_online ? '온라인' : '오프라인'}</span></div>
                 <div class="detail-row"><span class="detail-label">CPU:</span><span class="detail-value">${data.cpu_model || 'N/A'}</span></div>
                 <div class="detail-row"><span class="detail-label">RAM:</span><span class="detail-value">${data.ram_total || 0}MB</span></div>
@@ -282,6 +273,7 @@ function openModal(pcId) {
 
             if (isAdmin) {
                 footer.innerHTML = `
+                    <a href="/pc/${pcId}/history" class="btn btn-info">기록 보기</a>
                     <button class="btn btn-danger" onclick="shutdownPC(${pcId})">종료</button>
                     <button class="btn btn-warning" onclick="rebootPC(${pcId})">재시작</button>
                 `;
@@ -326,5 +318,6 @@ window.onclick = function(event) {
     if (event.target === modal) closeModal();
 }
 </script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

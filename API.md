@@ -37,7 +37,7 @@ POST /login
 }
 ```
 **응답 (200)**:
-```json
+```
 리다이렉트: /
 Set-Cookie: session=...
 ```
@@ -159,10 +159,16 @@ Content-Type: application/json
 **요청 Body**:
 ```json
 {
-"machine_id": "MACHINE-101",
-"hostname": "PC-101",
-"room_name": "1실습실",
-"seat_number": 1
+    "machine_id": "001C42FAD6D4",
+    "cpu_model": "Intel(R) Core(TM) i5-10400 CPU @ 2.90GHz",
+    "cpu_cores": 6,
+    "cpu_threads": 12,
+    "ram_total": 16384,
+    "disk_info": "{\"C:\\\\\": {\"total\": 512110190592}}",
+    "os_edition": "Windows-10-10.0.19041-SP0",
+    "os_version": "10.0.19041",
+    "mac_address": "00-1C-42-FA-D6-D4",
+    "hostname": "DESKTOP-USER"
 }
 ```
 **응답 (200)**:
@@ -188,30 +194,19 @@ POST /api/client/heartbeat
 
 Content-Type: application/json
 
-**요청 Body** (10분마다 전송):
+**요청 Body (동적 정보)** (10분마다 전송):
 ```json
 {
-"machine_id": "MACHINE-101",
-"system_info": {
-    "cpu_model": "Intel i5-10400",
-    "cpu_cores": 6,
-    "cpu_threads": 12,
-    "cpu_usage": 45.2,
-    "ram_total": 8192,
-    "ram_used": 4096,
-    "ram_usage_percent": 50.0,
-    "ram_type": "DDR4",
-    "disk_info": "{"C:": {"total": 500, "used": 250, "type": "SSD"}}",
-    "os_edition": "Windows 10 Pro",
-    "os_version": "22H2",
-    "os_build": "19045",
-    "os_activated": true,
-    "ip_address": "192.168.1.101",
-    "mac_address": "AA:BB:CC:DD:EE:01",
-    "gpu_model": "NVIDIA GTX 1650",
-    "gpu_vram": 4096,
-    "current_user": "student01",
-    "uptime": 3600
+    "machine_id": "001C42FAD6D4",
+    "system_info": {
+        "cpu_usage": 45.2,
+        "ram_used": 8192,
+        "ram_usage_percent": 50.0,
+        "disk_usage": "{\"C:\\\\\": {\"used\": 256055095296, \"free\": 256055095296}}",
+        "ip_address": "192.168.1.101",
+        "current_user": "student01",
+        "uptime": 3600,
+        "processes": "[\"chrome.exe\", \"gns3.exe\", \"Code.exe\"]"
     }
 }
 ```
@@ -345,18 +340,17 @@ POST /api/pc/<pc_id>/get-logs
 
 ### cURL 예시
 
-**heartbeat 전송**:
+**Heartbeat 전송 (동적 정보)**:
 ```bash
-curl -X POST http://localhost:5050/api/client/heartbeat
--H "Content-Type: application/json"
+curl -X POST http://localhost:5050/api/client/heartbeat \
+-H "Content-Type: application/json" \
 -d '{
-"machine_id": "TEST-001",
-"system_info": {
-    "cpu_model": "Intel i5",
-    "cpu_usage": 45.2,
-    "ram_total": 8192,
-    "ram_used": 4096,
-    "os_edition": "Windows 10 Pro"
+    "machine_id": "TEST-001",
+    "system_info": {
+        "cpu_usage": 15.2,
+        "ram_used": 4096,
+        "ip_address": "192.168.1.102",
+        "processes": "[\"chrome.exe\"]"
     }
 }'
 ```
@@ -383,13 +377,13 @@ curl http://localhost:5050/api/client/command?machine_id=TEST-001
 
 ### 클라이언트 → 서버
 
-1. 최초 등록 (1회)
-    - POST /api/client/register
-2. 10분마다 (무한 반복)
-    - POST /api/client/heartbeat
-3. 5초마다 명령 확인 (무한 반복)
+1. **최초 등록 (1회)**
+    - POST /api/client/register (정적 정보 전송)
+2. **10분마다 (무한 반복)**
+    - POST /api/client/heartbeat (동적 정보 전송)
+3. **5초마다 명령 확인 (무한 반복)**
     - GET /api/client/command
-4. 명령 실행 후
+4. **명령 실행 후**
     - POST /api/client/command/result
 
 ### 웹 관리자 → 서버 → 클라이언트

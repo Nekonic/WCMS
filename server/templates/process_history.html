@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}프로세스 기록 - {{ pc.hostname }}{% endblock %}
+
+{% block content %}
+<style>
+    /* 히스토리 페이지 전용 스타일 */
+    .history-container {
+        background: #2a2a2a;
+        padding: 2em;
+        border-radius: 10px;
+        border: 1px solid #333;
+    }
+    .history-header {
+        color: #4a9eff;
+        margin-bottom: 1.5em;
+        padding-bottom: 0.5em;
+        border-bottom: 1px solid #444;
+    }
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+        color: #e0e0e0;
+    }
+    .history-table th, .history-table td {
+        padding: 0.9em 1.2em;
+        text-align: left;
+        border-bottom: 1px solid #3a3a3a;
+    }
+    .history-table thead {
+        background: #333;
+    }
+    .history-table th {
+        font-weight: 600;
+        color: #ccc;
+    }
+    .history-table tbody tr:hover {
+        background: #303030;
+    }
+    .badge {
+        display: inline-block;
+        padding: 0.4em 0.7em;
+        font-size: 0.85em;
+        font-weight: 600;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 0.375rem;
+        background-color: #555;
+        color: #fff;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+</style>
+
+<div class="history-container">
+    <h2 class="history-header">프로세스 사용 기록: {{ pc.hostname }}</h2>
+    <table class="history-table" id="historyTable">
+        <thead>
+            <tr>
+                <th>시간</th>
+                <th>사용자</th>
+                <th>실행된 프로세스</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- 데이터가 여기에 동적으로 추가됩니다. -->
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const pcId = {{ pc.id }};
+    fetch(`/api/pc/${pcId}/history`)
+        .then(response => response.json())
+        .then(data => {
+            const tableBody = document.querySelector("#historyTable tbody");
+            if (data.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2em;">기록이 없습니다.</td></tr>';
+                return;
+            }
+
+            let rowsHtml = '';
+            data.forEach(record => {
+                let processesHtml = '<span style="color: #777;">없음</span>';
+                if (record.processes) {
+                    try {
+                        const processes = JSON.parse(record.processes);
+                        if (processes.length > 0) {
+                            processesHtml = processes.map(p => `<span class="badge">${p}</span>`).join('');
+                        }
+                    } catch(e) {
+                        processesHtml = '<span style="color: #f00;">오류</span>';
+                    }
+                }
+
+                const row = `
+                    <tr>
+                        <td>${new Date(record.created_at + ' UTC').toLocaleString()}</td>
+                        <td>${record.current_user || 'N/A'}</td>
+                        <td>${processesHtml}</td>
+                    </tr>
+                `;
+                rowsHtml += row;
+            });
+            tableBody.innerHTML = rowsHtml;
+        })
+        .catch(error => {
+            console.error('Error fetching process history:', error);
+            const tableBody = document.querySelector("#historyTable tbody");
+            tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2em; color: #f00;">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        });
+});
+</script>
+{% endblock %}
