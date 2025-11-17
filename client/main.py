@@ -6,7 +6,7 @@ import requests
 from collector import collect_static_info, collect_dynamic_info
 from executor import CommandExecutor
 
-SERVER_URL = "http://10.211.55.2:5050/"
+SERVER_URL = "http://aps.or.kr:8057/"
 MACHINE_ID = next(
     (addr.address.replace(':', '').replace('-', '') for interface, addrs in psutil.net_if_addrs().items()
      for addr in addrs if addr.family == psutil.AF_LINK),
