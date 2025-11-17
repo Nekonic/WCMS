@@ -1,172 +1,150 @@
-import pythoncom
-import wmi
 import psutil
 import platform
-import os
-import time
-import json
 import socket
-
-
-def get_active_network_info():
-    """활성 네트워크 인터페이스의 IP와 MAC 주소 조회"""
-    try:
-        interfaces = psutil.net_if_addrs()
-        for interface_name, addrs in interfaces.items():
-            if interface_name.startswith('Loopback'):
-                continue
-            for addr in addrs:
-                if addr.family == socket.AF_INET:
-                    ip = addr.address
-                    mac = get_mac_address(interface_name)
-                    if mac:
-                        return ip, mac
-        return '127.0.0.1', '00:00:00:00:00:00'
-    except Exception as e:
-        print(f"[-] 네트워크 정보 조회 오류: {e}")
-        return '127.0.0.1', '00:00:00:00:00:00'
-
-
-def get_mac_address(interface_name):
-    """특정 인터페이스의 MAC 주소 조회"""
-    try:
-        pythoncom.CoInitialize()
-        c = wmi.WMI()
-        for adapter in c.Win32_NetworkAdapter():
-            if interface_name.lower() in adapter.Name.lower() or adapter.Name.lower() in interface_name.lower():
-                return adapter.MACAddress
-        pythoncom.CoUninitialize()
-    except Exception as e:
-        print(f"[-] MAC 주소 조회 오류 ({interface_name}): {e}")
-    try:
-        addrs = psutil.net_if_addrs()
-        if interface_name in addrs:
-            for addr in addrs[interface_name]:
-                if addr.family == psutil.AF_LINK:
-                    return addr.address
-    except:
-        pass
-    return None
+import json
 
 
 def collect_static_info():
-    """정적 시스템 정보 수집 (최초 1회)"""
-    pythoncom.CoInitialize()
+    """정적 시스템 정보 수집 (한 번만 수집)"""
     try:
+        # CPU 정보
+        cpu_model = platform.processor() or "Unknown CPU"
+        cpu_cores = psutil.cpu_count(logical=False) or 1
+        cpu_threads = psutil.cpu_count(logical=True) or 1
+
+        # RAM 정보
+        ram = psutil.virtual_memory()
+        ram_total = ram.total // (1024 * 1024)  # MB 단위
+
+        # 디스크 정보
         disk_info = {}
-        try:
-            for partition in psutil.disk_partitions():
-                try:
-                    usage = psutil.disk_usage(partition.mountpoint)
-                    disk_info[partition.device] = {'total': usage.total}
-                except (PermissionError, OSError):
-                    continue
-        except Exception as e:
-            print(f"[-] 디스크 정보 수집 오류: {e}")
-            disk_info = {}
+        for partition in psutil.disk_partitions():
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                disk_info[partition.device] = {
+                    "total": usage.total,
+                    "fstype": partition.fstype,
+                    "mountpoint": partition.mountpoint
+                }
+            except:
+                pass
 
-        _, mac_address = get_active_network_info()
+        # OS 정보
+        os_edition = f"{platform.system()} {platform.release()}"
+        os_version = platform.version()
 
-        result = {
-            'cpu_model': platform.processor(),
-            'cpu_cores': psutil.cpu_count(logical=False),
-            'cpu_threads': psutil.cpu_count(logical=True),
-            'ram_total': int(psutil.virtual_memory().total / (1024 * 1024)),
-            'disk_info': json.dumps(disk_info),
-            'os_edition': platform.platform(),
-            'os_version': platform.version(),
-            'mac_address': mac_address,
-            'hostname': socket.gethostname()
+        # 호스트명
+        hostname = socket.gethostname()
+
+        # MAC 주소
+        mac_address = None
+        for interface, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == psutil.AF_LINK:
+                    mac_address = addr.address
+                    break
+            if mac_address:
+                break
+
+        return {
+            "hostname": hostname,
+            "mac_address": mac_address or "00:00:00:00:00:00",
+            "cpu_model": cpu_model,
+            "cpu_cores": cpu_cores,
+            "cpu_threads": cpu_threads,
+            "ram_total": ram_total,
+            "disk_info": json.dumps(disk_info),
+            "os_edition": os_edition,
+            "os_version": os_version
         }
-        return result
     except Exception as e:
-        print(f"[-] 정적 정보 수집 오류: {e}")
-        return {}
-    finally:
-        pythoncom.CoUninitialize()
-
-
-def collect_running_processes():
-    """설치된 프로그램 위주의 실행 중인 프로세스 목록 수집"""
-    interesting_processes = set()
-    # C:\Windows 경로만 시스템 경로로 간주
-    system_root = os.environ.get('SystemRoot', 'C:\\Windows').lower()
-
-    # 제외할 특정 시스템 프로세스 이름
-    exclude_list = {
-        # 셸 및 시스템 호스트
-        'explorer.exe', 'svchost.exe', 'conhost.exe', 'runtimebroker.exe',
-        'sihost.exe', 'taskhostw.exe', 'ctfmon.exe', 'fontdrhost.exe',
-        # 윈도우 UI
-        'startmenuexperiencehost.exe', 'searchapp.exe', 'shellexperiencehost.exe',
-        # 시스템 및 가상 프로세스
-        'system', 'registry', 'memcompression',
-        # 디펜더 및 보안
-        'msmpeng.exe', 'nissrv.exe', 'mpdefendercoreservice.exe', 'securityhealthservice.exe',
-        # 기타
-        'onedrive.exe',
-        # 클라이언트 자신
-        'python.exe', 'wcms-client.exe'
-    }
-
-    current_pid = os.getpid()
-
-    for proc in psutil.process_iter(['pid', 'name', 'exe']):
-        try:
-            # 자기 자신은 제외
-            if proc.info['pid'] == current_pid:
-                continue
-
-            proc_name = proc.info['name']
-            proc_exe = proc.info['exe']
-
-            # 실행 파일 경로가 없거나, 이름이 제외 목록에 있으면 무시
-            if not proc_exe or proc_name.lower() in exclude_list:
-                continue
-
-            # C:\Windows 폴더 하위에서 실행되는 프로세스는 제외
-            if proc_exe.lower().startswith(system_root):
-                continue
-
-            interesting_processes.add(proc_name)
-
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-    return sorted(list(interesting_processes))
+        print(f"[!] 정적 정보 수집 오류: {e}")
+        return None
 
 
 def collect_dynamic_info():
-    """동적 시스템 정보 수집 (주기적)"""
+    """동적 시스템 정보 수집 (주기적으로 수집)"""
     try:
-        disk_usage_info = {}
+        # CPU 사용률
+        cpu_usage = psutil.cpu_percent(interval=1)
+
+        # RAM 사용량
+        ram = psutil.virtual_memory()
+        ram_used = ram.used // (1024 * 1024)  # MB
+        ram_usage_percent = ram.percent
+
+        # 디스크 사용량
+        disk_usage = {}
+        for partition in psutil.disk_partitions():
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                disk_usage[partition.device] = {
+                    "used": usage.used,
+                    "free": usage.free,
+                    "percent": usage.percent
+                }
+            except:
+                pass
+
+        # IP 주소
+        ip_address = "Unknown"
         try:
-            for partition in psutil.disk_partitions():
-                try:
-                    usage = psutil.disk_usage(partition.mountpoint)
-                    disk_usage_info[partition.device] = {
-                        'used': usage.used,
-                        'free': usage.free,
-                    }
-                except (PermissionError, OSError):
-                    continue
-        except Exception as e:
-            print(f"[-] 디스크 사용량 수집 오류: {e}")
-            disk_usage_info = {}
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip_address = s.getsockname()[0]
+            s.close()
+        except:
+            pass
 
-        ip_address, _ = get_active_network_info()
-        processes = collect_running_processes()
+        # 현재 사용자
+        import getpass
+        current_user = getpass.getuser()
 
-        result = {
-            'cpu_usage': psutil.cpu_percent(interval=1),
-            'ram_used': int(psutil.virtual_memory().used / (1024 * 1024)),
-            'ram_usage_percent': psutil.virtual_memory().percent,
-            'disk_usage': json.dumps(disk_usage_info),
-            'ip_address': ip_address,
-            'current_user': os.getenv('USERNAME'),
-            'uptime': int(time.time() - psutil.boot_time()),
-            'processes': json.dumps(processes)
+        # 업타임 (부팅 후 경과 시간)
+        import time
+        uptime = int(time.time() - psutil.boot_time())
+
+        # 실행 중인 프로세스
+        processes = []
+        for proc in psutil.process_iter(['name']):
+            try:
+                processes.append(proc.info['name'])
+            except:
+                pass
+        # 중복 제거 및 정렬
+        processes = sorted(list(set(processes)))
+
+        return {
+            "cpu_usage": cpu_usage,
+            "ram_used": ram_used,
+            "ram_usage_percent": ram_usage_percent,
+            "disk_usage": json.dumps(disk_usage),
+            "ip_address": ip_address,
+            "current_user": current_user,
+            "uptime": uptime,
+            "processes": json.dumps(processes)
         }
-        return result
     except Exception as e:
-        print(f"[-] 동적 정보 수집 오류: {e}")
-        return {}
+        print(f"[!] 동적 정보 수집 오류: {e}")
+        return None
+
+
+def collect_running_processes():
+    """실행 중인 프로세스 목록 수집"""
+    try:
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'username', 'memory_info']):
+            try:
+                processes.append({
+                    'pid': proc.info['pid'],
+                    'name': proc.info['name'],
+                    'username': proc.info['username'],
+                    'memory': proc.info['memory_info'].rss // (1024 * 1024)  # MB
+                })
+            except:
+                pass
+        return processes
+    except Exception as e:
+        print(f"[!] 프로세스 목록 수집 오류: {e}")
+        return []
+

