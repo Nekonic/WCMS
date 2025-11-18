@@ -213,6 +213,7 @@
                 <a href="{{ url_for('index', room='2실습실') }}" {% if room=='2실습실' %}class="active"{% endif %}>실습실 2</a>
                 <div class="divider" style="margin: 1em 0.8em;"></div>
                 {% if session.get('admin') %}
+                <a href="{{ url_for('command_test') }}">🧪 명령 테스트</a>
                 <a href="{{ url_for('account_manager') }}">👤 계정 관리</a>
                 {% endif %}
             </div>

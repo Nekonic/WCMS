@@ -153,6 +153,13 @@ def account_manager():
     return render_template('account_manager.html')
 
 
+@app.route('/command/test')
+@require_admin
+def command_test():
+    """명령 실행 테스트 페이지"""
+    return render_template('command_test.html')
+
+
 # ==================== 관리자 API ====================
 
 @app.route('/api/pcs')
@@ -549,6 +556,53 @@ def api_client_command_result():
           f"STATUS={data.get('status')}, RESULT={data.get('result')}")
 
     return jsonify({'status': 'success', 'message': 'Result received'})
+
+
+@app.route('/api/pcs/bulk-command', methods=['POST'])
+@require_admin
+def api_bulk_command():
+    """여러 PC에 동시에 명령 전송"""
+    data = request.json
+    pc_ids = data.get('pc_ids', [])
+    command_type = data.get('command_type')
+    command_data = data.get('command_data', {})
+
+    if not pc_ids or not command_type:
+        return jsonify({'error': 'pc_ids와 command_type은 필수입니다'}), 400
+
+    db = get_db()
+    results = []
+
+    for pc_id in pc_ids:
+        try:
+            cursor = db.execute('''
+                INSERT INTO pc_command (pc_id, command_type, command_data, status, priority)
+                VALUES (?, ?, ?, 'pending', 5)
+            ''', (pc_id, command_type, json.dumps(command_data)))
+
+            command_id = cursor.lastrowid
+            db.commit()
+
+            results.append({
+                'pc_id': pc_id,
+                'command_id': command_id,
+                'status': 'success'
+            })
+            print(f"[+] 일괄 명령 전송: PC_ID={pc_id}, TYPE={command_type}")
+        except Exception as e:
+            results.append({
+                'pc_id': pc_id,
+                'status': 'error',
+                'message': str(e)
+            })
+            print(f"[!] 명령 전송 실패: PC_ID={pc_id}, ERROR={e}")
+
+    return jsonify({
+        'total': len(pc_ids),
+        'success': len([r for r in results if r['status'] == 'success']),
+        'failed': len([r for r in results if r['status'] == 'error']),
+        'results': results
+    })
 
 
 # ==================== 앱 실행 ====================

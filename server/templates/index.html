@@ -18,23 +18,161 @@
     {% endif %}
 </div>
 
-<!-- 범례 -->
-<div style="display: flex; gap: 2em; margin-bottom: 2em; padding: 1em; background: #2a2a2a; border-radius: 8px; flex-wrap: wrap;">
-    <div style="display: flex; align-items: center; gap: 0.5em;">
-        <div style="width: 30px; height: 30px; background: #10b981; border-radius: 4px;"></div>
-        <span>정상 (CPU < 75%)</span>
+<!-- 범례 및 일괄 명령 컨트롤 -->
+<div style="display: flex; gap: 2em; margin-bottom: 2em; padding: 1em; background: #2a2a2a; border-radius: 8px; flex-wrap: wrap; justify-content: space-between; align-items: center;">
+    <div style="display: flex; gap: 2em; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.5em;">
+            <div style="width: 30px; height: 30px; background: #10b981; border-radius: 4px;"></div>
+            <span>정상 (CPU < 75%)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5em;">
+            <div style="width: 30px; height: 30px; background: #f59e0b; border-radius: 4px;"></div>
+            <span>경고 (CPU 75~90%)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5em;">
+            <div style="width: 30px; height: 30px; background: #dc2626; border-radius: 4px;"></div>
+            <span>위험 (CPU > 90%)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5em;">
+            <div style="width: 30px; height: 30px; background: #555; border-radius: 4px;"></div>
+            <span>오프라인</span>
+        </div>
     </div>
-    <div style="display: flex; align-items: center; gap: 0.5em;">
-        <div style="width: 30px; height: 30px; background: #f59e0b; border-radius: 4px;"></div>
-        <span>경고 (CPU 75~90%)</span>
+
+    {% if admin %}
+    <div style="display: flex; gap: 1em; align-items: center;">
+        <button onclick="toggleSelectionMode()" id="selectionModeBtn" style="
+            background: #6366f1;
+            color: white;
+            padding: 0.6em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        ">
+            📋 선택 모드
+        </button>
+        <button onclick="selectAllOnlinePCs()" style="
+            background: #8b5cf6;
+            color: white;
+            padding: 0.6em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        ">
+            ✓ 온라인 PC 전체 선택
+        </button>
     </div>
-    <div style="display: flex; align-items: center; gap: 0.5em;">
-        <div style="width: 30px; height: 30px; background: #dc2626; border-radius: 4px;"></div>
-        <span>위험 (CPU > 90%)</span>
+    {% endif %}
+</div>
+
+<!-- 선택된 PC 패널 -->
+<div id="selectedPCsPanel" style="display: none; margin-bottom: 1.5em; padding: 1.5em; background: #1e3a8a; border-radius: 8px; border: 2px solid #3b82f6;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+        <h3 style="margin: 0; color: white;">
+            <span id="selectedCount">0</span>대 선택됨
+        </h3>
+        <button onclick="clearSelection()" style="
+            background: #dc2626;
+            color: white;
+            padding: 0.5em 1em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        ">
+            선택 해제
+        </button>
     </div>
-    <div style="display: flex; align-items: center; gap: 0.5em;">
-        <div style="width: 30px; height: 30px; background: #555; border-radius: 4px;"></div>
-        <span>오프라인</span>
+
+    <div id="selectedPCsList" style="
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5em;
+        margin-bottom: 1em;
+        padding: 1em;
+        background: rgba(255,255,255,0.1);
+        border-radius: 6px;
+        max-height: 150px;
+        overflow-y: auto;
+    ">
+        <!-- 선택된 PC 목록 동적 생성 -->
+    </div>
+
+    <div style="display: flex; gap: 0.8em; flex-wrap: wrap;">
+        <button onclick="showBulkCMDModal()" style="
+            background: #10b981;
+            color: white;
+            padding: 0.7em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        ">
+            <i class="fas fa-terminal"></i> CMD 실행
+        </button>
+        <button onclick="showBulkWingetModal()" style="
+            background: #3b82f6;
+            color: white;
+            padding: 0.7em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        ">
+            <i class="fas fa-download"></i> 프로그램 설치
+        </button>
+        <button onclick="showBulkFileDownloadModal()" style="
+            background: #8b5cf6;
+            color: white;
+            padding: 0.7em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        ">
+            <i class="fas fa-file-download"></i> 파일 다운로드
+        </button>
+        <button onclick="showBulkAccountModal()" style="
+            background: #f59e0b;
+            color: white;
+            padding: 0.7em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        ">
+            <i class="fas fa-user-cog"></i> 계정 관리
+        </button>
+        <button onclick="showBulkPowerModal()" style="
+            background: #dc2626;
+            color: white;
+            padding: 0.7em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        ">
+            <i class="fas fa-power-off"></i> 전원 관리
+        </button>
     </div>
 </div>
 
@@ -67,6 +205,8 @@
     text-align: center;
     font-size: 0.8em;
     box-sizing: border-box;
+    position: relative;
+    user-select: none;
 }
 
 .seat-cell.occupied {
@@ -83,11 +223,210 @@
     transform: scale(1.05);
     box-shadow: 0 4px 12px rgba(74, 158, 255, 0.5);
 }
+
+.seat-cell.selected {
+    border: 3px solid #fbbf24 !important;
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.6) !important;
+}
+
+.seat-checkbox {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid #333;
+    border-radius: 4px;
+    display: none;
+    cursor: pointer;
+}
+
+.seat-cell.selection-mode .seat-checkbox {
+    display: block;
+}
+
+.seat-checkbox.checked {
+    background: #fbbf24;
+    border-color: #f59e0b;
+}
+
+.seat-checkbox.checked::after {
+    content: '✓';
+    color: #000;
+    font-size: 14px;
+    font-weight: bold;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.selected-pc-tag {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 0.4em 0.8em;
+    border-radius: 6px;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.selected-pc-tag .remove-btn {
+    background: rgba(220, 38, 38, 0.8);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+}
 </style>
 
 <script>
 const room = "{{ room }}";
 const allPCs = {{ pcs|tojson }};
+let selectedPCs = new Set();
+let selectionMode = false;
+let isDragging = false;
+let dragStartPos = null;
+
+// 선택 모드 토글
+function toggleSelectionMode() {
+    selectionMode = !selectionMode;
+    const btn = document.getElementById('selectionModeBtn');
+    const cells = document.querySelectorAll('.seat-cell.occupied');
+
+    if (selectionMode) {
+        btn.style.background = '#dc2626';
+        btn.textContent = '✖ 선택 모드 종료';
+        cells.forEach(cell => cell.classList.add('selection-mode'));
+    } else {
+        btn.style.background = '#6366f1';
+        btn.textContent = '📋 선택 모드';
+        cells.forEach(cell => cell.classList.remove('selection-mode'));
+        clearSelection();
+    }
+}
+
+// PC 선택/해제
+function togglePCSelection(pcId, event) {
+    if (event) event.stopPropagation();
+
+    if (selectedPCs.has(pcId)) {
+        selectedPCs.delete(pcId);
+    } else {
+        selectedPCs.add(pcId);
+    }
+    updateSelectionUI();
+}
+
+// 전체 온라인 PC 선택
+function selectAllOnlinePCs() {
+    if (!selectionMode) toggleSelectionMode();
+
+    allPCs.forEach(pc => {
+        if (pc.is_online) {
+            selectedPCs.add(pc.id);
+        }
+    });
+    updateSelectionUI();
+}
+
+// 선택 해제
+function clearSelection() {
+    selectedPCs.clear();
+    updateSelectionUI();
+}
+
+// 선택 UI 업데이트
+function updateSelectionUI() {
+    const panel = document.getElementById('selectedPCsPanel');
+    const count = document.getElementById('selectedCount');
+    const list = document.getElementById('selectedPCsList');
+
+    count.textContent = selectedPCs.size;
+
+    if (selectedPCs.size > 0) {
+        panel.style.display = 'block';
+
+        // 선택된 PC 목록 표시
+        list.innerHTML = '';
+        selectedPCs.forEach(pcId => {
+            const pc = allPCs.find(p => p.id === pcId);
+            if (pc) {
+                const tag = document.createElement('div');
+                tag.className = 'selected-pc-tag';
+                tag.innerHTML = `
+                    <span>${pc.seat_number || pc.hostname}</span>
+                    <button class="remove-btn" onclick="togglePCSelection(${pcId}, event)">×</button>
+                `;
+                list.appendChild(tag);
+            }
+        });
+    } else {
+        panel.style.display = 'none';
+    }
+
+    // 좌석 셀 체크박스 업데이트
+    document.querySelectorAll('.seat-cell.occupied').forEach(cell => {
+        const pcId = parseInt(cell.dataset.pcId);
+        const checkbox = cell.querySelector('.seat-checkbox');
+        if (checkbox) {
+            if (selectedPCs.has(pcId)) {
+                cell.classList.add('selected');
+                checkbox.classList.add('checked');
+            } else {
+                cell.classList.remove('selected');
+                checkbox.classList.remove('checked');
+            }
+        }
+    });
+}
+
+// 드래그 선택
+function handleMouseDown(pcId, row, col) {
+    if (!selectionMode) return;
+    isDragging = true;
+    dragStartPos = { row, col };
+}
+
+function handleMouseOver(pcId, row, col) {
+    if (!selectionMode || !isDragging || !dragStartPos) return;
+
+    // 드래그 범위 내의 모든 PC 선택
+    const minRow = Math.min(dragStartPos.row, row);
+    const maxRow = Math.max(dragStartPos.row, row);
+    const minCol = Math.min(dragStartPos.col, col);
+    const maxCol = Math.max(dragStartPos.col, col);
+
+    document.querySelectorAll('.seat-cell.occupied').forEach(cell => {
+        const cellRow = parseInt(cell.dataset.row);
+        const cellCol = parseInt(cell.dataset.col);
+        const cellPcId = parseInt(cell.dataset.pcId);
+
+        if (cellRow >= minRow && cellRow <= maxRow &&
+            cellCol >= minCol && cellCol <= maxCol) {
+            selectedPCs.add(cellPcId);
+        }
+    });
+
+    updateSelectionUI();
+}
+
+function handleMouseUp() {
+    isDragging = false;
+    dragStartPos = null;
+}
+
+// 전역 마우스 이벤트
+document.addEventListener('mouseup', handleMouseUp);
 
 function renderLayout() {
     fetch(`/api/layout/map/${room}`)
@@ -113,6 +452,10 @@ function renderLayout() {
                     div.className = `seat-cell ${pc ? 'occupied' : 'empty'}`;
 
                     if (pc) {
+                        div.dataset.pcId = pc.id;
+                        div.dataset.row = row;
+                        div.dataset.col = col;
+
                         const color = !pc.is_online ? '#555' :
                                      (pc.cpu_usage && pc.cpu_usage > 90) ? '#dc2626' :
                                      (pc.cpu_usage && pc.cpu_usage > 75) ? '#f59e0b' : '#10b981';
@@ -121,6 +464,7 @@ function renderLayout() {
                         div.style.borderColor = color;
 
                         div.innerHTML = `
+                            <div class="seat-checkbox"></div>
                             <div style="font-weight: bold; color: white; font-size: 0.9em;">
                                 ${pc.seat_number}
                             </div>
@@ -133,7 +477,17 @@ function renderLayout() {
                             </div>
                         `;
 
-                        div.onclick = () => openModal(pc.id);
+                        // 이벤트 핸들러
+                        div.onclick = (e) => {
+                            if (selectionMode) {
+                                togglePCSelection(pc.id, e);
+                            } else {
+                                openModal(pc.id);
+                            }
+                        };
+
+                        div.onmousedown = () => handleMouseDown(pc.id, row, col);
+                        div.onmouseover = () => handleMouseOver(pc.id, row, col);
                     } else {
                         div.innerHTML = '<div style="color: #666; font-size: 0.8em;">빈 칸</div>';
                     }
@@ -149,5 +503,110 @@ function renderLayout() {
 }
 
 renderLayout();
+
+// ==================== 일괄 명령 모달 함수 ====================
+
+function showBulkCMDModal() {
+    const cmd = prompt('실행할 CMD 명령어를 입력하세요:\n\n예시:\n- hostname\n- whoami\n- ipconfig\n- dir');
+    if (!cmd) return;
+
+    executeBulkCommand('execute', { command: cmd });
+}
+
+function showBulkWingetModal() {
+    const appId = prompt('설치할 프로그램의 winget App ID를 입력하세요:\n\n예시:\n- Notepad++.Notepad++\n- 7zip.7zip\n- VideoLAN.VLC\n- Google.Chrome');
+    if (!appId) return;
+
+    executeBulkCommand('install', { app_id: appId });
+}
+
+function showBulkFileDownloadModal() {
+    const url = prompt('다운로드할 파일의 URL을 입력하세요:');
+    if (!url) return;
+
+    const path = prompt('저장할 경로를 입력하세요:\n(예: C:\\\\temp\\\\file.zip)', 'C:\\\\temp\\\\download.txt');
+    if (!path) return;
+
+    executeBulkCommand('download', { url, destination: path });
+}
+
+function showBulkAccountModal() {
+    const action = prompt('계정 관리 작업을 선택하세요:\n\n1. create (계정 생성)\n2. delete (계정 삭제)\n3. change_password (비밀번호 변경)');
+    if (!action || !['create', 'delete', 'change_password'].includes(action)) {
+        alert('올바른 작업을 입력하세요 (create, delete, change_password)');
+        return;
+    }
+
+    const username = prompt('사용자 이름:');
+    if (!username) return;
+
+    let password = null;
+    if (action === 'create' || action === 'change_password') {
+        password = prompt('비밀번호:');
+        if (!password) return;
+    }
+
+    executeBulkCommand('account', { action, username, password });
+}
+
+function showBulkPowerModal() {
+    const action = prompt('전원 관리 작업을 선택하세요:\n\n1. shutdown (종료)\n2. restart (재시작)\n3. logout (로그아웃)');
+    if (!action || !['shutdown', 'restart', 'logout'].includes(action)) {
+        alert('올바른 작업을 입력하세요 (shutdown, restart, logout)');
+        return;
+    }
+
+    const confirmed = confirm(`선택된 ${selectedPCs.size}대의 PC를 ${action} 하시겠습니까?`);
+    if (!confirmed) return;
+
+    executeBulkCommand('power', { action });
+}
+
+async function executeBulkCommand(commandType, commandData) {
+    if (selectedPCs.size === 0) {
+        alert('선택된 PC가 없습니다.');
+        return;
+    }
+
+    const pcIds = Array.from(selectedPCs);
+
+    if (!confirm(`선택된 ${pcIds.length}대의 PC에 명령을 전송하시겠습니까?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/pcs/bulk-command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                pc_ids: pcIds,
+                command_type: commandType,
+                command_data: commandData
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(`✅ 명령 전송 완료\n\n` +
+                  `총 ${result.total}대 중 ${result.success}대 성공, ${result.failed}대 실패`);
+
+            // 선택 해제
+            if (result.success > 0) {
+                clearSelection();
+            }
+        } else {
+            alert(`❌ 명령 전송 실패: ${result.error || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        console.error('Bulk command error:', error);
+        alert('명령 전송 중 오류가 발생했습니다.');
+    }
+}
+
+// PC 상세 모달 (기존 함수 유지)
+function openModal(pcId) {
+    window.location.href = `/pc/${pcId}`;
+}
 </script>
 {% endblock %}

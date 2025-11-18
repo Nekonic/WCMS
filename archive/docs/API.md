@@ -401,12 +401,12 @@ GET /api/pc/{pc_id}/history
 ```json
 [
   {
-    "created_at": "2024-11-17 10:30:00",
+    "created_at": "2025-11-17 10:30:00",
     "current_user": "student01",
     "processes": "[\"chrome.exe\", \"Code.exe\", \"notepad.exe\"]"
   },
   {
-    "created_at": "2024-11-17 10:20:00",
+    "created_at": "2025-11-17 10:20:00",
     "current_user": "student01",
     "processes": "[\"chrome.exe\", \"explorer.exe\"]"
   }

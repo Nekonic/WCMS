@@ -12,10 +12,24 @@ import json
 
 # 경로 설정
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(BASE_DIR, 'client'))
+CLIENT_DIR = os.path.join(BASE_DIR, 'client')
+sys.path.insert(0, CLIENT_DIR)
 
-from collector import collect_static_info, collect_dynamic_info
-from executor import CommandExecutor
+# 현재 디렉토리를 client로 변경 (collector.py가 상대 경로를 사용할 수 있도록)
+original_dir = os.getcwd()
+os.chdir(CLIENT_DIR)
+
+try:
+    from collector import collect_static_info, collect_dynamic_info
+    from executor import CommandExecutor
+except ImportError as e:
+    print(f"❌ 모듈 임포트 실패: {e}")
+    print(f"현재 작업 디렉토리: {os.getcwd()}")
+    print(f"sys.path: {sys.path}")
+    sys.exit(1)
+finally:
+    # 원래 디렉토리로 복원
+    os.chdir(original_dir)
 
 SERVER_URL = "http://127.0.0.1:5050"
 TEST_MACHINE_ID = "INTEGRATION_TEST_PC"

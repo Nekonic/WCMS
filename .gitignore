@@ -7,3 +7,7 @@
 *.idea/
 *.vscode/
 *.log
+*dist/
+*build/
+*.egg-info/
+*.pytest_cache/
