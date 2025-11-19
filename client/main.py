@@ -6,6 +6,7 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
+from typing import Optional
 from collector import collect_static_info, collect_dynamic_info
 from executor import CommandExecutor
 
@@ -209,7 +210,7 @@ def heartbeat_thread(stop_event: threading.Event):
             break
 
 
-def run_client(stop_event: threading.Event | None = None):
+def run_client(stop_event: Optional[threading.Event] = None):
     """클라이언트 본 동작. 서비스/콘솔 공통 진입점"""
     setup_logging()
     logger.info("WCMS 클라이언트 시작...")
