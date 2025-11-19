@@ -65,11 +65,45 @@ if sys.platform == 'win32':
             servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
                                   servicemanager.PYS_SERVICE_STARTED,
                                   (self._svc_name_, "started"))
+
+            # 서비스 로거 추가 (installer.log에 기록)
+            import logging
+            svc_logger = logging.getLogger('service_runtime')
+            svc_logger.setLevel(logging.INFO)
             try:
+                log_dir = os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), 'WCMS', 'logs')
+                os.makedirs(log_dir, exist_ok=True)
+                fh = logging.FileHandler(os.path.join(log_dir, 'service_runtime.log'), encoding='utf-8')
+                fh.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s'))
+                svc_logger.addHandler(fh)
+            except:
+                pass
+
+            try:
+                svc_logger.info('======= 서비스 시작 =======')
+                svc_logger.info(f'Python 실행 파일: {sys.executable}')
+                svc_logger.info(f'작업 디렉토리: {os.getcwd()}')
+                svc_logger.info('main 모듈 임포트 시도...')
+
                 from main import run_client
+                svc_logger.info('main 모듈 임포트 성공')
+                svc_logger.info('run_client 실행 시작...')
+
                 run_client(self.stop_event)
+
+                svc_logger.info('run_client 정상 종료')
+            except ImportError as e:
+                error_msg = f"모듈 임포트 실패: {e}"
+                svc_logger.error(error_msg)
+                import traceback
+                svc_logger.error(traceback.format_exc())
+                servicemanager.LogErrorMsg(error_msg)
             except Exception as e:
-                servicemanager.LogErrorMsg(f"WCMS Client Service error: {e}")
+                error_msg = f"WCMS Client Service error: {e}"
+                svc_logger.error(error_msg)
+                import traceback
+                svc_logger.error(traceback.format_exc())
+                servicemanager.LogErrorMsg(error_msg)
 
     if __name__ == '__main__':
         logger = setup_install_logging()

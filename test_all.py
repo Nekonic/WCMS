@@ -21,9 +21,9 @@ import argparse
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CLIENT_DIR = os.path.join(BASE_DIR, 'client')
 
-SERVER_URL = "http://127.0.0.1:5050"
+SERVER_URL = "http://aps.or.kr:8057"
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin"
+ADMIN_PASSWORD = "!Q2w3e4r!@#123"
 TEST_MACHINE_ID = "TEST_PC_INTEGRATION"
 
 # 색상 출력
@@ -84,19 +84,38 @@ def test_server_api():
     print_subsection("2. Admin Login (POST /login)")
     session = requests.Session()
     try:
+        print_info(f"로그인 시도: {ADMIN_USERNAME} / {ADMIN_PASSWORD}")
         response = session.post(
             f"{SERVER_URL}/login",
             data={'username': ADMIN_USERNAME, 'password': ADMIN_PASSWORD},
-            allow_redirects=False
+            allow_redirects=False,
+            timeout=5
         )
-        if response.status_code in [200, 302]:
-            print_success("로그인 성공")
+        print_info(f"응답 상태: {response.status_code}")
+        print_info(f"응답 헤더: {dict(response.headers)}")
+
+        # 세션 쿠키 확인
+        has_session = 'session' in session.cookies or 'connect.sid' in session.cookies
+        print_info(f"세션 쿠키: {dict(session.cookies)}")
+
+        # 실제 인증 확인: /api/pcs 접근 시도
+        verify_response = session.get(f"{SERVER_URL}/api/pcs", timeout=5)
+        print_info(f"인증 검증 응답: {verify_response.status_code}")
+
+        if verify_response.status_code == 200:
+            print_success("로그인 성공 (인증 검증 완료)")
             results.append(('login', True))
+        elif verify_response.status_code == 401:
+            print_error("로그인 실패 (인증되지 않음)")
+            print_error(f"응답 본문: {response.text[:200]}")
+            results.append(('login', False))
         else:
-            print_error(f"로그인 실패 (Status: {response.status_code})")
+            print_error(f"로그인 검증 실패 (Status: {verify_response.status_code})")
             results.append(('login', False))
     except Exception as e:
         print_error(f"로그인 오류: {e}")
+        import traceback
+        print_error(traceback.format_exc())
         results.append(('login', False))
 
     # 3. PC 목록 조회
@@ -255,17 +274,41 @@ def test_bulk_commands():
     # 로그인
     session = requests.Session()
     try:
+        print_info(f"로그인 시도: {ADMIN_USERNAME}")
         response = session.post(
             f"{SERVER_URL}/login",
             data={'username': ADMIN_USERNAME, 'password': ADMIN_PASSWORD},
-            allow_redirects=False
+            allow_redirects=False,
+            timeout=10
         )
-        if response.status_code not in [200, 302]:
-            print_error("로그인 실패 - 테스트 중단")
-            return []
+        print_info(f"로그인 응답 상태: {response.status_code}")
+        print_info(f"쿠키: {dict(session.cookies)}")
+
+        # 인증 확인
+        verify = session.get(f"{SERVER_URL}/api/pcs", timeout=10)
+        print_info(f"인증 확인 응답: {verify.status_code}")
+
+        if verify.status_code != 200:
+            print_error(f"로그인 실패 - 인증 확인 실패 (Status: {verify.status_code})")
+            print_error("테스트 중단")
+            return [
+                ('bulk_cmd', False),
+                ('bulk_winget', False),
+                ('bulk_download', False),
+                ('pending_commands', False),
+                ('clear_commands', False)
+            ]
     except Exception as e:
         print_error(f"로그인 오류: {e}")
-        return []
+        import traceback
+        print_error(traceback.format_exc())
+        return [
+            ('bulk_cmd', False),
+            ('bulk_winget', False),
+            ('bulk_download', False),
+            ('pending_commands', False),
+            ('clear_commands', False)
+        ]
 
     # 온라인 PC 조회
     try:
@@ -292,14 +335,22 @@ def test_bulk_commands():
     # 1. 일괄 CMD 명령
     print_subsection("1. 일괄 CMD 명령 (hostname)")
     try:
+        payload = {
+            'pc_ids': test_pc_ids,
+            'command_type': 'execute',
+            'command_data': {'command': 'hostname'}
+        }
+        print_info(f"요청 URL: {SERVER_URL}/api/pcs/bulk-command")
+        print_info(f"요청 본문: {json.dumps(payload, indent=2)}")
+
         response = session.post(
             f"{SERVER_URL}/api/pcs/bulk-command",
-            json={
-                'pc_ids': test_pc_ids,
-                'command_type': 'execute',
-                'command_data': {'command': 'hostname'}
-            }
+            json=payload,
+            timeout=10
         )
+        print_info(f"응답 상태: {response.status_code}")
+        print_info(f"응답 본문: {response.text[:500]}")
+
         if response.status_code == 200:
             result = response.json()
             print_success(f"명령 전송 완료: {result['success']}대 성공, {result['failed']}대 실패")
@@ -309,86 +360,123 @@ def test_bulk_commands():
             results.append(('bulk_cmd', False))
     except Exception as e:
         print_error(f"명령 전송 오류: {e}")
+        import traceback
+        print_error(traceback.format_exc())
         results.append(('bulk_cmd', False))
 
     # 2. 일괄 winget (버전 확인만)
     print_subsection("2. 일괄 winget 버전 확인")
     try:
+        payload = {
+            'pc_ids': test_pc_ids,
+            'command_type': 'execute',
+            'command_data': {'command': 'winget --version'}
+        }
+        print_info(f"요청 본문: {json.dumps(payload, indent=2)}")
+
         response = session.post(
             f"{SERVER_URL}/api/pcs/bulk-command",
-            json={
-                'pc_ids': test_pc_ids,
-                'command_type': 'execute',
-                'command_data': {'command': 'winget --version'}
-            }
+            json=payload,
+            timeout=10
         )
+        print_info(f"응답 상태: {response.status_code}")
+        print_info(f"응답 본문: {response.text[:500]}")
+
         if response.status_code == 200:
             result = response.json()
             print_success(f"명령 전송 완료: {result['success']}대 성공")
             results.append(('bulk_winget', True))
         else:
-            print_error(f"명령 전송 실패")
+            print_error(f"명령 전송 실패: {response.status_code}")
             results.append(('bulk_winget', False))
     except Exception as e:
         print_error(f"명령 전송 오류: {e}")
+        import traceback
+        print_error(traceback.format_exc())
         results.append(('bulk_winget', False))
 
     # 3. 일괄 파일 다운로드
     print_subsection("3. 일괄 파일 다운로드")
     try:
+        payload = {
+            'pc_ids': test_pc_ids,
+            'command_type': 'download',
+            'command_data': {
+                'url': 'https://www.google.com/robots.txt',
+                'destination': 'C:\\temp\\wcms_test.txt'
+            }
+        }
+        print_info(f"요청 본문: {json.dumps(payload, indent=2)}")
+
         response = session.post(
             f"{SERVER_URL}/api/pcs/bulk-command",
-            json={
-                'pc_ids': test_pc_ids,
-                'command_type': 'download',
-                'command_data': {
-                    'url': 'https://www.google.com/robots.txt',
-                    'destination': 'C:\\temp\\wcms_test.txt'
-                }
-            }
+            json=payload,
+            timeout=10
         )
+        print_info(f"응답 상태: {response.status_code}")
+        print_info(f"응답 본문: {response.text[:500]}")
+
         if response.status_code == 200:
             result = response.json()
             print_success(f"명령 전송 완료: {result['success']}대 성공")
             results.append(('bulk_download', True))
         else:
-            print_error(f"명령 전송 실패")
+            print_error(f"명령 전송 실패: {response.status_code}")
             results.append(('bulk_download', False))
     except Exception as e:
         print_error(f"명령 전송 오류: {e}")
+        import traceback
+        print_error(traceback.format_exc())
         results.append(('bulk_download', False))
 
     # 4. 대기 명령 조회
     print_subsection("4. 대기 중인 명령 조회")
     try:
-        response = session.get(f"{SERVER_URL}/api/commands/pending")
+        print_info(f"요청 URL: {SERVER_URL}/api/commands/pending")
+
+        response = session.get(f"{SERVER_URL}/api/commands/pending", timeout=10)
+        print_info(f"응답 상태: {response.status_code}")
+        print_info(f"응답 본문: {response.text[:500]}")
+
         if response.status_code == 200:
             result = response.json()
             print_success(f"대기 명령 조회 성공: {result['total']}개")
             results.append(('pending_commands', True))
         else:
-            print_error(f"대기 명령 조회 실패")
+            print_error(f"대기 명령 조회 실패: {response.status_code}")
             results.append(('pending_commands', False))
     except Exception as e:
         print_error(f"대기 명령 조회 오류: {e}")
+        import traceback
+        print_error(traceback.format_exc())
         results.append(('pending_commands', False))
 
     # 5. 명령 초기화 (일괄)
     print_subsection("5. 명령 초기화 (일괄)")
     try:
+        payload = {'pc_ids': test_pc_ids}
+        print_info(f"요청 URL: {SERVER_URL}/api/pcs/commands/clear")
+        print_info(f"요청 본문: {json.dumps(payload, indent=2)}")
+
         response = session.delete(
             f"{SERVER_URL}/api/pcs/commands/clear",
-            json={'pc_ids': test_pc_ids}
+            json=payload,
+            timeout=10
         )
+        print_info(f"응답 상태: {response.status_code}")
+        print_info(f"응답 본문: {response.text[:500]}")
+
         if response.status_code == 200:
             result = response.json()
             print_success(f"명령 삭제 완료: 총 {result['total_deleted']}개 삭제")
             results.append(('clear_commands', True))
         else:
-            print_error(f"명령 삭제 실패")
+            print_error(f"명령 삭제 실패: {response.status_code}")
             results.append(('clear_commands', False))
     except Exception as e:
         print_error(f"명령 삭제 오류: {e}")
+        import traceback
+        print_error(traceback.format_exc())
         results.append(('clear_commands', False))
 
     return results

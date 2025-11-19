@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 a = Analysis(
-    ['service.py'],
+    ['service.py', 'main.py', 'collector.py', 'executor.py'],  # 모든 소스 파일 명시
     pathex=[],
     binaries=[],
     datas=[],
