@@ -324,6 +324,39 @@ def test_bulk_commands():
         print_error(f"명령 전송 오류: {e}")
         results.append(('bulk_download', False))
 
+    # 4. 대기 명령 조회
+    print_subsection("4. 대기 중인 명령 조회")
+    try:
+        response = session.get(f"{SERVER_URL}/api/commands/pending")
+        if response.status_code == 200:
+            result = response.json()
+            print_success(f"대기 명령 조회 성공: {result['total']}개")
+            results.append(('pending_commands', True))
+        else:
+            print_error(f"대기 명령 조회 실패")
+            results.append(('pending_commands', False))
+    except Exception as e:
+        print_error(f"대기 명령 조회 오류: {e}")
+        results.append(('pending_commands', False))
+
+    # 5. 명령 초기화 (일괄)
+    print_subsection("5. 명령 초기화 (일괄)")
+    try:
+        response = session.delete(
+            f"{SERVER_URL}/api/pcs/commands/clear",
+            json={'pc_ids': test_pc_ids}
+        )
+        if response.status_code == 200:
+            result = response.json()
+            print_success(f"명령 삭제 완료: 총 {result['total_deleted']}개 삭제")
+            results.append(('clear_commands', True))
+        else:
+            print_error(f"명령 삭제 실패")
+            results.append(('clear_commands', False))
+    except Exception as e:
+        print_error(f"명령 삭제 오류: {e}")
+        results.append(('clear_commands', False))
+
     return results
 
 

@@ -3,6 +3,49 @@ import platform
 import socket
 import json
 
+# Windows 기본 시스템 프로세스 리스트
+WINDOWS_SYSTEM_PROCESSES = {
+    # 커널 및 코어 프로세스
+    'System Idle', 'Registry', 'MemCompression', 'Memory Compression',
+    'smss.exe', 'csrss.exe', 'wininit.exe', 'services.exe', 'lsass.exe',
+    'lsaiso.exe', 'winlogon.exe', 'fontdrvhost.exe',
+
+    # 서비스 호스트 및 관련 프로세스
+    'svchost.exe', 'dllhost.exe', 'taskhost.exe', 'taskhostex.exe',
+    'taskhostw.exe', 'RuntimeBroker.exe', 'sihost.exe',
+
+    # 탐색기 및 GUI 관련
+    'explorer.exe', 'dwm.exe', 'ShellExperienceHost.exe',
+    'StartMenuExperienceHost.exe', 'SearchHost.exe', 'SearchUI.exe',
+    'SearchApp.exe', 'SearchIndexer.exe',
+
+    # Windows 보안 및 업데이트
+    'SecurityHealthService.exe', 'SecurityHealthSystray.exe',
+    'MsMpEng.exe', 'NisSrv.exe', 'SgrmBroker.exe',
+    'smartscreen.exe', 'MpCmdRun.exe',
+
+    # Windows 업데이트 및 설치
+    'WUDFHost.exe', 'TiWorker.exe', 'TrustedInstaller.exe',
+    'usocoreworker.exe', 'UsoClient.exe', 'wuauclt.exe',
+
+    # Windows 스토어 및 앱
+    'ApplicationFrameHost.exe', 'WinStore.App.exe',
+    'AppInstaller.exe', 'WindowsInternal.ComposableShell.Experiences.TextInput.InputApp.exe',
+
+    # 시스템 서비스
+    'spoolsv.exe', 'conhost.exe', 'backgroundTaskHost.exe',
+    'ctfmon.exe', 'TextInputHost.exe', 'TabTip.exe',
+    'LogonUI.exe', 'LockApp.exe', 'UserOOBEBroker.exe',
+
+    # Windows 이벤트 및 로그
+    'wininit.exe', 'WmiPrvSE.exe', 'audiodg.exe',
+
+    # 기타 Windows 기본 프로세스
+    'SystemSettingsBroker.exe', 'SystemSettings.exe',
+    'PickerHost.exe', 'Widgets.exe', 'WidgetService.exe',
+    'PhoneExperienceHost.exe', 'YourPhone.exe',
+    'ProcessWindowsTerminal',
+}
 
 def collect_static_info():
     """정적 시스템 정보 수집 (한 번만 수집)"""
@@ -108,7 +151,9 @@ def collect_dynamic_info():
         processes = []
         for proc in psutil.process_iter(['name']):
             try:
-                processes.append(proc.info['name'])
+                proc_name = proc.info['name']
+                if proc_name not in WINDOWS_SYSTEM_PROCESSES:
+                    processes.append(proc_name)
             except:
                 pass
         # 중복 제거 및 정렬

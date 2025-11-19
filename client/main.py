@@ -3,6 +3,7 @@ import threading
 import json
 import psutil
 import requests
+from datetime import datetime
 from collector import collect_static_info, collect_dynamic_info
 from executor import CommandExecutor
 
@@ -13,7 +14,12 @@ MACHINE_ID = next(
     "MACHINE-DEFAULT"
 )
 
+# 부팅 시간 기록 (전원 관리 명령 유예 시간 계산용)
+BOOT_TIME = datetime.now()
+POWER_COMMAND_GRACE_PERIOD = 60  # 부팅 후 60초 동안은 전원 명령 실행 안 함
+
 print(f"[*] Machine ID: {MACHINE_ID}")
+print(f"[*] 부팅 시간: {BOOT_TIME.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def register_client():
@@ -71,6 +77,36 @@ def send_heartbeat():
         print(f"[-] Heartbeat 오류: {e}")
 
 
+def is_power_command(cmd_type, cmd_params):
+    """전원 관리 명령인지 확인"""
+    if cmd_type == 'power':
+        return True
+    if cmd_type in ['shutdown', 'reboot']:
+        return True
+    # execute 타입 중에서 shutdown 관련 명령 체크
+    if cmd_type == 'execute' and cmd_params.get('command'):
+        cmd = cmd_params['command'].lower()
+        if 'shutdown' in cmd or 'restart' in cmd or 'logoff' in cmd:
+            return True
+    return False
+
+
+def should_skip_command(cmd_type, cmd_params):
+    """명령을 건너뛰어야 하는지 확인"""
+    # 전원 관리 명령인지 확인
+    if not is_power_command(cmd_type, cmd_params):
+        return False
+
+    # 부팅 후 유예 시간 확인
+    elapsed = (datetime.now() - BOOT_TIME).total_seconds()
+    if elapsed < POWER_COMMAND_GRACE_PERIOD:
+        print(f"[!] 전원 관리 명령이지만 부팅 후 {int(elapsed)}초 경과 (유예 시간: {POWER_COMMAND_GRACE_PERIOD}초)")
+        print(f"[!] 안전을 위해 이 명령을 건너뜁니다.")
+        return True
+
+    return False
+
+
 def poll_command():
     """Long-polling으로 명령 대기"""
     while True:
@@ -86,7 +122,20 @@ def poll_command():
                     cmd_id = cmd_data.get('command_id')
                     cmd_type = cmd_data['command_type']
                     cmd_params = json.loads(cmd_data.get('command_data', '{}'))
+
                     print(f"\n[>>>] 명령 수신: {cmd_type} | 파라미터: {cmd_params}")
+
+                    # 전원 관리 명령이면서 유예 시간 내라면 건너뛰기
+                    if should_skip_command(cmd_type, cmd_params):
+                        result = f"⏭️ 명령 건너뜀: 부팅 후 {POWER_COMMAND_GRACE_PERIOD}초 이내의 전원 관리 명령은 안전을 위해 실행하지 않습니다."
+                        print(f"[<<<] {result}\n")
+                        send_command_result(cmd_id, 'skipped', result)
+                        continue
+
+                    # 전원 관리 명령이면 추가 경고 출력
+                    if is_power_command(cmd_type, cmd_params):
+                        elapsed = (datetime.now() - BOOT_TIME).total_seconds()
+                        print(f"[⚠️] 전원 관리 명령 실행 (부팅 후 {int(elapsed)}초 경과)")
 
                     # 명령 실행
                     result = CommandExecutor.execute_command(cmd_type, cmd_params)

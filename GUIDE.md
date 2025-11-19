@@ -64,7 +64,8 @@ WCMS는 실습실 PC를 원격으로 관리하고 제어하는 웹 기반 시스
 - ✅ **다중 PC 선택**: 드래그 또는 클릭으로 여러 PC 선택
 - ✅ **체크박스 UI**: 선택된 PC를 시각적으로 확인
 - ✅ **일괄 실행**: 선택된 모든 PC에 동시에 명령 전송
-- ✅ **결과 추적**: 성공/실패 개수 즉시 확인
+- ✅ **실시간 결과**: 각 PC별 실행 상태 및 결과 즉시 확인
+- ✅ **명령 초기화**: 대기 중인 명령 삭제 (개별/일괄)
 
 ### 🖥️ 모니터링
 - ✅ **실시간 상태**: CPU, RAM, 디스크 사용률
@@ -199,10 +200,30 @@ python test_bulk_commands.py
    - 📥 파일 다운로드
    - 👤 계정 관리
    - 🔌 전원 관리
+   - 🗑️ 대기 명령 삭제
 
 4. **결과 확인**
-   - 성공/실패 개수 알림
-   - 선택 자동 해제
+   - **실시간 결과 모달** 자동 표시
+   - 각 PC별 실행 상태 표시 (대기/실행 중/완료/오류)
+   - 명령 실행 결과 즉시 확인
+   - 완료될 때까지 자동 새로고침 (2초마다)
+   - 모든 명령 완료 시 자동으로 선택 해제
+
+#### 명령 초기화
+
+1. **일괄 삭제**
+   - PC 선택 후 "🗑️ 대기 명령 삭제" 클릭
+   - 선택된 PC들의 모든 대기 명령 삭제
+
+2. **전체 보기 및 개별 삭제**
+   - PC 선택 없이 "🗑️ 대기 명령 삭제" 클릭
+   - 대기 중인 모든 명령 목록 표시
+   - 개별 명령마다 삭제 버튼 제공
+
+3. **사용 시나리오**
+   - 부팅 시 밀린 shutdown 명령 때문에 꺼지는 경우
+   - 잘못된 명령을 전송한 경우
+   - 대량의 명령이 대기 중일 때
 
 #### 개별 PC 제어
 
@@ -218,7 +239,7 @@ python test_bulk_commands.py
 
 대부분의 관리 API는 세션 기반 인증이 필요합니다.
 
-```python
+```http request
 POST /login
 {
     "username": "admin",
@@ -230,7 +251,7 @@ POST /login
 
 #### 등록
 
-```python
+```http request
 POST /api/client/register
 {
     "machine_id": "ABC123",
@@ -244,7 +265,7 @@ POST /api/client/register
 
 #### 하트비트
 
-```python
+```http request
 POST /api/client/heartbeat
 {
     "machine_id": "ABC123",
@@ -260,7 +281,7 @@ POST /api/client/heartbeat
 
 #### 명령 폴링 (Long-polling)
 
-```python
+```http request
 GET /api/client/command?machine_id=ABC123&timeout=30
 
 # 응답 (명령 있음)
@@ -280,7 +301,7 @@ GET /api/client/command?machine_id=ABC123&timeout=30
 
 #### 명령 결과 보고
 
-```python
+```http request
 POST /api/client/command/result
 {
     "machine_id": "ABC123",
@@ -294,7 +315,7 @@ POST /api/client/command/result
 
 #### PC 목록 조회
 
-```python
+```http request
 GET /api/pcs
 
 # 응답
@@ -313,7 +334,7 @@ GET /api/pcs
 
 #### 일괄 명령 전송 ⭐
 
-```python
+```http request
 POST /api/pcs/bulk-command
 {
     "pc_ids": [1, 2, 3],
@@ -336,6 +357,101 @@ POST /api/pcs/bulk-command
 }
 ```
 
+#### 명령 초기화
+
+**대기 중인 명령 조회**:
+```http request
+GET /api/commands/pending
+
+# 응답
+{
+    "total": 5,
+    "commands": [
+        {
+            "command_id": 123,
+            "pc_id": 1,
+            "hostname": "DESKTOP-001",
+            "seat_number": "1, 1",
+            "room_name": "1실습실",
+            "command_type": "power",
+            "command_data": "{\"action\": \"shutdown\"}",
+            "priority": 5,
+            "created_at": "2025-11-18 10:30:00"
+        }
+    ]
+}
+```
+
+**개별 PC 명령 삭제**:
+```http request
+DELETE /api/pc/{pc_id}/commands/clear
+
+# 응답
+{
+    "status": "success",
+    "message": "3개의 대기 중인 명령이 삭제되었습니다.",
+    "deleted_count": 3
+}
+```
+
+**일괄 명령 삭제**:
+```http request
+DELETE /api/pcs/commands/clear
+{
+    "pc_ids": [1, 2, 3]
+}
+
+# 응답
+{
+    "total": 3,
+    "success": 3,
+    "failed": 0,
+    "total_deleted": 8,
+    "results": [
+        {"pc_id": 1, "deleted_count": 2, "status": "success"},
+        {"pc_id": 2, "deleted_count": 3, "status": "success"},
+        {"pc_id": 3, "deleted_count": 3, "status": "success"}
+    ]
+}
+```
+
+**명령 결과 조회** (실시간 폴링용):
+```http request
+POST /api/commands/results
+{
+    "command_ids": [123, 124, 125]
+}
+
+# 응답
+{
+    "total": 3,
+    "results": [
+        {
+            "command_id": 123,
+            "pc_id": 1,
+            "hostname": "DESKTOP-001",
+            "seat_number": "1, 1",
+            "command_type": "execute",
+            "status": "completed",
+            "result": "DESKTOP-001\n",
+            "error_message": null,
+            "completed_at": "2025-11-18 10:35:22"
+        },
+        {
+            "command_id": 124,
+            "pc_id": 2,
+            "hostname": "DESKTOP-002",
+            "seat_number": "1, 2",
+            "command_type": "execute",
+            "status": "executing",
+            "result": null,
+            "error_message": null,
+            "completed_at": null
+        }
+    ]
+}
+```
+
 #### 명령 타입
 
 | 타입 | 설명 | 필수 파라미터 |
@@ -348,8 +464,8 @@ POST /api/pcs/bulk-command
 
 **계정 관리 예시**:
 
-```python
-# 계정 생성
+생성
+```json
 {
     "command_type": "account",
     "command_data": {
@@ -358,8 +474,9 @@ POST /api/pcs/bulk-command
         "password": "Pass1234!"
     }
 }
-
-# 비밀번호 변경
+```
+비밀번호 변경
+```json
 {
     "command_type": "account",
     "command_data": {
@@ -368,8 +485,9 @@ POST /api/pcs/bulk-command
         "password": "NewPass5678!"
     }
 }
-
-# 계정 삭제
+```
+삭제
+```json
 {
     "command_type": "account",
     "command_data": {
@@ -381,11 +499,11 @@ POST /api/pcs/bulk-command
 
 **전원 관리 예시**:
 
-```python
+```json
 {
     "command_type": "power",
     "command_data": {
-        "action": "shutdown"  # shutdown, restart, logout
+        "action": "shutdown"
     }
 }
 ```
@@ -447,7 +565,7 @@ WCMS/
 
 ### 클라이언트 동작 흐름
 
-```python
+```
 1. 시작
    ↓
 2. 서버에 등록 (최초 1회)

@@ -89,11 +89,27 @@
                 </tr>
                 <tr>
                     <th>디스크 정보</th>
-                    <td>{{ pc.disk_info or 'N/A' }}</td>
+                    <td>
+                        {% if pc.disk_info_parsed %}
+                        <table class="table table-sm table-dark mb-0">
+                            <tr><th>디바이스</th><th>총 용량(GB)</th><th>파일시스템</th><th>마운트</th></tr>
+                            {% for dev, info in pc.disk_info_parsed.items() %}
+                            <tr>
+                                <td>{{ dev }}</td>
+                                <td>{{ (info.total / 1024 / 1024 / 1024)|round(2) if info.total is defined else 'N/A' }}</td>
+                                <td>{{ info.fstype or 'N/A' }}</td>
+                                <td>{{ info.mountpoint or 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
                 </tr>
                 <tr>
                     <th>OS 버전</th>
-                    <td>{{ pc.os_edition or 'N/A' }}</td>
+                    <td>{{ pc.os_edition }} <small class="text-muted">({{ pc.os_version or '버전 정보 없음' }})</small></td>
                 </tr>
                 <tr>
                     <th>현재 사용자</th>

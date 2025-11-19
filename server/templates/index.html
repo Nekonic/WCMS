@@ -173,6 +173,49 @@
         ">
             <i class="fas fa-power-off"></i> 전원 관리
         </button>
+        <button onclick="clearPendingCommands()" style="
+            background: #ff6b6b;
+            color: white;
+            padding: 0.7em 1.2em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        ">
+            <i class="fas fa-trash-alt"></i> 대기 명령 삭제
+        </button>
+    </div>
+</div>
+
+<!-- 대기 중인 명령 패널 -->
+<div id="pendingCommandsPanel" style="display: none; margin-bottom: 1.5em; padding: 1.5em; background: #3a3a3a; border-radius: 8px; border: 2px solid #ff6b6b;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+        <h3 style="margin: 0; color: white;">
+            <i class="fas fa-clock"></i> 대기 중인 명령: <span id="pendingCommandCount">0</span>개
+        </h3>
+        <button onclick="closePendingPanel()" style="
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+            padding: 0.5em 1em;
+            border-radius: 6px;
+            cursor: pointer;
+        ">
+            닫기
+        </button>
+    </div>
+
+    <div id="pendingCommandsList" style="
+        max-height: 300px;
+        overflow-y: auto;
+        background: rgba(0,0,0,0.3);
+        padding: 1em;
+        border-radius: 6px;
+    ">
+        <!-- 대기 명령 목록 동적 생성 -->
     </div>
 </div>
 
@@ -185,6 +228,72 @@
         width: fit-content;
     ">
         <!-- JavaScript에서 동적 생성 -->
+    </div>
+</div>
+
+<!-- 명령 실행 결과 모달 -->
+<div id="commandResultModal" style="
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 2000;
+    padding: 2em;
+    overflow-y: auto;
+">
+    <div style="
+        max-width: 900px;
+        margin: 2em auto;
+        background: #2a2a2a;
+        border-radius: 12px;
+        padding: 2em;
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
+            <h2 style="margin: 0; color: white;">
+                <i class="fas fa-tasks"></i> 명령 실행 결과
+            </h2>
+            <button onclick="closeResultModal()" style="
+                background: #dc2626;
+                color: white;
+                border: none;
+                padding: 0.6em 1.2em;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 600;
+            ">
+                닫기
+            </button>
+        </div>
+
+        <div id="commandResultStatus" style="
+            background: rgba(74, 158, 255, 0.1);
+            padding: 1em;
+            border-radius: 8px;
+            margin-bottom: 1.5em;
+            border-left: 4px solid #4a9eff;
+        ">
+            <div style="display: flex; align-items: center; gap: 1em;">
+                <div class="spinner" id="loadingSpinner"></div>
+                <div>
+                    <div style="color: white; font-weight: 600; margin-bottom: 0.3em;">
+                        명령 실행 중...
+                    </div>
+                    <div style="color: #aaa; font-size: 0.9em;">
+                        <span id="completedCount">0</span> / <span id="totalCount">0</span> 완료
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="commandResultList" style="
+            max-height: 500px;
+            overflow-y: auto;
+        ">
+            <!-- 결과 동적 생성 -->
+        </div>
     </div>
 </div>
 
@@ -286,6 +395,62 @@
     cursor: pointer;
     font-size: 12px;
     padding: 0;
+}
+
+/* 명령 실행 결과 모달 스타일 */
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #4a9eff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.result-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1em;
+    margin-bottom: 0.8em;
+    border-radius: 8px;
+    border-left: 4px solid #888;
+}
+
+.result-item.completed {
+    border-left-color: #10b981;
+}
+
+.result-item.error {
+    border-left-color: #dc2626;
+}
+
+.result-item.pending {
+    border-left-color: #f59e0b;
+}
+
+.result-item.executing {
+    border-left-color: #4a9eff;
+}
+
+.result-item.skipped {
+    border-left-color: #6366f1;
+}
+
+.result-content {
+    background: #1a1a1a;
+    padding: 1em;
+    border-radius: 6px;
+    margin-top: 0.5em;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85em;
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
 }
 </style>
 
@@ -585,28 +750,354 @@ async function executeBulkCommand(commandType, commandData) {
             })
         });
 
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const result = await response.json();
 
-        if (response.ok) {
-            alert(`✅ 명령 전송 완료\n\n` +
-                  `총 ${result.total}대 중 ${result.success}대 성공, ${result.failed}대 실패`);
+        if (result.success > 0) {
+            // 명령 전송 성공 - 결과 모달 표시
+            const commandIds = result.results
+                .filter(r => r.status === 'success')
+                .map(r => r.command_id);
 
-            // 선택 해제
-            if (result.success > 0) {
-                clearSelection();
+            if (commandIds.length > 0) {
+                showCommandResultModal(commandIds, pcIds);
+            } else {
+                alert(`⚠️ 일부 명령 전송 실패\n\n성공: ${result.success}대\n실패: ${result.failed}대`);
             }
         } else {
-            alert(`❌ 명령 전송 실패: ${result.error || '알 수 없는 오류'}`);
+            alert(`❌ 명령 전송 실패\n\n모든 PC에 명령 전송이 실패했습니다.\n\n${result.error || '알 수 없는 오류'}`);
         }
     } catch (error) {
         console.error('Bulk command error:', error);
-        alert('명령 전송 중 오류가 발생했습니다.');
+        alert(`명령 전송 중 오류가 발생했습니다.\n\n${error.message}`);
+    }
+}
+
+// ==================== 명령 결과 추적 ====================
+
+let resultPollingInterval = null;
+
+function showCommandResultModal(commandIds, pcIds) {
+    // 기존 폴링이 있다면 정리
+    if (resultPollingInterval) {
+        clearInterval(resultPollingInterval);
+        resultPollingInterval = null;
+    }
+
+    const modal = document.getElementById('commandResultModal');
+    const resultList = document.getElementById('commandResultList');
+    const statusDiv = document.getElementById('commandResultStatus');
+
+    // 초기화 - 먼저 resultList를 비움
+    resultList.innerHTML = '';
+
+    // statusDiv를 재생성 (이 시점에서 totalCount, completedCount는 아직 없음)
+    statusDiv.style.background = 'rgba(74, 158, 255, 0.1)';
+    statusDiv.style.borderLeftColor = '#4a9eff';
+    statusDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 1em;">
+            <div class="spinner" id="loadingSpinner"></div>
+            <div>
+                <div style="color: white; font-weight: 600; margin-bottom: 0.3em;">
+                    명령 실행 중...
+                </div>
+                <div style="color: #aaa; font-size: 0.9em;">
+                    <span id="completedCount">0</span> / <span id="totalCount">${commandIds.length}</span> 완료
+                </div>
+            </div>
+        </div>
+    `;
+
+    // statusDiv.innerHTML이 재생성된 후에 spinner를 표시
+    const spinner = document.getElementById('loadingSpinner');
+    if (spinner) {
+        spinner.style.display = 'block';
+    }
+
+    // PC 정보 매핑
+    const pcMap = {};
+    allPCs.forEach(pc => {
+        pcMap[pc.id] = pc;
+    });
+
+    // 초기 리스트 생성
+    commandIds.forEach((cmdId, index) => {
+        const pcId = pcIds[index];
+        const pc = pcMap[pcId] || {};
+
+        const item = document.createElement('div');
+        item.className = 'result-item pending';
+        item.id = `result-${cmdId}`;
+        item.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="color: white;">${pc.hostname || 'Unknown PC'}</strong>
+                    <span style="color: #888;"> (${pc.seat_number || 'N/A'})</span>
+                </div>
+                <span class="status-badge" style="
+                    background: #f59e0b;
+                    color: white;
+                    padding: 0.3em 0.8em;
+                    border-radius: 4px;
+                    font-size: 0.85em;
+                ">대기 중...</span>
+            </div>
+            <div class="result-content" style="display: none;"></div>
+        `;
+        resultList.appendChild(item);
+    });
+
+    modal.style.display = 'block';
+
+    // 결과 폴링 시작
+    startResultPolling(commandIds);
+}
+
+async function startResultPolling(commandIds) {
+    let completedCommands = new Set();
+
+    const poll = async () => {
+        try {
+            const response = await fetch('/api/commands/results', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command_ids: commandIds })
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch results:', response.status);
+                return;
+            }
+
+            const data = await response.json();
+
+            data.results.forEach(cmd => {
+                updateCommandResult(cmd);
+                if (cmd.status === 'completed' || cmd.status === 'error' || cmd.status === 'skipped') {
+                    completedCommands.add(cmd.command_id);
+                }
+            });
+
+            // 완료 카운트 업데이트
+            const completedCountEl = document.getElementById('completedCount');
+            if (completedCountEl) {
+                completedCountEl.textContent = completedCommands.size;
+            }
+
+            // 모든 명령 완료 시 폴링 중지
+            if (completedCommands.size === commandIds.length) {
+                clearInterval(resultPollingInterval);
+                resultPollingInterval = null;
+
+                const spinner = document.getElementById('loadingSpinner');
+                const statusDiv = document.getElementById('commandResultStatus');
+
+                if (spinner) spinner.style.display = 'none';
+                if (statusDiv) {
+                    statusDiv.style.background = 'rgba(16, 185, 129, 0.1)';
+                    statusDiv.style.borderLeftColor = '#10b981';
+                    statusDiv.innerHTML = `
+                        <div style="color: #10b981; font-weight: 600;">
+                            <i class="fas fa-check-circle"></i> 모든 명령 실행 완료!
+                        </div>
+                    `;
+                }
+
+                clearSelection();
+            }
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+    };
+
+    // 즉시 한 번 실행
+    await poll();
+
+    // 2초마다 폴링
+    resultPollingInterval = setInterval(poll, 2000);
+}
+
+function updateCommandResult(cmd) {
+    const item = document.getElementById(`result-${cmd.command_id}`);
+    if (!item) return;
+
+    // 상태별 색상 및 텍스트
+    const statusMap = {
+        'pending': { color: '#f59e0b', text: '대기 중...', class: 'pending' },
+        'executing': { color: '#4a9eff', text: '실행 중...', class: 'executing' },
+        'completed': { color: '#10b981', text: '완료', class: 'completed' },
+        'error': { color: '#dc2626', text: '오류', class: 'error' },
+        'skipped': { color: '#6366f1', text: '건너뜀', class: 'skipped' }
+    };
+
+    const status = statusMap[cmd.status] || statusMap['pending'];
+
+    item.className = `result-item ${status.class}`;
+
+    const badge = item.querySelector('.status-badge');
+    if (badge) {
+        badge.style.background = status.color;
+        badge.textContent = status.text;
+    }
+
+    // 결과 표시
+    if (cmd.result || cmd.error_message) {
+        const resultContent = item.querySelector('.result-content');
+        if (resultContent) {
+            resultContent.style.display = 'block';
+            resultContent.textContent = cmd.result || cmd.error_message || '(결과 없음)';
+        }
+    }
+}
+
+function closeResultModal() {
+    const modal = document.getElementById('commandResultModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+
+    if (resultPollingInterval) {
+        clearInterval(resultPollingInterval);
+        resultPollingInterval = null;
     }
 }
 
 // PC 상세 모달 (기존 함수 유지)
 function openModal(pcId) {
     window.location.href = `/pc/${pcId}`;
+}
+
+// ==================== 명령 초기화 기능 ====================
+
+async function clearPendingCommands() {
+    if (selectedPCs.size === 0) {
+        // 선택된 PC가 없으면 대기 명령 목록 표시
+        await showPendingCommandsList();
+        return;
+    }
+
+    const pcIds = Array.from(selectedPCs);
+
+    if (!confirm(`선택된 ${pcIds.length}대 PC의 대기 중인 명령을 모두 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/pcs/commands/clear', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pc_ids: pcIds })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(`✅ 명령 삭제 완료\n\n` +
+                  `총 ${result.total_deleted}개의 대기 명령이 삭제되었습니다.\n` +
+                  `성공: ${result.success}대, 실패: ${result.failed}대`);
+            clearSelection();
+        } else {
+            alert(`❌ 명령 삭제 실패: ${result.error || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        console.error('Clear commands error:', error);
+        alert('명령 삭제 중 오류가 발생했습니다.');
+    }
+}
+
+async function showPendingCommandsList() {
+    try {
+        const response = await fetch('/api/commands/pending');
+        const data = await response.json();
+
+        if (!response.ok) {
+            alert('대기 명령 목록을 불러올 수 없습니다.');
+            return;
+        }
+
+        const panel = document.getElementById('pendingCommandsPanel');
+        const list = document.getElementById('pendingCommandsList');
+        const count = document.getElementById('pendingCommandCount');
+
+        count.textContent = data.total;
+
+        if (data.total === 0) {
+            list.innerHTML = '<p style="color: #aaa; text-align: center; padding: 2em;">대기 중인 명령이 없습니다.</p>';
+        } else {
+            list.innerHTML = data.commands.map(cmd => {
+                const cmdData = JSON.parse(cmd.command_data || '{}');
+                const cmdDataStr = Object.keys(cmdData).map(k => `${k}: ${cmdData[k]}`).join(', ');
+
+                return `
+                    <div style="
+                        background: rgba(255,255,255,0.05);
+                        padding: 1em;
+                        margin-bottom: 0.5em;
+                        border-radius: 6px;
+                        border-left: 4px solid #fbbf24;
+                    ">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: #fbbf24;">${cmd.hostname || 'Unknown'}</strong>
+                                <span style="color: #888;"> (${cmd.seat_number || 'N/A'} - ${cmd.room_name || 'N/A'})</span>
+                            </div>
+                            <button onclick="clearSingleCommand(${cmd.pc_id}, ${cmd.command_id})" style="
+                                background: #dc2626;
+                                color: white;
+                                border: none;
+                                padding: 0.4em 0.8em;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 0.85em;
+                            ">삭제</button>
+                        </div>
+                        <div style="color: #ccc; font-size: 0.9em; margin-top: 0.5em;">
+                            <span style="color: #4a9eff;">${cmd.command_type}</span> - ${cmdDataStr}
+                        </div>
+                        <div style="color: #888; font-size: 0.8em; margin-top: 0.3em;">
+                            생성: ${cmd.created_at} | 우선순위: ${cmd.priority}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        panel.style.display = 'block';
+    } catch (error) {
+        console.error('Load pending commands error:', error);
+        alert('대기 명령 목록을 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+async function clearSingleCommand(pcId, commandId) {
+    if (!confirm('이 명령을 삭제하시겠습니까?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/pc/${pcId}/commands/clear`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(`✅ ${result.deleted_count}개의 명령이 삭제되었습니다.`);
+            showPendingCommandsList(); // 목록 새로고침
+        } else {
+            alert(`❌ 삭제 실패: ${result.message || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        console.error('Clear single command error:', error);
+        alert('명령 삭제 중 오류가 발생했습니다.');
+    }
+}
+
+function closePendingPanel() {
+    document.getElementById('pendingCommandsPanel').style.display = 'none';
 }
 </script>
 {% endblock %}
