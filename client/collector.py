@@ -50,30 +50,52 @@ WINDOWS_SYSTEM_PROCESSES = {
 def collect_static_info():
     """정적 시스템 정보 수집 (한 번만 수집)"""
     try:
-        # CPU 정보
-        cpu_model = platform.processor() or "Unknown CPU"
+        # CPU 정보 - WMI로 정확한 모델명 가져오기
+        cpu_model = "Unknown CPU"
+        try:
+            import wmi
+            c = wmi.WMI()
+            for processor in c.Win32_Processor():
+                cpu_model = processor.Name.strip()
+                break
+        except:
+            # WMI 실패 시 platform 사용
+            cpu_model = platform.processor() or "Unknown CPU"
+
         cpu_cores = psutil.cpu_count(logical=False) or 1
         cpu_threads = psutil.cpu_count(logical=True) or 1
 
-        # RAM 정보
+        # RAM 정보 - GB 단위로 변경
         ram = psutil.virtual_memory()
-        ram_total = ram.total // (1024 * 1024)  # MB 단위
+        ram_total_gb = round(ram.total / (1024 ** 3), 2)  # GB 단위, 소수점 2자리
 
-        # 디스크 정보
+        # 디스크 정보 - GB 단위로 변경
         disk_info = {}
         for partition in psutil.disk_partitions():
             try:
                 usage = psutil.disk_usage(partition.mountpoint)
                 disk_info[partition.device] = {
-                    "total": usage.total,
+                    "total_gb": round(usage.total / (1024 ** 3), 2),
                     "fstype": partition.fstype,
                     "mountpoint": partition.mountpoint
                 }
             except:
                 pass
 
-        # OS 정보
-        os_edition = f"{platform.system()} {platform.release()}"
+        # OS 정보 - Windows 11 정확하게 감지
+        os_name = platform.system()
+        os_release = platform.release()
+
+        # Windows 11 감지 (빌드 번호로 확인)
+        if os_name == "Windows" and os_release == "10":
+            try:
+                import sys
+                if sys.getwindowsversion().build >= 22000:
+                    os_release = "11"
+            except:
+                pass
+
+        os_edition = f"{os_name} {os_release}"
         os_version = platform.version()
 
         # 호스트명
@@ -95,7 +117,7 @@ def collect_static_info():
             "cpu_model": cpu_model,
             "cpu_cores": cpu_cores,
             "cpu_threads": cpu_threads,
-            "ram_total": ram_total,
+            "ram_total": ram_total_gb,  # GB 단위
             "disk_info": json.dumps(disk_info),
             "os_edition": os_edition,
             "os_version": os_version
@@ -111,19 +133,19 @@ def collect_dynamic_info():
         # CPU 사용률
         cpu_usage = psutil.cpu_percent(interval=1)
 
-        # RAM 사용량
+        # RAM 사용량 - GB 단위로 변경
         ram = psutil.virtual_memory()
-        ram_used = ram.used // (1024 * 1024)  # MB
+        ram_used_gb = round(ram.used / (1024 ** 3), 2)  # GB 단위
         ram_usage_percent = ram.percent
 
-        # 디스크 사용량
+        # 디스크 사용량 - GB 단위로 변경
         disk_usage = {}
         for partition in psutil.disk_partitions():
             try:
                 usage = psutil.disk_usage(partition.mountpoint)
                 disk_usage[partition.device] = {
-                    "used": usage.used,
-                    "free": usage.free,
+                    "used_gb": round(usage.used / (1024 ** 3), 2),
+                    "free_gb": round(usage.free / (1024 ** 3), 2),
                     "percent": usage.percent
                 }
             except:
@@ -161,7 +183,7 @@ def collect_dynamic_info():
 
         return {
             "cpu_usage": cpu_usage,
-            "ram_used": ram_used,
+            "ram_used": ram_used_gb,  # GB 단위
             "ram_usage_percent": ram_usage_percent,
             "disk_usage": json.dumps(disk_usage),
             "ip_address": ip_address,

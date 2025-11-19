@@ -47,7 +47,7 @@ def test_collect_static_info():
             print_info(f"호스트명: {info.get('hostname')}")
             print_info(f"CPU 모델: {info.get('cpu_model')}")
             print_info(f"CPU 코어: {info.get('cpu_cores')}")
-            print_info(f"총 RAM: {info.get('ram_total')} MB")
+            print_info(f"총 RAM: {info.get('ram_total')} GB")
             print_info(f"OS: {info.get('os_edition')}")
 
             # 필수 필드 확인
@@ -77,7 +77,7 @@ def test_collect_dynamic_info():
         if info:
             print_success("동적 정보 수집 성공")
             print_info(f"CPU 사용률: {info.get('cpu_usage')}%")
-            print_info(f"RAM 사용량: {info.get('ram_used')} MB ({info.get('ram_usage_percent')}%)")
+            print_info(f"RAM 사용량: {info.get('ram_used')} GB ({info.get('ram_usage_percent')}%)")
             print_info(f"IP 주소: {info.get('ip_address')}")
             print_info(f"현재 사용자: {info.get('current_user')}")
             print_info(f"업타임: {info.get('uptime')} 초")

@@ -71,7 +71,7 @@
                     <th>RAM 전체</th>
                     <td>
                         {% if pc.ram_total %}
-                        {{ (pc.ram_total / 1024 / 1024 / 1024)|round(2) }} GB
+                        {{ pc.ram_total }} GB
                         {% else %}
                         N/A
                         {% endif %}
@@ -80,8 +80,8 @@
                 <tr>
                     <th>RAM 사용</th>
                     <td>
-                        {% if pc.ram_used and pc.ram_total %}
-                        {{ (pc.ram_used / 1024 / 1024 / 1024)|round(2) }} GB ({{ ((pc.ram_used / pc.ram_total) * 100)|round(1) }}%)
+                        {% if pc.ram_used %}
+                        {{ pc.ram_used }} GB ({{ pc.ram_usage_percent|round(1) if pc.ram_usage_percent else 'N/A' }}%)
                         {% else %}
                         N/A
                         {% endif %}
@@ -92,11 +92,11 @@
                     <td>
                         {% if pc.disk_info_parsed %}
                         <table class="table table-sm table-dark mb-0">
-                            <tr><th>디바이스</th><th>총 용량(GB)</th><th>파일시스템</th><th>마운트</th></tr>
+                            <tr><th>디바이스</th><th>총 용량</th><th>파일시스템</th><th>마운트</th></tr>
                             {% for dev, info in pc.disk_info_parsed.items() %}
                             <tr>
                                 <td>{{ dev }}</td>
-                                <td>{{ (info.total / 1024 / 1024 / 1024)|round(2) if info.total is defined else 'N/A' }}</td>
+                                <td>{{ info.total_gb }} GB</td>
                                 <td>{{ info.fstype or 'N/A' }}</td>
                                 <td>{{ info.mountpoint or 'N/A' }}</td>
                             </tr>
