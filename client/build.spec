@@ -54,8 +54,14 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
+    upx=False,  # UPX 압축 비활성화 (pywin32 DLL 호환성 문제 방지)
+    upx_exclude=[
+        'pythoncom*.dll',
+        'pywintypes*.dll',
+        'mfc*.dll',
+        'vcruntime*.dll',
+        'python*.dll'
+    ],
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,

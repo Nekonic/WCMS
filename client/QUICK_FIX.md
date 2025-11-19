@@ -49,6 +49,10 @@ WCMS-Client.exe run
 
 ### 4. 오류별 해결 방법
 
+#### 오류: "Failed to extract Pythonwin#mfc140u.dll: decompression resulted in return code -1!"
+**원인:** UPX 압축이 pywin32 DLL과 호환되지 않음
+**해결:** build.spec에서 upx=False로 설정 (이미 수정됨) 후 재빌드 필요
+
 #### 오류: "No module named 'collector'" 또는 "No module named 'executor'"
 **원인:** PyInstaller가 모듈을 포함하지 못함
 **해결:** build.spec 수정 (이미 수정함) 후 재빌드 필요
