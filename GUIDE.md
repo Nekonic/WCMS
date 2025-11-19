@@ -1,7 +1,7 @@
 # WCMS 통합 가이드
 
-> **최종 업데이트**: 2025.11.18  
-> **버전**: 1.0  
+> **최종 업데이트**: 2025.11.19  
+> **버전**: 1.1  
 > **프로젝트**: Woosuk Computer Management System
 
 ---
@@ -60,7 +60,7 @@ WCMS는 실습실 PC를 원격으로 관리하고 제어하는 웹 기반 시스
 - ✅ **계정 관리**: Windows 계정 생성/삭제/비밀번호 변경
 - ✅ **전원 관리**: 원격 종료/재시작/로그아웃
 
-### 📊 일괄 명령
+### 📦 일괄 명령
 - ✅ **다중 PC 선택**: 드래그 또는 클릭으로 여러 PC 선택
 - ✅ **체크박스 UI**: 선택된 PC를 시각적으로 확인
 - ✅ **일괄 실행**: 선택된 모든 PC에 동시에 명령 전송
@@ -68,10 +68,18 @@ WCMS는 실습실 PC를 원격으로 관리하고 제어하는 웹 기반 시스
 - ✅ **명령 초기화**: 대기 중인 명령 삭제 (개별/일괄)
 
 ### 🖥️ 모니터링
-- ✅ **실시간 상태**: CPU, RAM, 디스크 사용률
-- ✅ **프로세스 추적**: 실행 중인 프로그램 모니터링
-- ✅ **좌석 배치**: 실습실 레이아웃 관리
+- ✅ **실시간 상태**: CPU, RAM, 디스크 사용률 (GB 단위)
+- ✅ **디스크 시각화**: Chart.js 도넛 차트로 드라이브별 사용 현황 표시
+- ✅ **프로세스 추적**: 실행 중인 프로그램 모니터링 (시스템 프로세스 자동 필터링)
+- ✅ **좌석 배치**: 실습실 레이아웃 관리 (드래그 앤 드롭)
 - ✅ **상태 표시**: 온라인/오프라인, 부하 상태 색상 구분
+- ✅ **상세 정보**: CPU 모델명, Windows 에디션 (Home/Pro/Education 등)
+
+### 🚀 배포
+- ✅ **Windows 서비스**: 백그라운드 실행, 재부팅 시 자동 시작
+- ✅ **단일 EXE**: PyInstaller로 빌드된 배포 파일
+- ✅ **GitHub Actions**: 자동 빌드 및 릴리스
+- ✅ **로그 시스템**: 회전 로그 파일 (RotatingFileHandler)
 
 ---
 
@@ -110,14 +118,48 @@ python app.py
 
 ### 3. 클라이언트 설정 (Windows PC)
 
+#### 개발/테스트 모드
+
 ```bash
 cd client
-
-# 직접 실행
 python main.py
+```
 
-# 또는 빌드된 실행 파일 사용
-build\main\main.exe
+#### 배포 모드 (Windows 서비스)
+
+**방법 1: 릴리스 다운로드 (권장)**
+```bash
+# 1. GitHub Release에서 최신 WCMS-Client.exe 다운로드
+# 2. 관리자 권한으로 실행 → 자동 설치 및 시작
+# 3. 재부팅 시 자동 시작됨
+```
+
+**방법 2: 로컬 빌드**
+```bash
+cd client
+pip install pyinstaller
+pyinstaller build.spec
+
+# 생성된 dist/WCMS-Client.exe를 관리자 권한으로 실행
+```
+
+**서비스 관리**
+```bash
+# 상태 확인
+check_status.bat
+
+# 로그 확인
+type C:\ProgramData\WCMS\logs\client.log
+type C:\ProgramData\WCMS\logs\service_runtime.log
+
+# 서비스 중지 및 제거
+sc stop WCMSClient
+sc delete WCMSClient
+```
+
+**디버그 모드 (포그라운드 실행)**
+```bash
+WCMS-Client.exe run
 ```
 
 ### 4. 웹 접속
