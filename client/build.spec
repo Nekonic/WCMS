@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 a = Analysis(
-    ['main.py'],
+    ['service.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -17,7 +17,11 @@ a = Analysis(
         'urllib3',
         'charset_normalizer',
         'idna',
-        'certifi'
+        'certifi',
+        'win32service',
+        'win32serviceutil',
+        'win32event',
+        'servicemanager'
     ],
     hookspath=[],
     hooksconfig={},
@@ -42,7 +46,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

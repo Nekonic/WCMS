@@ -32,11 +32,14 @@ jobs:
         python -c "import psutil; print('psutil:', psutil.__version__)"
         python -c "import requests; print('requests:', requests.__version__)"
         python -c "import wmi; print('wmi OK')"
+        python -c "import win32serviceutil, win32service, win32event, servicemanager; print('pywin32 OK')"
 
     - name: Build EXE with PyInstaller
       working-directory: ./client
       run: |
         pyinstaller build.spec
+        echo Built files:
+        dir dist
 
     - name: Extract version from tag
       id: version
@@ -51,19 +54,13 @@ jobs:
       with:
         name: WCMS Client v${{ steps.version.outputs.version }}
         body: |
-          # WCMS Client Beta v${{ steps.version.outputs.version }}
-          
+          # WCMS Client v${{ steps.version.outputs.version }}
+
           ## 설치 방법
-          1. `WCMS-Client.exe` 다운로드
-          2. Windows 환경에서 관리자 권한으로 실행
-          3. 서버 주소 확인 후 자동 등록
-          
-          ## 주요 기능
-          - 시스템 정보 자동 수집
-          - 실제 IP/MAC 주소 조회
-          - Long-polling 명령 수신
-          - 원격 종료/재시작
-          
+          1. `WCMS-Client.exe`를 다운로드합니다.
+          2. 파일을 우클릭하여 "관리자 권한으로 실행"을 선택하면 서비스가 자동으로 설치 및 시작됩니다.
+          3. 설치 후 재부팅 시에도 자동 시작됩니다.
+
           ## 요구사항
           - Windows 10/11
           - 관리자 권한
@@ -78,5 +75,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: WCMS-Client-v${{ steps.version.outputs.version }}
-        path: ./client/dist/WCMS-Client.exe
+        path: |
+          ./client/dist/WCMS-Client.exe
         retention-days: 30

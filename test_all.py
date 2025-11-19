@@ -139,7 +139,11 @@ def test_server_api():
             "mac_address": "00:11:22:33:44:55",
             "cpu_model": "Test CPU",
             "cpu_cores": 4,
-            "ram_total": 8192
+            "cpu_threads": 4,
+            "ram_total": 8192,
+            "disk_info": {"C:": {"total": 512000000000, "fstype": "NTFS"}},
+            "os_edition": "Test OS",
+            "os_version": "1.0"
         }
         response = requests.post(
             f"{SERVER_URL}/api/client/register",
@@ -165,7 +169,12 @@ def test_server_api():
             "system_info": {
                 "cpu_usage": 45.2,
                 "ram_used": 4096,
-                "ip_address": "127.0.0.1"
+                "ram_usage_percent": 50.0,
+                "uptime": 3600,
+                "disk_usage": '{"C:": {"used": 256000000000, "free": 256000000000, "percent": 50.0}}',
+                "ip_address": "127.0.0.1",
+                "current_user": "test_user",
+                "processes": '["test.exe"]'
             }
         }
         response = requests.post(
@@ -208,6 +217,31 @@ def test_server_api():
     except Exception as e:
         print_error(f"명령 폴링 오류: {e}")
         results.append(('poll', False))
+
+    # 8. PC 상세 정보 (첫 번째 PC)
+    print_subsection("8. PC Detail (GET /api/pc/1)")
+    try:
+        detail_resp = session.get(f"{SERVER_URL}/api/pc/1", timeout=5)
+        if detail_resp.status_code == 200:
+            pc_detail = detail_resp.json()
+            os_ok = pc_detail.get('os_edition') not in (None, 'Unknown')
+            disk_ok = bool(pc_detail.get('disk_info_parsed'))
+            if os_ok:
+                print_success(f"OS 확인: {pc_detail.get('os_edition')}")
+            else:
+                print_warning("OS 정보가 Unknown")
+            if disk_ok:
+                first_dev = next(iter(pc_detail['disk_info_parsed'].keys())) if pc_detail['disk_info_parsed'] else 'N/A'
+                print_success(f"디스크 정보 파싱 성공 (예: {first_dev})")
+            else:
+                print_warning("디스크 정보 없음/파싱 실패")
+            results.append(('pc_detail_api', os_ok and disk_ok))
+        else:
+            print_error(f"PC 상세 조회 실패 (Status: {detail_resp.status_code})")
+            results.append(('pc_detail_api', False))
+    except Exception as e:
+        print_error(f"PC 상세 조회 오류: {e}")
+        results.append(('pc_detail_api', False))
 
     return results
 
@@ -500,4 +534,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(f"\n\n{Colors.YELLOW}테스트가 사용자에 의해 중단되었습니다.{Colors.END}")
         sys.exit(0)
-
