@@ -43,8 +43,8 @@ CREATE TABLE pc_specs (
     cpu_model TEXT NOT NULL,
     cpu_cores INTEGER NOT NULL,
     cpu_threads INTEGER NOT NULL,
-    ram_total INTEGER NOT NULL,  -- MB 단위
-    disk_info TEXT NOT NULL,     -- JSON: {"C:": {"total": 256000000000, "drive_type": "SSD"}}
+    ram_total REAL NOT NULL,  -- GB 단위 (소수점)
+    disk_info TEXT NOT NULL,     -- JSON: {"C:\\": {"total_gb": 237.0, "fstype": "NTFS", "mountpoint": "C:\\"}}
     os_edition TEXT NOT NULL,
     os_version TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -60,9 +60,9 @@ CREATE TABLE pc_status (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pc_id INTEGER NOT NULL,
     cpu_usage REAL NOT NULL,         -- 0.0 ~ 100.0
-    ram_used INTEGER NOT NULL,       -- MB 단위
+    ram_used REAL NOT NULL,          -- GB 단위 (소수점)
     ram_usage_percent REAL NOT NULL, -- 0.0 ~ 100.0
-    disk_usage TEXT,                 -- JSON: {"C:": {"used": 128000000000, "free": 128000000000, "percent": 50.0}}
+    disk_usage TEXT,                 -- JSON: {"C:\\": {"used_gb": 107.2, "free_gb": 129.9, "percent": 45.2}}
     current_user TEXT,
     uptime INTEGER NOT NULL,         -- 초 단위
     processes TEXT,                  -- JSON: ["chrome.exe", "Code.exe"]
