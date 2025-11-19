@@ -6,9 +6,10 @@ import json
 # Windows 기본 시스템 프로세스 리스트
 WINDOWS_SYSTEM_PROCESSES = {
     # 커널 및 코어 프로세스
-    'System Idle', 'Registry', 'MemCompression', 'Memory Compression',
+    'System Idle','System Idle Process','System', 'Registry', 'MemCompression', 'Memory Compression',
     'smss.exe', 'csrss.exe', 'wininit.exe', 'services.exe', 'lsass.exe',
     'lsaiso.exe', 'winlogon.exe', 'fontdrvhost.exe',
+    'IntelCpHDCPSvc.exe','IntelCpHeciSvc.exe',
 
     # 서비스 호스트 및 관련 프로세스
     'svchost.exe', 'dllhost.exe', 'taskhost.exe', 'taskhostex.exe',
@@ -22,11 +23,11 @@ WINDOWS_SYSTEM_PROCESSES = {
     # Windows 보안 및 업데이트
     'SecurityHealthService.exe', 'SecurityHealthSystray.exe',
     'MsMpEng.exe', 'NisSrv.exe', 'SgrmBroker.exe',
-    'smartscreen.exe', 'MpCmdRun.exe',
+    'smartscreen.exe', 'MpCmdRun.exe','CHXSmartScreen.exe',
 
     # Windows 업데이트 및 설치
     'WUDFHost.exe', 'TiWorker.exe', 'TrustedInstaller.exe',
-    'usocoreworker.exe', 'UsoClient.exe', 'wuauclt.exe',
+    'MoUsoCoreWorker.exe', 'UsoClient.exe', 'wuauclt.exe',
 
     # Windows 스토어 및 앱
     'ApplicationFrameHost.exe', 'WinStore.App.exe',
@@ -45,6 +46,27 @@ WINDOWS_SYSTEM_PROCESSES = {
     'PickerHost.exe', 'Widgets.exe', 'WidgetService.exe',
     'PhoneExperienceHost.exe', 'YourPhone.exe',
     'ProcessWindowsTerminal',
+    'OneDrive.Sync.Service.exe', 'OneDrive.exe',
+    'LocationNotificationWindows.exe', 'SearchProtocolHost.exe',
+    'PresentationFontCache.exe',
+
+    # Windows 알림 및 UX
+    'MoNotificationUx.exe',
+
+    # 크로스 디바이스 및 동기화
+    'CrossDeviceService.exe', 'AggregatorHost.exe',
+
+    # 작업 관리자
+    'Taskmgr.exe',
+
+    # Intel 그래픽 서비스
+    'igfxCUIService.exe', 'igfxEM.exe',
+
+    # VMware 서비스 (가상화 환경에서 흔함)
+    'vmnat.exe', 'vmnetdhcp.exe', 'vmware-authd.exe', 'vmware-usbarbitrator64.exe',
+
+    # Microsoft Edge 관련
+    'msedge.exe', 'msedgewebview2.exe',
 }
 
 def collect_static_info():
@@ -82,20 +104,59 @@ def collect_static_info():
             except:
                 pass
 
-        # OS 정보 - Windows 11 정확하게 감지
+        # OS 정보 - Windows 에디션 및 버전 정확하게 감지
         os_name = platform.system()
         os_release = platform.release()
+        os_edition_detail = ""
 
-        # Windows 11 감지 (빌드 번호로 확인)
-        if os_name == "Windows" and os_release == "10":
+        if os_name == "Windows":
             try:
                 import sys
+                # Windows 11 감지 (빌드 번호 22000 이상)
                 if sys.getwindowsversion().build >= 22000:
                     os_release = "11"
+
+                # WMI로 상세 에디션 정보 가져오기
+                try:
+                    import wmi
+                    c = wmi.WMI()
+                    for os_info in c.Win32_OperatingSystem():
+                        # Caption 예: "Microsoft Windows 11 Pro"
+                        caption = os_info.Caption
+                        if caption:
+                            # "Microsoft Windows" 제거하고 버전과 에디션만 추출
+                            caption = caption.replace("Microsoft Windows", "").strip()
+                            # 숫자(10, 11)를 제외한 나머지가 에디션
+                            parts = caption.split()
+                            edition_parts = []
+                            for part in parts:
+                                if part not in ['10', '11', 'Windows']:
+                                    edition_parts.append(part)
+                            if edition_parts:
+                                os_edition_detail = " ".join(edition_parts)
+                        break
+                except:
+                    pass
+
+                # WMI 실패 시 레지스트리로 시도
+                if not os_edition_detail:
+                    try:
+                        import winreg
+                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+                        os_edition_detail, _ = winreg.QueryValueEx(key, "EditionID")
+                        winreg.CloseKey(key)
+                    except:
+                        pass
             except:
                 pass
 
-        os_edition = f"{os_name} {os_release}"
+        # 최종 OS 에디션 문자열 구성
+        if os_edition_detail:
+            os_edition = f"{os_name} {os_release} {os_edition_detail}"
+        else:
+            os_edition = f"{os_name} {os_release}"
+
         os_version = platform.version()
 
         # 호스트명

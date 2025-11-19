@@ -87,26 +87,65 @@
                         {% endif %}
                     </td>
                 </tr>
-                <tr>
-                    <th>디스크 정보</th>
-                    <td>
-                        {% if pc.disk_info_parsed %}
-                        <table class="table table-sm table-dark mb-0">
-                            <tr><th>디바이스</th><th>총 용량</th><th>파일시스템</th><th>마운트</th></tr>
-                            {% for dev, info in pc.disk_info_parsed.items() %}
-                            <tr>
-                                <td>{{ dev }}</td>
-                                <td>{{ info.total_gb }} GB</td>
-                                <td>{{ info.fstype or 'N/A' }}</td>
-                                <td>{{ info.mountpoint or 'N/A' }}</td>
-                            </tr>
-                            {% endfor %}
-                        </table>
-                        {% else %}
-                        N/A
-                        {% endif %}
-                    </td>
-                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- 디스크 정보 시각화 -->
+    <div class="card mt-3">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">💾 디스크 사용 현황</h5>
+        </div>
+        <div class="card-body">
+            {% if pc.disk_info_parsed %}
+            <div class="row">
+                {% for dev, info in pc.disk_info_parsed.items() %}
+                <div class="col-md-6 mb-4">
+                    <div class="card bg-dark">
+                        <div class="card-body">
+                            <h6 class="text-center mb-3">
+                                <strong>{{ dev }}</strong>
+                                <small class="text-muted">({{ info.fstype or 'Unknown' }})</small>
+                            </h6>
+
+                            <!-- 도넛 차트 -->
+                            <div style="position: relative; height: 200px; margin-bottom: 20px;">
+                                <canvas id="diskChart{{ loop.index }}"></canvas>
+                            </div>
+
+                            <!-- 상세 정보 -->
+                            <div class="text-center">
+                                {% if info.used_gb is defined and info.free_gb is defined %}
+                                <p class="mb-1">
+                                    <span class="badge bg-danger">사용: {{ info.used_gb }} GB</span>
+                                    <span class="badge bg-success">여유: {{ info.free_gb }} GB</span>
+                                </p>
+                                <p class="mb-0">
+                                    <small class="text-muted">총 용량: {{ info.total_gb }} GB</small>
+                                </p>
+                                {% elif info.total_gb is defined %}
+                                <p class="mb-0">
+                                    <span class="badge bg-info">총 용량: {{ info.total_gb }} GB</span>
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted">디스크 정보가 없습니다.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">기타 정보</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered">
                 <tr>
                     <th>OS 버전</th>
                     <td>{{ pc.os_edition }} <small class="text-muted">({{ pc.os_version or '버전 정보 없음' }})</small></td>
@@ -136,7 +175,116 @@
     {% endif %}
 </div>
 
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 <script>
+// 디스크 차트 생성
+{% if pc.disk_info_parsed %}
+const diskData = {{ pc.disk_info_parsed|tojson }};
+let chartIndex = 1;
+
+for (const [dev, info] of Object.entries(diskData)) {
+    const ctx = document.getElementById(`diskChart${chartIndex}`);
+    if (!ctx) continue;
+
+    let usedGB = 0;
+    let freeGB = 0;
+    let usagePercent = 0;
+
+    // 동적 정보에서 사용량 가져오기
+    if (info.used_gb !== undefined && info.free_gb !== undefined) {
+        usedGB = parseFloat(info.used_gb);
+        freeGB = parseFloat(info.free_gb);
+        const totalGB = usedGB + freeGB;
+        usagePercent = totalGB > 0 ? ((usedGB / totalGB) * 100).toFixed(1) : 0;
+    } else if (info.percent !== undefined) {
+        // percent만 있는 경우
+        usagePercent = parseFloat(info.percent).toFixed(1);
+        const totalGB = parseFloat(info.total_gb) || 100;
+        usedGB = (totalGB * usagePercent / 100).toFixed(2);
+        freeGB = (totalGB - usedGB).toFixed(2);
+    } else if (info.total_gb) {
+        // 총 용량만 있는 경우 (사용량 정보 없음)
+        usedGB = 0;
+        freeGB = parseFloat(info.total_gb);
+        usagePercent = 0;
+    }
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['사용 중', '여유 공간'],
+            datasets: [{
+                data: [usedGB, freeGB],
+                backgroundColor: [
+                    'rgba(220, 53, 69, 0.8)',   // 빨강 (사용)
+                    'rgba(25, 135, 84, 0.8)'    // 초록 (여유)
+                ],
+                borderColor: [
+                    'rgba(220, 53, 69, 1)',
+                    'rgba(25, 135, 84, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.parsed.toFixed(2) + ' GB';
+                        }
+                    }
+                },
+                // 중앙에 사용률 표시
+                beforeDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    ctx.restore();
+                    const fontSize = (chart.height / 114).toFixed(2);
+                    ctx.font = fontSize + "em sans-serif";
+                    ctx.textBaseline = "middle";
+                    ctx.fillStyle = "#fff";
+
+                    const text = usagePercent + "%";
+                    const textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
+                    const textY = chart.height / 2;
+
+                    ctx.fillText(text, textX, textY);
+                    ctx.save();
+                }
+            }
+        },
+        plugins: [{
+            beforeDraw: function(chart) {
+                const ctx = chart.ctx;
+                const width = chart.width;
+                const height = chart.height;
+
+                ctx.restore();
+                ctx.font = "bold 24px sans-serif";
+                ctx.textBaseline = "middle";
+                ctx.fillStyle = "#e0e0e0";
+
+                const text = usagePercent + "%";
+                const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                const textY = height / 2;
+
+                ctx.fillText(text, textX, textY);
+                ctx.save();
+            }
+        }]
+    });
+
+    chartIndex++;
+}
+{% endif %}
+
 function sendCommand(type) {
     if (!confirm(`정말로 ${type === 'shutdown' ? '종료' : '재시작'}하시겠습니까?`)) return;
 

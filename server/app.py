@@ -239,12 +239,24 @@ def api_pc_detail(pc_id):
     specs = execute_query('SELECT * FROM pc_specs WHERE pc_id=?', [pc_id], fetch_one=True)
     if specs:
         pc_dict.update(dict(specs))
-        # 디스크 파싱
+        # 디스크 파싱 및 사용량 병합
         disk_raw = pc_dict.get('disk_info') or '{}'
         try:
             disk_parsed = json.loads(disk_raw) if isinstance(disk_raw, str) else disk_raw
         except Exception:
             disk_parsed = {}
+
+        # 디스크 사용량 정보 병합
+        disk_usage_raw = pc_dict.get('disk_usage') or '{}'
+        try:
+            disk_usage = json.loads(disk_usage_raw) if isinstance(disk_usage_raw, str) else disk_usage_raw
+            # disk_parsed에 사용량 정보 추가
+            for dev, usage_info in disk_usage.items():
+                if dev in disk_parsed:
+                    disk_parsed[dev].update(usage_info)
+        except Exception:
+            pass
+
         pc_dict['disk_info_parsed'] = disk_parsed
         # OS Unknown 보강
         if not pc_dict.get('os_edition') or pc_dict.get('os_edition') == 'Unknown':
