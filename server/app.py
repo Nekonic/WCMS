@@ -427,12 +427,19 @@ def manage_layout_map(room_name):
 
 @app.route('/api/client/register', methods=['POST'])
 def api_client_register():
-    """클라이언트 등록 (기존 존재 시 스펙 업데이트)"""
+    """클라이언트 등록 (machine_id 기반 중복 방지)"""
     data = request.json
     if not data or 'machine_id' not in data:
         return jsonify({'status': 'error', 'message': 'machine_id is required'}), 400
 
-    existing = get_pc_by_machine_id(data['machine_id'])
+    db = get_db()
+    machine_id = data['machine_id']
+    hostname = data.get('hostname') or 'Unknown-PC'
+    mac_address = data.get('mac_address') or '00:00:00:00:00:00'
+    ip_address = data.get('ip_address')
+
+    # machine_id로 기존 PC 찾기 (중복 방지)
+    existing = db.execute('SELECT id FROM pc_info WHERE machine_id=?', (machine_id,)).fetchone()
 
     # disk_info 정규화
     disk_info = data.get('disk_info')
@@ -451,52 +458,50 @@ def api_client_register():
     ram_total = validate_not_null(data.get('ram_total'), 0)
     os_edition = data.get('os_edition') or 'Unknown'
     os_version = data.get('os_version') or 'Unknown'
-    hostname = data.get('hostname') or 'Unknown-PC'
-    mac_address = data.get('mac_address') or '00:00:00:00:00:00'
 
     if existing:
         pc_id = existing['id']
-        # pc_info 기본 정보 업데이트
-        execute_query(
-            'UPDATE pc_info SET hostname=?, mac_address=?, is_online=1, last_seen=CURRENT_TIMESTAMP WHERE id=?',
-            (hostname, mac_address, pc_id), commit=True
-        )
-        # pc_specs 존재 여부 확인
-        specs = execute_query('SELECT id, disk_info FROM pc_specs WHERE pc_id=?', [pc_id], fetch_one=True)
+        # 기존 PC 업데이트 (호스트명, IP, MAC 주소 변경 가능성 대비)
+        db.execute('''
+            UPDATE pc_info 
+            SET hostname=?, ip_address=?, mac_address=?, is_online=1, last_seen=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+        ''', (hostname, ip_address, mac_address, pc_id))
+        db.commit()
+
+        # pc_specs 업데이트
+        specs = db.execute('SELECT id FROM pc_specs WHERE pc_id=?', (pc_id,)).fetchone()
         if specs:
-            # 이전 disk_info가 빈 객체이거나 업데이트 요청이 더 풍부하면 변경
-            old_disk = {}
-            try:
-                old_disk = json.loads(specs['disk_info']) if specs['disk_info'] else {}
-            except Exception:
-                pass
-            if old_disk != disk_info or os_edition != 'Unknown' or ram_total != 0:
-                execute_query(
-                    '''UPDATE pc_specs SET cpu_model=?, cpu_cores=?, cpu_threads=?, ram_total=?, disk_info=?, os_edition=?, os_version=?, updated_at=CURRENT_TIMESTAMP WHERE pc_id=?''',
-                    (cpu_model, cpu_cores, cpu_threads, ram_total, disk_info_str, os_edition, os_version, pc_id),
-                    commit=True
-                )
+            db.execute('''
+                UPDATE pc_specs 
+                SET cpu_model=?, cpu_cores=?, cpu_threads=?, ram_total=?, disk_info=?, os_edition=?, os_version=?, updated_at=CURRENT_TIMESTAMP 
+                WHERE pc_id=?
+            ''', (cpu_model, cpu_cores, cpu_threads, ram_total, disk_info_str, os_edition, os_version, pc_id))
         else:
-            execute_query(
-                '''INSERT INTO pc_specs (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info, os_edition, os_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info_str, os_edition, os_version),
-                commit=True
-            )
-        print(f"[+] PC 스펙 업데이트: {data['machine_id']}")
-        return jsonify({'status': 'success', 'message': '업데이트 완료'}), 200
+            db.execute('''
+                INSERT INTO pc_specs (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info, os_edition, os_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info_str, os_edition, os_version))
+        db.commit()
+
+        print(f"[+] PC 업데이트: machine_id={machine_id}, hostname={hostname}, pc_id={pc_id}")
+        return jsonify({'status': 'success', 'message': '업데이트 완료', 'pc_id': pc_id}), 200
 
     # 신규 등록
-    pc_id = execute_query(
-        'INSERT INTO pc_info (machine_id, hostname, mac_address, is_online, last_seen) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)',
-        (data['machine_id'], hostname, mac_address), commit=True
-    )
-    execute_query(
-        '''INSERT INTO pc_specs (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info, os_edition, os_version)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-        (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info_str, os_edition, os_version), commit=True
-    )
-    print(f"[+] PC 신규 등록: {data['machine_id']}")
-    return jsonify({'status': 'success', 'message': '등록 완료'}), 200
+    cursor = db.execute('''
+        INSERT INTO pc_info (machine_id, hostname, ip_address, mac_address, is_online, created_at, last_seen)
+        VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ''', (machine_id, hostname, ip_address, mac_address))
+    pc_id = cursor.lastrowid
+
+    db.execute('''
+        INSERT INTO pc_specs (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info, os_edition, os_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info_str, os_edition, os_version))
+    db.commit()
+
+    print(f"[+] PC 신규 등록: machine_id={machine_id}, hostname={hostname}, pc_id={pc_id}")
+    return jsonify({'status': 'success', 'message': '등록 완료', 'pc_id': pc_id}), 200
 
 
 @app.route('/api/client/heartbeat', methods=['POST'])
