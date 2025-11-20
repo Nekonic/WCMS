@@ -39,8 +39,44 @@ def find_duplicates_by_machine_id(db):
     return duplicates
 
 
+def find_duplicates_by_identity(db):
+    """IP, MAC, hostname이 모두 같지만 machine_id가 다른 PC 찾기 (실질적 중복)"""
+    duplicates = []
+
+    # IP + MAC + hostname 조합으로 그룹화
+    cursor = db.execute('''
+        SELECT ip_address, mac_address, hostname, COUNT(*) as cnt
+        FROM pc_info
+        WHERE ip_address IS NOT NULL AND mac_address IS NOT NULL AND hostname IS NOT NULL
+        GROUP BY ip_address, mac_address, hostname
+        HAVING cnt > 1
+    ''')
+
+    identity_dups = cursor.fetchall()
+
+    for dup in identity_dups:
+        pcs = db.execute('''
+            SELECT id, machine_id, hostname, ip_address, mac_address, created_at, last_seen, is_online
+            FROM pc_info
+            WHERE ip_address = ? AND mac_address = ? AND hostname = ?
+            ORDER BY last_seen DESC, created_at DESC
+        ''', (dup['ip_address'], dup['mac_address'], dup['hostname'])).fetchall()
+
+        # machine_id가 다른지 확인
+        machine_ids = set(pc['machine_id'] for pc in pcs if pc['machine_id'])
+        if len(machine_ids) > 1:
+            duplicates.append({
+                'ip': dup['ip_address'],
+                'mac': dup['mac_address'],
+                'hostname': dup['hostname'],
+                'pcs': pcs
+            })
+
+    return duplicates
+
+
 def find_duplicates_by_hostname(db):
-    """hostname이 중복된 PC 찾기 (machine_id는 다른 경우)"""
+    """hostname만 중복된 PC 찾기 (참고용)"""
     cursor = db.execute('''
         SELECT hostname, COUNT(*) as cnt
         FROM pc_info
@@ -51,17 +87,20 @@ def find_duplicates_by_hostname(db):
 
     duplicates = cursor.fetchall()
 
-    # machine_id가 모두 다른지 확인
+    # IP나 MAC이 다른지 확인 (실제로 다른 PC일 가능성)
     real_duplicates = []
     for dup in duplicates:
         pcs = db.execute('''
-            SELECT id, machine_id, hostname, created_at, last_seen
+            SELECT id, machine_id, hostname, ip_address, mac_address, created_at, last_seen
             FROM pc_info
             WHERE hostname = ?
         ''', (dup['hostname'],)).fetchall()
 
-        machine_ids = set(pc['machine_id'] for pc in pcs if pc['machine_id'])
-        if len(machine_ids) > 1:
+        # IP 또는 MAC이 다르면 실제로 다른 PC
+        ips = set(pc['ip_address'] for pc in pcs if pc['ip_address'])
+        macs = set(pc['mac_address'] for pc in pcs if pc['mac_address'])
+
+        if len(ips) > 1 or len(macs) > 1:
             real_duplicates.append((dup['hostname'], pcs))
 
     return real_duplicates
@@ -115,24 +154,77 @@ def clean_machine_id_duplicates(db):
     return total_deleted
 
 
+def clean_identity_duplicates(db):
+    """실질적 중복 처리 (IP+MAC+hostname 같지만 machine_id 다름)"""
+    duplicates = find_duplicates_by_identity(db)
+
+    if not duplicates:
+        print("✅ 실질적 중복 없음 (IP+MAC+hostname 같은 경우)")
+        return 0
+
+    print(f"\n⚠️  실질적 중복 발견 (같은 PC인데 machine_id만 다름): {len(duplicates)}개")
+    print("=" * 80)
+
+    total_deleted = 0
+
+    for dup_group in duplicates:
+        pcs = dup_group['pcs']
+
+        print(f"\n📌 {dup_group['hostname']} (IP: {dup_group['ip']}, MAC: {dup_group['mac']})")
+        print("   이 PC들은 IP, MAC, hostname이 모두 같습니다. (실질적으로 같은 PC)")
+        print()
+
+        for i, pc in enumerate(pcs, 1):
+            status = "✅ 유지" if i == 1 else "❌ 삭제 대상"
+            print(f"   [{i}] {status}")
+            print(f"       ID={pc['id']}, machine_id={pc['machine_id']}")
+            print(f"       생성: {pc['created_at']}, 최종 접속: {pc['last_seen']}")
+            print(f"       상태: {'온라인' if pc['is_online'] else '오프라인'}")
+
+        print()
+        answer = input(f"   최신 PC(ID={pcs[0]['id']})만 남기고 나머지 {len(pcs)-1}개를 삭제하시겠습니까? (yes/no): ").strip().lower()
+
+        if answer in ('yes', 'y'):
+            # 첫 번째(최신) PC만 유지하고 나머지 삭제
+            for pc in pcs[1:]:
+                db.execute('DELETE FROM pc_status WHERE pc_id = ?', (pc['id'],))
+                db.execute('DELETE FROM pc_specs WHERE pc_id = ?', (pc['id'],))
+                db.execute('DELETE FROM pc_command WHERE pc_id = ?', (pc['id'],))
+                db.execute('DELETE FROM seat_map WHERE pc_id = ?', (pc['id'],))
+                db.execute('DELETE FROM pc_info WHERE id = ?', (pc['id'],))
+                print(f"   ✅ 삭제 완료: ID={pc['id']}")
+                total_deleted += 1
+
+            db.commit()
+        else:
+            print("   ⏭️  건너뜀")
+
+    if total_deleted > 0:
+        print(f"\n✅ 실질적 중복 정리 완료: {total_deleted}개 PC 삭제됨")
+
+    return total_deleted
+
+
 def clean_hostname_duplicates(db):
-    """hostname 중복 처리 (사용자 확인 필요)"""
+    """hostname만 중복 처리 (IP/MAC 다름 - 실제로 다른 PC)"""
     duplicates = find_duplicates_by_hostname(db)
 
     if not duplicates:
-        print("✅ hostname 중복 없음 (machine_id 다른 경우)")
+        print("✅ hostname만 중복된 경우 없음 (실제로 다른 PC)")
         return 0
 
-    print(f"\n⚠️  hostname 중복 발견 (machine_id는 다름): {len(duplicates)}개")
+    print(f"\n📋 참고: hostname은 같지만 IP/MAC이 다른 PC: {len(duplicates)}개")
     print("=" * 80)
 
     for hostname, pcs in duplicates:
         print(f"\n📌 hostname: {hostname}")
         for i, pc in enumerate(pcs, 1):
-            print(f"   [{i}] ID={pc['id']}, machine_id={pc['machine_id']}, created_at={pc['created_at']}, last_seen={pc['last_seen']}")
+            print(f"   [{i}] ID={pc['id']}, machine_id={pc['machine_id']}")
+            print(f"       IP={pc['ip_address']}, MAC={pc['mac_address']}")
+            print(f"       최종 접속: {pc['last_seen']}")
 
-        print("   ⚠️  이 PC들은 machine_id가 다르므로 별도 PC입니다.")
-        print("   ⚠️  필요시 수동으로 확인 후 삭제하세요.")
+        print("   ℹ️  이 PC들은 IP 또는 MAC이 다르므로 실제로 다른 PC입니다.")
+        print("   ℹ️  hostname이 같은 것은 정상일 수 있습니다 (예: 이미지 복제 등)")
 
     return 0
 
@@ -161,22 +253,25 @@ def main():
     # 현재 상태 확인
     show_database_status(db)
 
-    # machine_id 중복 확인
+    # 중복 검사
     machine_id_dups = find_duplicates_by_machine_id(db)
+    identity_dups = find_duplicates_by_identity(db)
     hostname_dups = find_duplicates_by_hostname(db)
 
-    if not machine_id_dups and not hostname_dups:
+    if not machine_id_dups and not identity_dups and not hostname_dups:
         print("\n✅ 중복된 PC가 없습니다!")
         db.close()
         return
 
     print(f"\n발견된 중복:")
     print(f"  - machine_id 중복: {len(machine_id_dups)}개")
-    print(f"  - hostname 중복 (machine_id 다름): {len(hostname_dups)}개")
+    print(f"  - 실질적 중복 (IP+MAC+hostname 같음): {len(identity_dups)}개")
+    print(f"  - hostname만 중복 (IP/MAC 다름): {len(hostname_dups)}개")
 
     # 사용자 확인
     print("\n⚠️  경고: 이 작업은 데이터를 삭제합니다!")
     print("   - machine_id가 같은 PC는 최신 것만 남기고 자동 삭제됩니다.")
+    print("   - IP+MAC+hostname이 같은 PC는 사용자 확인 후 삭제됩니다.")
     print("   - hostname만 같은 PC는 확인만 하고 삭제하지 않습니다.")
 
     answer = input("\n계속하시겠습니까? (yes/no): ").strip().lower()
@@ -201,7 +296,15 @@ def main():
     print("🧹 중복 정리 시작")
     print("=" * 80)
 
-    deleted_count = clean_machine_id_duplicates(db)
+    deleted_count = 0
+
+    # 1. machine_id 중복 정리 (자동)
+    deleted_count += clean_machine_id_duplicates(db)
+
+    # 2. 실질적 중복 정리 (사용자 확인)
+    deleted_count += clean_identity_duplicates(db)
+
+    # 3. hostname만 중복 (참고만)
     clean_hostname_duplicates(db)
 
     # 최종 상태
