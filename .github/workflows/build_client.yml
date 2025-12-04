@@ -89,11 +89,18 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Notify server about new version
-      if: secrets.SERVER_URL != '' && secrets.UPDATE_TOKEN != ''
       continue-on-error: true
       shell: pwsh
       run: |
         $VERSION = "${{ steps.version.outputs.version }}"
+        $SERVER_URL = "${{ secrets.SERVER_URL }}"
+        $UPDATE_TOKEN = "${{ secrets.UPDATE_TOKEN }}"
+        
+        if ([string]::IsNullOrEmpty($SERVER_URL) -or [string]::IsNullOrEmpty($UPDATE_TOKEN)) {
+          Write-Host "⚠️ SERVER_URL 또는 UPDATE_TOKEN이 설정되지 않음 - 서버 알림 건너뜀"
+          exit 0
+        }
+        
         $DOWNLOAD_URL = "https://github.com/${{ github.repository }}/releases/download/client-v$VERSION/WCMS-Client.exe"
         
         $body = @{
@@ -103,14 +110,14 @@ jobs:
         } | ConvertTo-Json
         
         try {
-          Invoke-RestMethod -Uri "${{ secrets.SERVER_URL }}/api/client/version" `
+          Invoke-RestMethod -Uri "$SERVER_URL/api/client/version" `
             -Method POST `
-            -Headers @{ "Authorization" = "Bearer ${{ secrets.UPDATE_TOKEN }}" } `
+            -Headers @{ "Authorization" = "Bearer $UPDATE_TOKEN" } `
             -Body $body `
             -ContentType "application/json"
-          Write-Host "[!] 서버에 버전 정보 업데이트 완료"
+          Write-Host "✅ 서버에 버전 정보 업데이트 완료"
         } catch {
-          Write-Host "[-] 서버 업데이트 실패"
+          Write-Host "⚠️ 서버 업데이트 실패 (선택사항): $_"
         }
 
     - name: Upload as Artifact
