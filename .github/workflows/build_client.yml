@@ -47,7 +47,9 @@ jobs:
       shell: pwsh
       run: |
         $VERSION = "${{ steps.version.outputs.version }}"
-        (Get-Content client/main.py) -replace '__version__ = ".*"', "__version__ = `"$VERSION`"" | Set-Content client/main.py
+        $content = Get-Content client/main.py -Raw
+        $content = $content -replace '__version__\s*=\s*"[^"]*"', "__version__ = `"$VERSION`""
+        Set-Content client/main.py -Value $content -NoNewline
         Write-Host "버전 업데이트 완료: $VERSION"
         Get-Content client/main.py | Select-String "__version__"
 
