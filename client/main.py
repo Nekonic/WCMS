@@ -13,7 +13,7 @@ from executor import CommandExecutor
 # 버전 정보 (GitHub Actions가 빌드 시 자동으로 태그 버전으로 교체)
 __version__ = "dev"
 
-SERVER_URL = "http://10.211.55.2:5050/"  # 서버 IP 주소 (http:// 필수!)
+SERVER_URL = "http://aps.or.kr:8057/"
 MACHINE_ID = next(
     (addr.address.replace(':', '').replace('-', '') for interface, addrs in psutil.net_if_addrs().items()
      for addr in addrs if addr.family == psutil.AF_LINK),
