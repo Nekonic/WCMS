@@ -101,33 +101,65 @@
             <div class="row">
                 {% for dev, info in pc.disk_info_parsed.items() %}
                 <div class="col-md-6 mb-4">
-                    <div class="card bg-dark">
+                    <div class="card bg-light">
                         <div class="card-body">
                             <h6 class="text-center mb-3">
                                 <strong>{{ dev }}</strong>
                                 <small class="text-muted">({{ info.fstype or 'Unknown' }})</small>
                             </h6>
 
-                            <!-- 도넛 차트 -->
-                            <div style="position: relative; height: 200px; margin-bottom: 20px;">
-                                <canvas id="diskChart{{ loop.index }}"></canvas>
-                            </div>
-
-                            <!-- 상세 정보 -->
-                            <div class="text-center">
-                                {% if info.used_gb is defined and info.free_gb is defined %}
-                                <p class="mb-1">
-                                    <span class="badge bg-danger">사용: {{ info.used_gb }} GB</span>
-                                    <span class="badge bg-success">여유: {{ info.free_gb }} GB</span>
-                                </p>
-                                <p class="mb-0">
-                                    <small class="text-muted">총 용량: {{ info.total_gb }} GB</small>
-                                </p>
-                                {% elif info.total_gb is defined %}
-                                <p class="mb-0">
-                                    <span class="badge bg-info">총 용량: {{ info.total_gb }} GB</span>
-                                </p>
+                            <!-- 디스크 정보 표시 -->
+                            <div style="text-align: center; margin-bottom: 15px;">
+                                {% if info.used_gb is defined and info.free_gb is defined and info.total_gb is defined %}
+                                    {% set total_gb = info.total_gb %}
+                                    {% set used_gb = info.used_gb %}
+                                    {% set free_gb = info.free_gb %}
+                                    {% set usage_percent = ((used_gb / total_gb) * 100)|round(1) if total_gb > 0 else 0 %}
+                                {% elif info.percent is defined and info.total_gb is defined %}
+                                    {% set total_gb = info.total_gb %}
+                                    {% set usage_percent = info.percent %}
+                                    {% set used_gb = ((total_gb * usage_percent) / 100)|round(2) %}
+                                    {% set free_gb = (total_gb - used_gb)|round(2) %}
+                                {% else %}
+                                    {% set total_gb = info.total_gb or 0 %}
+                                    {% set used_gb = 0 %}
+                                    {% set free_gb = total_gb %}
+                                    {% set usage_percent = 0 %}
                                 {% endif %}
+
+                                <p class="mb-2">
+                                    <strong style="font-size: 1.5em; color: #dc3545;">{{ usage_percent }}%</strong>
+                                    <small class="text-muted">사용 중</small>
+                                </p>
+
+                                <!-- 진행 바 -->
+                                <div class="progress" style="height: 25px;">
+                                    {% if usage_percent > 90 %}
+                                        <div class="progress-bar bg-danger" role="progressbar"
+                                             style="width: {{ usage_percent }}%;"
+                                             aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ used_gb|round(1) }} GB
+                                        </div>
+                                    {% elif usage_percent > 75 %}
+                                        <div class="progress-bar bg-warning" role="progressbar"
+                                             style="width: {{ usage_percent }}%;"
+                                             aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ used_gb|round(1) }} GB
+                                        </div>
+                                    {% else %}
+                                        <div class="progress-bar bg-success" role="progressbar"
+                                             style="width: {{ usage_percent }}%;"
+                                             aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ used_gb|round(1) }} GB
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <p class="mt-2 mb-0">
+                                    <small class="text-muted">
+                                        여유: {{ free_gb|round(1) }} GB / 총: {{ total_gb|round(1) }} GB
+                                    </small>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -165,6 +197,7 @@
         {% if admin %}
         <button class="btn btn-danger" onclick="sendCommand('shutdown')">종료</button>
         <button class="btn btn-warning" onclick="sendCommand('restart')">재시작</button>
+        <button class="btn btn-danger" onclick="deletePC({{ pc.id }}, '{{ pc.hostname }}')">🗑️ PC 삭제</button>
         {% endif %}
     </div>
 
@@ -175,116 +208,7 @@
     {% endif %}
 </div>
 
-<!-- Chart.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
 <script>
-// 디스크 차트 생성
-{% if pc.disk_info_parsed %}
-const diskData = {{ pc.disk_info_parsed|tojson }};
-let chartIndex = 1;
-
-for (const [dev, info] of Object.entries(diskData)) {
-    const ctx = document.getElementById(`diskChart${chartIndex}`);
-    if (!ctx) continue;
-
-    let usedGB = 0;
-    let freeGB = 0;
-    let usagePercent = 0;
-
-    // 동적 정보에서 사용량 가져오기
-    if (info.used_gb !== undefined && info.free_gb !== undefined) {
-        usedGB = parseFloat(info.used_gb);
-        freeGB = parseFloat(info.free_gb);
-        const totalGB = usedGB + freeGB;
-        usagePercent = totalGB > 0 ? ((usedGB / totalGB) * 100).toFixed(1) : 0;
-    } else if (info.percent !== undefined) {
-        // percent만 있는 경우
-        usagePercent = parseFloat(info.percent).toFixed(1);
-        const totalGB = parseFloat(info.total_gb) || 100;
-        usedGB = (totalGB * usagePercent / 100).toFixed(2);
-        freeGB = (totalGB - usedGB).toFixed(2);
-    } else if (info.total_gb) {
-        // 총 용량만 있는 경우 (사용량 정보 없음)
-        usedGB = 0;
-        freeGB = parseFloat(info.total_gb);
-        usagePercent = 0;
-    }
-
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['사용 중', '여유 공간'],
-            datasets: [{
-                data: [usedGB, freeGB],
-                backgroundColor: [
-                    'rgba(220, 53, 69, 0.8)',   // 빨강 (사용)
-                    'rgba(25, 135, 84, 0.8)'    // 초록 (여유)
-                ],
-                borderColor: [
-                    'rgba(220, 53, 69, 1)',
-                    'rgba(25, 135, 84, 1)'
-                ],
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.label + ': ' + context.parsed.toFixed(2) + ' GB';
-                        }
-                    }
-                },
-                // 중앙에 사용률 표시
-                beforeDraw: function(chart) {
-                    const ctx = chart.ctx;
-                    ctx.restore();
-                    const fontSize = (chart.height / 114).toFixed(2);
-                    ctx.font = fontSize + "em sans-serif";
-                    ctx.textBaseline = "middle";
-                    ctx.fillStyle = "#fff";
-
-                    const text = usagePercent + "%";
-                    const textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
-                    const textY = chart.height / 2;
-
-                    ctx.fillText(text, textX, textY);
-                    ctx.save();
-                }
-            }
-        },
-        plugins: [{
-            beforeDraw: function(chart) {
-                const ctx = chart.ctx;
-                const width = chart.width;
-                const height = chart.height;
-
-                ctx.restore();
-                ctx.font = "bold 24px sans-serif";
-                ctx.textBaseline = "middle";
-                ctx.fillStyle = "#e0e0e0";
-
-                const text = usagePercent + "%";
-                const textX = Math.round((width - ctx.measureText(text).width) / 2);
-                const textY = height / 2;
-
-                ctx.fillText(text, textX, textY);
-                ctx.save();
-            }
-        }]
-    });
-
-    chartIndex++;
-}
-{% endif %}
-
 function sendCommand(type) {
     if (!confirm(`정말로 ${type === 'shutdown' ? '종료' : '재시작'}하시겠습니까?`)) return;
 
@@ -296,6 +220,33 @@ function sendCommand(type) {
     .then(r => r.json())
     .then(data => {
         alert(data.message || '명령 전송 완료');
+    })
+    .catch(err => {
+        alert('오류 발생: ' + err);
+    });
+}
+
+function deletePC(pcId, hostname) {
+    if (!confirm(`정말로 ${hostname} (ID: ${pcId})를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n\n이 PC의 모든 데이터(명령, 상태 정보 등)가 삭제됩니다.`)) {
+        return;
+    }
+
+    // 두 번 확인
+    if (!confirm(`마지막 확인: ${hostname}을(를) 정말 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    fetch(`/api/pc/${pcId}`, {
+        method: 'DELETE'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert(`✅ ${hostname}이(가) 삭제되었습니다.`);
+            window.location.href = '/';
+        } else {
+            alert(`❌ 삭제 실패: ${data.message || '알 수 없는 오류'}`);
+        }
     })
     .catch(err => {
         alert('오류 발생: ' + err);

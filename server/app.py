@@ -5,6 +5,7 @@ import os
 import json
 import time
 import platform
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = 'woosuk25'
@@ -69,6 +70,30 @@ def validate_not_null(value, default):
         return default
 
 
+def update_offline_status():
+    """10분 이상 하트비트가 없는 PC를 오프라인으로 표시"""
+    try:
+        db = get_db()
+        cutoff_time = (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
+
+        updated = db.execute(
+            "UPDATE pc_info SET is_online=0 WHERE is_online=1 AND last_seen < ?",
+            (cutoff_time,)
+        )
+        db.commit()
+
+        if updated.rowcount > 0:
+            print(f"[+] 오프라인 상태 업데이트: {updated.rowcount}대")
+
+        return updated.rowcount
+    except sqlite3.OperationalError as e:
+        # 테이블이 없으면 무시 (초기화 필요)
+        if 'no such table' in str(e):
+            print("[!] pc_info 테이블이 없습니다. init_db.py를 실행하세요.")
+            return 0
+        raise
+
+
 # ==================== 데코레이터 ====================
 
 def require_admin(f):
@@ -83,11 +108,27 @@ def require_admin(f):
     return decorated_function
 
 
+@app.context_processor
+def inject_rooms():
+    """모든 템플릿에 실습실 목록 주입"""
+    try:
+        db = get_db()
+        rooms = db.execute('SELECT room_name FROM seat_layout WHERE is_active=1 ORDER BY room_name').fetchall()
+        room_list = [r['room_name'] for r in rooms]
+        return {'all_rooms': room_list}
+    except:
+        # DB가 초기화되지 않았거나 오류가 발생한 경우 기본값
+        return {'all_rooms': ['1실습실', '2실습실', '3실습실', '4실습실']}
+
+
 # ==================== 웹 페이지 라우트 ====================
 
 @app.route('/')
 def index():
     """메인 페이지 - PC 목록"""
+    # 오프라인 상태 먼저 업데이트
+    update_offline_status()
+
     room = request.args.get('room')
     if not room:
         return redirect(url_for('index', room='1실습실'))
@@ -199,6 +240,13 @@ def account_manager():
 def command_test():
     """명령 실행 테스트 페이지"""
     return render_template('command_test.html')
+
+
+@app.route('/room/manager')
+@require_admin
+def room_manager():
+    """실습실 관리 페이지"""
+    return render_template('room_manager.html')
 
 
 # ==================== 관리자 API ====================
@@ -801,6 +849,244 @@ def api_get_command_results():
         })
     except Exception as e:
         print(f"[!] 명령 결과 조회 실패: ERROR={e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/pcs/duplicates', methods=['GET'])
+@require_admin
+def api_get_duplicates():
+    """중복된 호스트명의 PC 목록 조회"""
+    db = get_db()
+
+    try:
+        duplicates = db.execute('''
+            SELECT hostname, COUNT(*) as count, GROUP_CONCAT(id) as ids
+            FROM pc_info
+            WHERE hostname IS NOT NULL
+            GROUP BY hostname
+            HAVING count > 1
+            ORDER BY hostname
+        ''').fetchall()
+
+        result = []
+        for dup in duplicates:
+            pc_ids = [int(id) for id in dup['ids'].split(',')]
+            pcs = db.execute('SELECT id, hostname, ip_address, mac_address, machine_id, room_name, seat_number, created_at FROM pc_info WHERE id IN ({})'.format(','.join('?' * len(pc_ids))), pc_ids).fetchall()
+
+            result.append({
+                'hostname': dup['hostname'],
+                'count': dup['count'],
+                'pcs': [dict(pc) for pc in pcs]
+            })
+
+        return jsonify({
+            'total_duplicate_groups': len(result),
+            'duplicates': result
+        })
+    except Exception as e:
+        print(f"[!] 중복 PC 조회 실패: ERROR={e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/pc/<int:pc_id>', methods=['DELETE'])
+@require_admin
+def api_delete_pc(pc_id):
+    """PC 삭제 (관리자만 가능)"""
+    db = get_db()
+
+    try:
+        pc = db.execute('SELECT id, hostname FROM pc_info WHERE id=?', (pc_id,)).fetchone()
+        if not pc:
+            return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+
+        hostname = pc['hostname']
+
+        # 관련 데이터 모두 삭제
+        db.execute('DELETE FROM pc_command WHERE pc_id=?', (pc_id,))
+        db.execute('DELETE FROM pc_status WHERE pc_id=?', (pc_id,))
+        db.execute('DELETE FROM pc_specs WHERE pc_id=?', (pc_id,))
+        db.execute('DELETE FROM seat_map WHERE pc_id=?', (pc_id,))
+        db.execute('DELETE FROM pc_info WHERE id=?', (pc_id,))
+        db.commit()
+
+        print(f"[+] PC 삭제: ID={pc_id}, hostname={hostname}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f'PC({hostname})가 삭제되었습니다.',
+            'deleted_pc_id': pc_id
+        })
+    except Exception as e:
+        print(f"[!] PC 삭제 실패: PC_ID={pc_id}, ERROR={e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 실습실 관리 API ====================
+
+@app.route('/api/rooms', methods=['GET'])
+@require_admin
+def api_get_rooms():
+    """모든 실습실 목록 조회"""
+    db = get_db()
+
+    try:
+        rooms = db.execute('''
+            SELECT 
+                sl.id,
+                sl.room_name,
+                sl.rows,
+                sl.cols,
+                sl.description,
+                sl.is_active,
+                sl.created_at,
+                COUNT(pi.id) as pc_count
+            FROM seat_layout sl
+            LEFT JOIN pc_info pi ON sl.room_name = pi.room_name
+            GROUP BY sl.id, sl.room_name, sl.rows, sl.cols, sl.description, sl.is_active, sl.created_at
+            ORDER BY sl.room_name
+        ''').fetchall()
+
+        return jsonify({
+            'total': len(rooms),
+            'rooms': [dict(room) for room in rooms]
+        })
+    except Exception as e:
+        print(f"[!] 실습실 조회 실패: ERROR={e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/rooms', methods=['POST'])
+@require_admin
+def api_create_room():
+    """새 실습실 생성"""
+    data = request.json
+
+    if not data or 'room_name' not in data:
+        return jsonify({'status': 'error', 'message': 'room_name is required'}), 400
+
+    room_name = data['room_name']
+    rows = data.get('rows', 6)
+    cols = data.get('cols', 8)
+    description = data.get('description', '')
+
+    db = get_db()
+
+    try:
+        # 중복 확인
+        existing = db.execute('SELECT id FROM seat_layout WHERE room_name=?', (room_name,)).fetchone()
+        if existing:
+            return jsonify({'status': 'error', 'message': '이미 존재하는 실습실 이름입니다'}), 400
+
+        # 생성
+        cursor = db.execute('''
+            INSERT INTO seat_layout (room_name, rows, cols, description, is_active)
+            VALUES (?, ?, ?, ?, 1)
+        ''', (room_name, rows, cols, description))
+        db.commit()
+
+        print(f"[+] 실습실 생성: {room_name}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f'{room_name}이(가) 생성되었습니다.',
+            'room_id': cursor.lastrowid
+        })
+    except Exception as e:
+        print(f"[!] 실습실 생성 실패: ERROR={e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/rooms/<int:room_id>', methods=['PUT'])
+@require_admin
+def api_update_room(room_id):
+    """실습실 정보 수정"""
+    data = request.json
+
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+
+    db = get_db()
+
+    try:
+        # 실습실 확인
+        room = db.execute('SELECT * FROM seat_layout WHERE id=?', (room_id,)).fetchone()
+        if not room:
+            return jsonify({'status': 'error', 'message': 'Room not found'}), 404
+
+        old_name = room['room_name']
+        new_name = data.get('room_name', old_name)
+        rows = data.get('rows', room['rows'])
+        cols = data.get('cols', room['cols'])
+        description = data.get('description', room['description'])
+        is_active = data.get('is_active', room['is_active'])
+
+        # 이름 변경 시 중복 확인
+        if new_name != old_name:
+            existing = db.execute('SELECT id FROM seat_layout WHERE room_name=? AND id!=?',
+                                 (new_name, room_id)).fetchone()
+            if existing:
+                return jsonify({'status': 'error', 'message': '이미 존재하는 실습실 이름입니다'}), 400
+
+            # PC들의 room_name도 업데이트
+            db.execute('UPDATE pc_info SET room_name=? WHERE room_name=?', (new_name, old_name))
+            # seat_map도 업데이트
+            db.execute('UPDATE seat_map SET room_name=? WHERE room_name=?', (new_name, old_name))
+
+        # 실습실 정보 업데이트
+        db.execute('''
+            UPDATE seat_layout 
+            SET room_name=?, rows=?, cols=?, description=?, is_active=?, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+        ''', (new_name, rows, cols, description, is_active, room_id))
+        db.commit()
+
+        print(f"[+] 실습실 수정: {old_name} -> {new_name}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f'{new_name}이(가) 수정되었습니다.'
+        })
+    except Exception as e:
+        print(f"[!] 실습실 수정 실패: ERROR={e}")
+        db.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/rooms/<int:room_id>', methods=['DELETE'])
+@require_admin
+def api_delete_room(room_id):
+    """실습실 삭제"""
+    db = get_db()
+
+    try:
+        room = db.execute('SELECT room_name FROM seat_layout WHERE id=?', (room_id,)).fetchone()
+        if not room:
+            return jsonify({'status': 'error', 'message': 'Room not found'}), 404
+
+        room_name = room['room_name']
+
+        # PC 개수 확인
+        pc_count = db.execute('SELECT COUNT(*) as cnt FROM pc_info WHERE room_name=?',
+                             (room_name,)).fetchone()['cnt']
+
+        if pc_count > 0:
+            return jsonify({
+                'status': 'error',
+                'message': f'이 실습실에는 {pc_count}대의 PC가 배치되어 있습니다. 먼저 PC를 제거하세요.'
+            }), 400
+
+        # 삭제 (seat_map은 ON DELETE CASCADE로 자동 삭제)
+        db.execute('DELETE FROM seat_layout WHERE id=?', (room_id,))
+        db.commit()
+
+        print(f"[+] 실습실 삭제: {room_name}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f'{room_name}이(가) 삭제되었습니다.'
+        })
+    except Exception as e:
+        print(f"[!] 실습실 삭제 실패: ERROR={e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 

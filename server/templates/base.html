@@ -209,11 +209,15 @@
         <div>
             <div class="logo">Woosuk Computer Management System</div>
             <div class="rooms">
-                <a href="{{ url_for('index', room='1실습실') }}" {% if room=='1실습실' %}class="active"{% endif %}>실습실 1</a>
-                <a href="{{ url_for('index', room='2실습실') }}" {% if room=='2실습실' %}class="active"{% endif %}>실습실 2</a>
+                {% for room_name in all_rooms %}
+                <a href="{{ url_for('index', room=room_name) }}" {% if room==room_name %}class="active"{% endif %}>
+                    {{ room_name.replace('실습실', '실습실 ') }}
+                </a>
+                {% endfor %}
                 <div class="divider" style="margin: 1em 0.8em;"></div>
                 {% if session.get('admin') %}
                 <a href="{{ url_for('command_test') }}">🧪 명령 테스트</a>
+                <a href="{{ url_for('room_manager') }}">🏫 실습실 관리</a>
                 <a href="{{ url_for('account_manager') }}">👤 계정 관리</a>
                 {% endif %}
             </div>

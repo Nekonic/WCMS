@@ -4,17 +4,32 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
     <h2 style="margin: 0;">{{ room or '실습실' }} PC 목록</h2>
     {% if admin %}
-    <a href="/layout/editor?room={{ room }}" style="
-        background: #4a9eff;
-        color: white;
-        padding: 0.7em 1.5em;
-        border-radius: 6px;
-        text-decoration: none;
-        font-weight: 600;
-        transition: all 0.3s;
-    " onmouseover="this.style.background='#3a8eef'" onmouseout="this.style.background='#4a9eff'">
-        ⚙️ 배치 편집
-    </a>
+    <div style="display: flex; gap: 1em;">
+        <button onclick="showDuplicatePCsModal()" style="
+            background: #ff9800;
+            color: white;
+            padding: 0.7em 1.5em;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+        " onmouseover="this.style.background='#f57c00'" onmouseout="this.style.background='#ff9800'">
+            🔄 중복 PC 관리
+        </button>
+        <a href="/layout/editor?room={{ room }}" style="
+            background: #4a9eff;
+            color: white;
+            padding: 0.7em 1.5em;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        " onmouseover="this.style.background='#3a8eef'" onmouseout="this.style.background='#4a9eff'">
+            ⚙️ 배치 편집
+        </a>
+    </div>
     {% endif %}
 </div>
 
@@ -1098,6 +1113,163 @@ async function clearSingleCommand(pcId, commandId) {
 
 function closePendingPanel() {
     document.getElementById('pendingCommandsPanel').style.display = 'none';
+}
+
+// ==================== 중복 PC 관리 모달 ====================
+
+async function showDuplicatePCsModal() {
+    try {
+        const response = await fetch('/api/pcs/duplicates');
+        const data = await response.json();
+
+        if (!response.ok) {
+            alert('중복 PC 목록을 불러올 수 없습니다.');
+            return;
+        }
+
+        if (data.total_duplicate_groups === 0) {
+            alert('중복된 PC가 없습니다.');
+            return;
+        }
+
+        // 모달 생성
+        let modalHTML = `
+            <div id="duplicatePCsModal" style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.8);
+                z-index: 2000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 2em;
+            ">
+                <div style="
+                    background: #2a2a2a;
+                    border-radius: 12px;
+                    padding: 2em;
+                    max-width: 800px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    color: white;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
+                        <h2 style="margin: 0;">🔄 중복 PC 관리</h2>
+                        <button onclick="document.getElementById('duplicatePCsModal').remove()" style="
+                            background: #dc2626;
+                            color: white;
+                            border: none;
+                            padding: 0.5em 1em;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 600;
+                        ">닫기</button>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.1); padding: 1em; border-radius: 8px; margin-bottom: 1.5em;">
+                        <p style="margin: 0; color: #aaa;">
+                            총 <strong style="color: #ff9800;">${data.total_duplicate_groups}</strong>개의 중복 그룹이 있습니다.
+                        </p>
+                    </div>
+        `;
+
+        // 각 중복 그룹 표시
+        data.duplicates.forEach((group, groupIndex) => {
+            modalHTML += `
+                <div style="
+                    background: rgba(255,255,255,0.05);
+                    padding: 1em;
+                    margin-bottom: 1em;
+                    border-radius: 8px;
+                    border-left: 4px solid #ff9800;
+                ">
+                    <h4 style="margin-top: 0; color: #ff9800;">
+                        ${group.hostname} (${group.count}개)
+                    </h4>
+                    <div style="display: flex; flex-direction: column; gap: 0.5em;">
+            `;
+
+            group.pcs.forEach((pc) => {
+                modalHTML += `
+                    <div style="
+                        background: rgba(0,0,0,0.3);
+                        padding: 1em;
+                        border-radius: 6px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <div>
+                            <div style="font-weight: 600;">${pc.hostname}</div>
+                            <small style="color: #aaa;">
+                                IP: ${pc.ip_address || 'N/A'} | MAC: ${pc.mac_address || 'N/A'} | Machine ID: ${pc.machine_id || 'N/A'}
+                            </small><br>
+                            <small style="color: #888;">
+                                등록: ${pc.created_at || 'N/A'} | 배치: ${pc.room_name || '미배치'} ${pc.seat_number ? '(' + pc.seat_number + ')' : ''}
+                            </small>
+                        </div>
+                        <button onclick="deletePCFromDuplicateModal(${pc.id}, '${pc.hostname}')" style="
+                            background: #dc2626;
+                            color: white;
+                            border: none;
+                            padding: 0.5em 1em;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 600;
+                            white-space: nowrap;
+                        ">🗑️ 삭제</button>
+                    </div>
+                `;
+            });
+
+            modalHTML += `
+                    </div>
+                </div>
+            `;
+        });
+
+        modalHTML += `
+                </div>
+            </div>
+        `;
+
+        // 모달 추가
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    } catch (error) {
+        console.error('Load duplicates error:', error);
+        alert('중복 PC 목록을 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+async function deletePCFromDuplicateModal(pcId, hostname) {
+    if (!confirm(`정말로 ${hostname} (ID: ${pcId})를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/pc/${pcId}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(`✅ ${hostname}이(가) 삭제되었습니다.`);
+            // 모달 새로고침
+            document.getElementById('duplicatePCsModal').remove();
+            // 페이지 새로고침
+            location.reload();
+        } else {
+            alert(`❌ 삭제 실패: ${result.message || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        console.error('Delete PC error:', error);
+        alert('PC 삭제 중 오류가 발생했습니다.');
+    }
 }
 </script>
 {% endblock %}
