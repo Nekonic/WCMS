@@ -89,7 +89,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Notify server about new version
-      if: ${{ secrets.SERVER_URL != '' && secrets.UPDATE_TOKEN != '' }}
+      if: secrets.SERVER_URL != '' && secrets.UPDATE_TOKEN != ''
+      continue-on-error: true
       shell: pwsh
       run: |
         $VERSION = "${{ steps.version.outputs.version }}"
@@ -107,9 +108,9 @@ jobs:
             -Headers @{ "Authorization" = "Bearer ${{ secrets.UPDATE_TOKEN }}" } `
             -Body $body `
             -ContentType "application/json"
-          Write-Host "✅ 서버에 버전 정보 업데이트 완료"
+          Write-Host "[!] 서버에 버전 정보 업데이트 완료"
         } catch {
-          Write-Host "⚠️ 서버 업데이트 실패 (선택사항, 무시): $_"
+          Write-Host "[-] 서버 업데이트 실패"
         }
 
     - name: Upload as Artifact
