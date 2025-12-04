@@ -5,6 +5,7 @@ import os
 import json
 import time
 import platform
+import threading
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -71,27 +72,69 @@ def validate_not_null(value, default):
 
 
 def update_offline_status():
-    """10분 이상 하트비트가 없는 PC를 오프라인으로 표시"""
+    """2분 이상 하트비트가 없는 PC를 오프라인으로 표시 (명령 폴링 10초 활용)"""
     try:
-        db = get_db()
-        cutoff_time = (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
+        # 독립적인 DB 연결 사용 (스레드 안전)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.row_factory = sqlite3.Row
 
-        updated = db.execute(
-            "UPDATE pc_info SET is_online=0 WHERE is_online=1 AND last_seen < ?",
-            (cutoff_time,)
-        )
-        db.commit()
+        # 디버깅: 오프라인으로 전환될 PC 확인
+        offline_candidates = conn.execute("""
+            SELECT 
+                id, hostname, last_seen,
+                (julianday('now') - julianday(last_seen)) * 24 * 60 as minutes_ago
+            FROM pc_info 
+            WHERE is_online=1 
+            AND (julianday('now') - julianday(last_seen)) * 24 * 60 > 2
+        """).fetchall()
 
-        if updated.rowcount > 0:
-            print(f"[+] 오프라인 상태 업데이트: {updated.rowcount}대")
+        if offline_candidates:
+            for pc in offline_candidates:
+                print(f"[!] 오프라인 전환: {pc['hostname']} (마지막 하트비트: {pc['last_seen']}, {round(pc['minutes_ago'], 1)}분 전)")
 
-        return updated.rowcount
+        # 명령 폴링이 10초마다 있으므로, 2분 무응답이면 확실히 오프라인
+        cursor = conn.execute("""
+            UPDATE pc_info 
+            SET is_online=0 
+            WHERE is_online=1 
+            AND (julianday('now') - julianday(last_seen)) * 24 * 60 > 2
+        """)
+        conn.commit()
+
+        if cursor.rowcount > 0:
+            print(f"[+] 오프라인 상태 업데이트: {cursor.rowcount}대")
+
+        conn.close()
+        return cursor.rowcount
     except sqlite3.OperationalError as e:
         # 테이블이 없으면 무시 (초기화 필요)
         if 'no such table' in str(e):
-            print("[!] pc_info 테이블이 없습니다. init_db.py를 실행하세요.")
+            print("[!] pc_info 테이블이 없습니다. setup.sh를 실행하세요.")
             return 0
         raise
+
+
+def background_offline_checker():
+    """백그라운드에서 30초마다 오프라인 상태 체크"""
+    print("[*] 백그라운드 오프라인 체크 스레드 시작 (30초 주기)")
+
+    # 즉시 한 번 실행
+    try:
+        update_offline_status()
+    except Exception as e:
+        print(f"[!] 초기 오프라인 체크 오류: {e}")
+
+    while True:
+        try:
+            time.sleep(30)  # 30초마다 체크
+            update_offline_status()
+        except Exception as e:
+            print(f"[!] 백그라운드 오프라인 체크 오류: {e}")
+
+
+# 백그라운드 스레드 시작
+checker_thread = threading.Thread(target=background_offline_checker, daemon=True)
+checker_thread.start()
 
 
 # ==================== 데코레이터 ====================
@@ -249,11 +292,21 @@ def room_manager():
     return render_template('room_manager.html')
 
 
+@app.route('/system/status')
+@require_admin
+def system_status():
+    """시스템 상태 모니터링 페이지"""
+    return render_template('system_status.html')
+
+
 # ==================== 관리자 API ====================
 
 @app.route('/api/pcs')
 def api_pcs_list():
     """모든 PC 목록 조회 (온라인 상태 포함)"""
+    # 오프라인 상태 업데이트
+    update_offline_status()
+
     db = get_db()
     pcs = db.execute('SELECT * FROM pc_info ORDER BY room_name, seat_number').fetchall()
 
@@ -268,6 +321,9 @@ def api_pcs_list():
 @app.route('/api/pc/<int:pc_id>')
 def api_pc_detail(pc_id):
     """PC 상세 정보 조회"""
+    # 오프라인 상태 업데이트
+    update_offline_status()
+
     db = get_db()
     pc = db.execute('SELECT * FROM pc_info WHERE id=?', (pc_id,)).fetchone()
     if not pc:
@@ -1087,6 +1143,124 @@ def api_delete_room(room_id):
         })
     except Exception as e:
         print(f"[!] 실습실 삭제 실패: ERROR={e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 디버깅 API ====================
+
+@app.route('/api/debug/pc-status', methods=['GET'])
+@require_admin
+def api_debug_pc_status():
+    """PC 상태 디버깅 정보"""
+    # 먼저 오프라인 상태 업데이트
+    update_offline_status()
+
+    db = get_db()
+
+    try:
+        # 모든 PC의 상태 정보 조회
+        pcs = db.execute("""
+            SELECT 
+                id,
+                hostname,
+                machine_id,
+                is_online,
+                last_seen,
+                created_at,
+                datetime('now') as server_time,
+                (julianday('now') - julianday(last_seen)) * 24 * 60 as minutes_since_last_seen
+            FROM pc_info
+            ORDER BY is_online DESC, last_seen DESC
+        """).fetchall()
+
+        return jsonify({
+            'total': len(pcs),
+            'online_count': len([p for p in pcs if p['is_online']]),
+            'offline_count': len([p for p in pcs if not p['is_online']]),
+            'pcs': [dict(pc) for pc in pcs]
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 클라이언트 업데이트 API ====================
+
+@app.route('/api/client/version', methods=['GET'])
+def api_client_version():
+    """클라이언트 최신 버전 정보 조회"""
+    try:
+        db = get_db()
+
+        # 버전 정보 테이블에서 최신 버전 조회
+        version_info = db.execute("""
+            SELECT version, download_url, changelog, released_at
+            FROM client_versions
+            ORDER BY released_at DESC
+            LIMIT 1
+        """).fetchone()
+
+        if version_info:
+            return jsonify({
+                'status': 'success',
+                'version': version_info['version'],
+                'download_url': version_info['download_url'],
+                'changelog': version_info['changelog'],
+                'released_at': version_info['released_at']
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'version': '1.0.0',
+                'download_url': None,
+                'changelog': 'Initial version',
+                'released_at': None
+            })
+    except sqlite3.OperationalError:
+        # 테이블이 없으면 기본값 반환
+        return jsonify({
+            'status': 'success',
+            'version': '1.0.0',
+            'download_url': None,
+            'changelog': 'Initial version',
+            'released_at': None
+        })
+
+
+@app.route('/api/client/version', methods=['POST'])
+def api_update_client_version():
+    """클라이언트 버전 정보 업데이트 (GitHub Actions용)"""
+    data = request.json
+
+    if not data or 'version' not in data:
+        return jsonify({'status': 'error', 'message': 'version is required'}), 400
+
+    # 간단한 인증 (환경변수로 설정된 토큰 확인)
+    auth_token = request.headers.get('Authorization')
+    if auth_token != f"Bearer {os.environ.get('UPDATE_TOKEN', 'default-secret-token')}":
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    version = data['version']
+    download_url = data.get('download_url', '')
+    changelog = data.get('changelog', '')
+
+    try:
+        db = get_db()
+
+        # 버전 정보 삽입
+        db.execute("""
+            INSERT INTO client_versions (version, download_url, changelog, released_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """, (version, download_url, changelog))
+        db.commit()
+
+        print(f"[+] 클라이언트 버전 업데이트: {version}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f'Version {version} registered'
+        })
+    except Exception as e:
+        print(f"[!] 버전 업데이트 실패: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 

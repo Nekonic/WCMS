@@ -422,3 +422,14 @@ PRAGMA synchronous = NORMAL;
 5. 검증 후 교체
    mv db_new.sqlite3 db.sqlite3
 */
+
+-- ==================== 클라이언트 버전 관리 ====================
+CREATE TABLE IF NOT EXISTS client_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version TEXT NOT NULL,
+    download_url TEXT,
+    changelog TEXT,
+    released_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_client_versions_released ON client_versions(released_at DESC);

@@ -34,20 +34,80 @@ Woosuk Computer Management System
 
 ## 🚀 빠른 시작
 
-### 서버 (Linux/macOS)
+### 서버 (Linux)
 
 ```bash
-# 1. 의존성 설치
 cd server
-pip install -r requirements.txt
 
-# 2. DB 초기화 및 관리자 생성
-./init_db.sh              # DB 초기화
-python create_admin.py    # 관리자 생성 (기본: admin/!Q2w3e4r!@#123)
+# 초기 설정 (한 번만 실행)
+bash setup.sh           # 기본: 4개 실습실
+# 또는
+bash setup.sh 6         # 6개 실습실 생성
+bash setup.sh 10        # 10개 실습실 생성
 
-# 3. 서버 시작
-python app.py             # http://0.0.0.0:5050
+# 서버 시작
+python3 app.py          # http://0.0.0.0:5050
+
+# 로그인
+# ID: admin / PW: admin123 (꼭 변경하세요!)
 ```
+
+---
+
+## 💾 데이터베이스 관리
+
+### 자동 정리 (기본 설정)
+- **pc_status**: 3개월 이상 된 데이터 자동 삭제
+- **pc_command**: 완료된 명령 30일 후 삭제
+- **디스크 사용량**: 100대 PC 기준 약 650MB (3개월)
+
+### 수동 정리 (필요 시)
+```bash
+cd server
+# 30일 이상 된 데이터 삭제
+sqlite3 db.sqlite3 "DELETE FROM pc_status WHERE created_at < datetime('now', '-30 days'); VACUUM;"
+```
+
+**자세한 내용:** [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md)
+
+---
+
+## 🔄 클라이언트 자동 업데이트
+
+### 새 버전 배포 방법
+
+1. **버전 태그 생성 및 푸시**
+   ```bash
+   git tag client-v0.5.7
+   git push origin client-v0.5.7
+   ```
+
+2. **GitHub Actions 자동 실행**
+   - 클라이언트 자동 빌드 (`build_client.yml`)
+   - GitHub Release 생성
+   - WCMS-Client.exe 업로드
+   - 서버에 버전 정보 전송 (선택사항)
+
+3. **클라이언트 자동 확인**
+   - 시작 시 서버에서 최신 버전 체크
+   - 새 버전 있으면 로그에 다운로드 URL 표시
+
+### GitHub Secrets 설정 (선택사항)
+
+서버 자동 알림을 원하면 Repository Settings → Secrets:
+- `SERVER_URL`: 서버 주소 (예: `http://your-server.com:5050`)
+- `UPDATE_TOKEN`: 인증 토큰
+
+### 서버 환경변수 (선택사항)
+
+```bash
+export UPDATE_TOKEN="your-secret-token"
+python3 app.py
+```
+
+**현재 버전:** v0.5.6
+
+---
 
 ### 클라이언트 (Windows PC)
 

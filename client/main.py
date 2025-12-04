@@ -10,7 +10,10 @@ from typing import Optional
 from collector import collect_static_info, collect_dynamic_info
 from executor import CommandExecutor
 
-SERVER_URL = "http://aps.or.kr:8057/"
+# 버전 정보 (GitHub Actions가 빌드 시 자동으로 태그 버전으로 교체)
+__version__ = "dev"
+
+SERVER_URL = "http://10.211.55.2:5050/"  # 서버 IP 주소 (http:// 필수!)
 MACHINE_ID = next(
     (addr.address.replace(':', '').replace('-', '') for interface, addrs in psutil.net_if_addrs().items()
      for addr in addrs if addr.family == psutil.AF_LINK),
@@ -48,6 +51,25 @@ def setup_logging():
         logger.addHandler(sh)
         logger.error(f"로그 파일 초기화 실패: {e}")
     return logger
+
+
+def check_for_updates():
+    """서버에서 최신 버전 확인"""
+    try:
+        response = requests.get(f"{SERVER_URL}api/client/version", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            latest_version = data.get('version', '1.0.0')
+
+            if latest_version != __version__:
+                logger.warning(f"새 버전이 있습니다! 현재: {__version__}, 최신: {latest_version}")
+                logger.info(f"다운로드: {data.get('download_url', 'GitHub Release 확인')}")
+                if data.get('changelog'):
+                    logger.info(f"변경사항: {data.get('changelog')}")
+            else:
+                logger.info(f"최신 버전 사용 중: {__version__}")
+    except Exception as e:
+        logger.debug(f"버전 체크 실패 (무시): {e}")
 
 
 def register_client():
@@ -202,22 +224,25 @@ def send_command_result(command_id, status, result):
 
 
 def heartbeat_thread(stop_event: threading.Event):
-    """10분 주기로 Heartbeat 전송"""
+    """5분 주기로 Heartbeat 전송 (명령 폴링이 10초마다 있으므로 충분)"""
     while not stop_event.is_set():
         send_heartbeat()
         # 대기 도중 종료 이벤트 감지
-        if stop_event.wait(600):
+        if stop_event.wait(300):  # 5분 = 300초
             break
 
 
 def run_client(stop_event: Optional[threading.Event] = None):
     """클라이언트 본 동작. 서비스/콘솔 공통 진입점"""
     setup_logging()
-    logger.info("WCMS 클라이언트 시작...")
+    logger.info(f"WCMS 클라이언트 v{__version__} 시작...")
     logger.info(f"Machine ID: {MACHINE_ID}")
     logger.info(f"부팅 시간: {BOOT_TIME.strftime('%Y-%m-%d %H:%M:%S')}")
 
     ev = stop_event or STOP_EVENT
+
+    # 버전 체크
+    check_for_updates()
 
     # 시작 시 먼저 등록 시도
     if not register_client():

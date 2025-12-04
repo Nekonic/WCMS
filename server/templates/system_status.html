@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}시스템 상태{% endblock %}
+{% block content %}
+<div style="max-width: 1400px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2em;">
+        <h2 style="margin: 0;">🔍 시스템 상태 모니터링</h2>
+        <div style="display: flex; gap: 1em;">
+            <button onclick="forceCheck()" style="
+                background: #f59e0b;
+                color: white;
+                padding: 0.7em 1.5em;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 600;
+            ">
+                ⚡ 강제 체크
+            </button>
+            <button onclick="refreshStatus()" style="
+                background: #10b981;
+                color: white;
+                padding: 0.7em 1.5em;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 600;
+            ">
+                🔄 새로고침
+            </button>
+        </div>
+    </div>
+
+    <!-- 요약 통계 -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5em; margin-bottom: 2em;">
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 1.5em; border-radius: 10px; color: white;">
+            <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 0.5em;">온라인 PC</div>
+            <div style="font-size: 2.5em; font-weight: bold;" id="onlineCount">0</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); padding: 1.5em; border-radius: 10px; color: white;">
+            <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 0.5em;">오프라인 PC</div>
+            <div style="font-size: 2.5em; font-weight: bold;" id="offlineCount">0</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 1.5em; border-radius: 10px; color: white;">
+            <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 0.5em;">전체 PC</div>
+            <div style="font-size: 2.5em; font-weight: bold;" id="totalCount">0</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 1.5em; border-radius: 10px; color: white;">
+            <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 0.5em;">마지막 업데이트</div>
+            <div style="font-size: 1.2em; font-weight: bold;" id="lastUpdate">-</div>
+        </div>
+    </div>
+
+    <!-- 필터 -->
+    <div style="background: #2a2a2a; padding: 1em; border-radius: 8px; margin-bottom: 1.5em;">
+        <div style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
+            <label style="color: #aaa;">필터:</label>
+            <button onclick="filterStatus('all')" id="filterAll" class="filter-btn active">전체</button>
+            <button onclick="filterStatus('online')" id="filterOnline" class="filter-btn">온라인만</button>
+            <button onclick="filterStatus('offline')" id="filterOffline" class="filter-btn">오프라인만</button>
+        </div>
+    </div>
+
+    <!-- PC 상태 테이블 -->
+    <div style="background: #2a2a2a; border-radius: 10px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #1a1a1a; border-bottom: 2px solid #444;">
+                    <th style="padding: 1em; text-align: left; color: #aaa; font-weight: 600;">상태</th>
+                    <th style="padding: 1em; text-align: left; color: #aaa; font-weight: 600;">호스트명</th>
+                    <th style="padding: 1em; text-align: left; color: #aaa; font-weight: 600;">Machine ID</th>
+                    <th style="padding: 1em; text-align: left; color: #aaa; font-weight: 600;">마지막 하트비트</th>
+                    <th style="padding: 1em; text-align: left; color: #aaa; font-weight: 600;">경과 시간</th>
+                    <th style="padding: 1em; text-align: left; color: #aaa; font-weight: 600;">서버 시간</th>
+                </tr>
+            </thead>
+            <tbody id="pcStatusTable">
+                <!-- 동적 생성 -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.filter-btn {
+    background: #444;
+    color: white;
+    border: none;
+    padding: 0.6em 1.2em;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.filter-btn:hover {
+    background: #555;
+}
+
+.filter-btn.active {
+    background: #4a9eff;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.4em 0.8em;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.status-online {
+    background: #10b981;
+    color: white;
+}
+
+.status-offline {
+    background: #6b7280;
+    color: white;
+}
+
+.status-warning {
+    background: #f59e0b;
+    color: white;
+}
+
+tr.pc-row {
+    border-bottom: 1px solid #333;
+    transition: background 0.2s;
+}
+
+tr.pc-row:hover {
+    background: rgba(74, 158, 255, 0.1);
+}
+
+tr.pc-row td {
+    padding: 1em;
+    color: #e0e0e0;
+}
+</style>
+
+<script>
+let allPCs = [];
+let currentFilter = 'all';
+
+async function loadStatus() {
+    try {
+        const response = await fetch('/api/debug/pc-status');
+        const data = await response.json();
+
+        allPCs = data.pcs;
+
+        // 통계 업데이트
+        document.getElementById('onlineCount').textContent = data.online_count;
+        document.getElementById('offlineCount').textContent = data.offline_count;
+        document.getElementById('totalCount').textContent = data.total;
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko-KR');
+
+        // 테이블 렌더링
+        renderTable();
+    } catch (error) {
+        console.error('Load status error:', error);
+        alert('상태 정보를 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+function renderTable() {
+    const tbody = document.getElementById('pcStatusTable');
+
+    // 필터링
+    let filteredPCs = allPCs;
+    if (currentFilter === 'online') {
+        filteredPCs = allPCs.filter(pc => pc.is_online === 1);
+    } else if (currentFilter === 'offline') {
+        filteredPCs = allPCs.filter(pc => pc.is_online === 0);
+    }
+
+    if (filteredPCs.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 3em; color: #888;">
+                    데이터가 없습니다
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = filteredPCs.map(pc => {
+        const minutes = Math.round(pc.minutes_since_last_seen * 10) / 10;
+        const isOnline = pc.is_online === 1;
+
+        // 온라인/오프라인만 표시
+        let statusClass = isOnline ? 'status-online' : 'status-offline';
+        let statusText = isOnline ? '온라인' : '오프라인';
+
+        // 초 단위로 표시 (1분 미만은 초로)
+        let timeDisplay;
+        if (minutes < 1) {
+            const seconds = Math.round(minutes * 60);
+            timeDisplay = `${seconds}초 전`;
+        } else {
+            timeDisplay = `${Math.round(minutes)}분 전`;
+        }
+
+        return `
+            <tr class="pc-row">
+                <td>
+                    <span class="status-badge ${statusClass}">${statusText}</span>
+                </td>
+                <td style="font-weight: 600;">${pc.hostname || 'Unknown'}</td>
+                <td style="font-family: monospace; font-size: 0.9em;">${pc.machine_id || 'N/A'}</td>
+                <td>${formatDateTime(pc.last_seen)}</td>
+                <td>
+                    <span style="${minutes > 2 ? 'color: #ef4444; font-weight: 600;' : ''}">
+                        ${timeDisplay}
+                    </span>
+                </td>
+                <td style="color: #aaa; font-size: 0.9em;">${formatDateTime(pc.server_time)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function formatDateTime(dateStr) {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr + ' UTC'); // SQLite는 UTC 시간
+    return date.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function filterStatus(filter) {
+    currentFilter = filter;
+
+    // 버튼 활성화 상태 변경
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById('filter' + filter.charAt(0).toUpperCase() + filter.slice(1)).classList.add('active');
+
+    renderTable();
+}
+
+function refreshStatus() {
+    loadStatus();
+}
+
+async function forceCheck() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ 체크 중...';
+
+    try {
+        // API 호출 시 자동으로 update_offline_status() 실행됨
+        await loadStatus();
+
+        // 시각적 피드백
+        btn.style.background = '#10b981';
+        btn.textContent = '✓ 완료!';
+
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.style.background = '#f59e0b';
+            btn.textContent = '⚡ 강제 체크';
+        }, 2000);
+
+        console.log('오프라인 체크 완료');
+    } catch (error) {
+        btn.disabled = false;
+        btn.textContent = '❌ 실패';
+        setTimeout(() => {
+            btn.textContent = '⚡ 강제 체크';
+        }, 2000);
+    }
+}
+
+// 페이지 로드 시 실행
+loadStatus();
+
+// 30초마다 자동 새로고침 (하트비트 주기와 동일)
+setInterval(loadStatus, 30000);
+</script>
+{% endblock %}
+

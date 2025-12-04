@@ -1,7 +1,7 @@
 # WCMS 통합 가이드
 
-> **최종 업데이트**: 2025.11.19  
-> **버전**: 1.1  
+> **최종 업데이트**: 2025.12.04  
+> **버전**: 2.0  
 > **프로젝트**: Woosuk Computer Management System
 
 ---
@@ -26,28 +26,30 @@ WCMS는 실습실 PC를 원격으로 관리하고 제어하는 웹 기반 시스
 
 ```
 ┌─────────────────┐
-│   웹 브라우저    │ ← 관리자 접속
+│   웹 브라우저    │ ← 관리자 접속 (30초 자동 새로고침)
 └────────┬────────┘
          │ HTTP
          ↓
 ┌─────────────────┐
 │  Flask 서버     │ ← 중앙 관리 서버
-│  (SQLite DB)    │
+│  (SQLite DB)    │   + 백그라운드 오프라인 체크 (30초 주기)
 └────────┬────────┘
          │ REST API
          ↓
 ┌─────────────────┐
 │ 클라이언트      │ ← Windows PC (여러 대)
-│ (Python)        │
+│ (Python)        │   + 하트비트 (5분), 명령 폴링 (10초 롱폴링)
+│ Windows 서비스  │
 └─────────────────┘
 ```
 
 ### 기술 스택
 
-- **서버**: Flask, SQLite
-- **클라이언트**: Python, psutil, WMI
-- **프론트엔드**: HTML, CSS, JavaScript
-- **통신**: REST API, Long-polling
+- **서버**: Flask, SQLite (백그라운드 스레드)
+- **클라이언트**: Python, psutil, WMI, Windows Services
+- **프론트엔드**: HTML, CSS, JavaScript (Vanilla)
+- **통신**: REST API, Long-polling (10초)
+- **배포**: PyInstaller, GitHub Actions
 
 ---
 
@@ -69,10 +71,12 @@ WCMS는 실습실 PC를 원격으로 관리하고 제어하는 웹 기반 시스
 
 ### 🖥️ 모니터링
 - ✅ **실시간 상태**: CPU, RAM, 디스크 사용률 (GB 단위)
-- ✅ **디스크 시각화**: Chart.js 도넛 차트로 드라이브별 사용 현황 표시
+- ✅ **시스템 상태 모니터링**: 온라인/오프라인 감지 (2분 타임아웃)
+- ✅ **디스크 시각화**: 진행 바로 드라이브별 사용 현황 표시
 - ✅ **프로세스 추적**: 실행 중인 프로그램 모니터링 (시스템 프로세스 자동 필터링)
 - ✅ **좌석 배치**: 실습실 레이아웃 관리 (드래그 앤 드롭)
-- ✅ **상태 표시**: 온라인/오프라인, 부하 상태 색상 구분
+- ✅ **실습실 관리**: 웹에서 실습실 추가/수정/삭제 (CRUD)
+- ✅ **상태 표시**: 🟢 온라인 / ⚫ 오프라인 (간단명료)
 - ✅ **상세 정보**: CPU 모델명, Windows 에디션 (Home/Pro/Education 등)
 
 ### 🚀 배포
@@ -91,10 +95,6 @@ WCMS는 실습실 PC를 원격으로 관리하고 제어하는 웹 기반 시스
 # 저장소 클론
 git clone <repository-url>
 cd WCMS
-
-# 의존성 설치
-pip install -r server/requirements.txt
-pip install -r client/requirements.txt
 ```
 
 ### 2. 서버 설정
@@ -102,21 +102,39 @@ pip install -r client/requirements.txt
 ```bash
 cd server
 
-# 데이터베이스 초기화
-./init_db.sh   # Linux/Mac
+# 올인원 초기 설정 (한 번만 실행)
+bash setup.sh           # 기본: 4개 실습실
 # 또는
-sh init_db.sh  # Windows Git Bash
-
-# 관리자 계정 생성 (admin/admin)
-python create_admin.py
+bash setup.sh 10        # 10개 실습실 생성
 
 # 서버 시작
-python app.py
+python3 app.py
 ```
 
-서버가 `http://127.0.0.1:5050`에서 실행됩니다.
+서버가 `http://0.0.0.0:5050`에서 실행됩니다.
+
+**기본 관리자 계정:**
+- ID: `admin`
+- PW: `admin123`
+- ⚠️ 로그인 후 반드시 비밀번호를 변경하세요!
 
 ### 3. 클라이언트 설정 (Windows PC)
+
+#### 배포 모드 (권장)
+
+**GitHub Actions로 자동 빌드된 EXE 사용:**
+1. GitHub Release에서 최신 `WCMS-Client.exe` 다운로드
+2. **관리자 권한으로 실행**
+3. Windows 서비스로 자동 설치 및 시작
+4. 재부팅 시 자동 시작됨
+
+**로그 확인:**
+```bash
+type C:\ProgramData\WCMS\logs\client.log
+```
+
+**서버 IP 변경:**
+- `client/main.py`의 `SERVER_URL` 수정 후 재빌드
 
 #### 개발/테스트 모드
 
@@ -125,48 +143,11 @@ cd client
 python main.py
 ```
 
-#### 배포 모드 (Windows 서비스)
-
-**방법 1: 릴리스 다운로드 (권장)**
-```bash
-# 1. GitHub Release에서 최신 WCMS-Client.exe 다운로드
-# 2. 관리자 권한으로 실행 → 자동 설치 및 시작
-# 3. 재부팅 시 자동 시작됨
-```
-
-**방법 2: 로컬 빌드**
-```bash
-cd client
-pip install pyinstaller
-pyinstaller build.spec
-
-# 생성된 dist/WCMS-Client.exe를 관리자 권한으로 실행
-```
-
-**서비스 관리**
-```bash
-# 상태 확인
-check_status.bat
-
-# 로그 확인
-type C:\ProgramData\WCMS\logs\client.log
-type C:\ProgramData\WCMS\logs\service_runtime.log
-
-# 서비스 중지 및 제거
-sc stop WCMSClient
-sc delete WCMSClient
-```
-
-**디버그 모드 (포그라운드 실행)**
-```bash
-WCMS-Client.exe run
-```
-
 ### 4. 웹 접속
 
-브라우저에서 `http://127.0.0.1:5050` 접속 후 로그인
+브라우저에서 `http://localhost:5050` 또는 `http://[서버_IP]:5050` 접속 후 로그인
 - **ID**: `admin`
-- **PW**: `admin`
+- **PW**: `admin123`
 
 ---
 
@@ -612,9 +593,9 @@ WCMS/
    ↓
 2. 서버에 등록 (최초 1회)
    ↓
-3. Heartbeat 전송 (10분마다, 백그라운드)
+3. Heartbeat 전송 (5분마다, 백그라운드)
    ↓
-4. 명령 폴링 (Long-polling, 메인 스레드)
+4. 명령 폴링 (10초 롱폴링, 메인 스레드)
    ↓
 5. 명령 수신 시 실행
    ↓
@@ -759,7 +740,7 @@ sys.path.insert(0, 'client')
 
 ---
 
-**작성일**: 2025.11.18  
+**작성일**: 2025.12.04  
 **작성자**: WCMS Development Team  
-**버전**: 1.0
+**버전**: 2.0
 

@@ -216,6 +216,7 @@
                 {% endfor %}
                 <div class="divider" style="margin: 1em 0.8em;"></div>
                 {% if session.get('admin') %}
+                <a href="{{ url_for('system_status') }}">🔍 시스템 상태</a>
                 <a href="{{ url_for('command_test') }}">🧪 명령 테스트</a>
                 <a href="{{ url_for('room_manager') }}">🏫 실습실 관리</a>
                 <a href="{{ url_for('account_manager') }}">👤 계정 관리</a>

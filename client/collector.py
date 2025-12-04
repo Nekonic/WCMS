@@ -9,7 +9,8 @@ WINDOWS_SYSTEM_PROCESSES = {
     'System Idle','System Idle Process','System', 'Registry', 'MemCompression', 'Memory Compression',
     'smss.exe', 'csrss.exe', 'wininit.exe', 'services.exe', 'lsass.exe',
     'lsaiso.exe', 'winlogon.exe', 'fontdrvhost.exe',
-    'IntelCpHDCPSvc.exe','IntelCpHeciSvc.exe',
+    'IntelCpHDCPSvc.exe','IntelCpHeciSvc.exe','MpDefenderCoreService',
+    'Defrag.exe',
 
     # 서비스 호스트 및 관련 프로세스
     'svchost.exe', 'dllhost.exe', 'taskhost.exe', 'taskhostex.exe',
@@ -18,7 +19,7 @@ WINDOWS_SYSTEM_PROCESSES = {
     # 탐색기 및 GUI 관련
     'explorer.exe', 'dwm.exe', 'ShellExperienceHost.exe',
     'StartMenuExperienceHost.exe', 'SearchHost.exe', 'SearchUI.exe',
-    'SearchApp.exe', 'SearchIndexer.exe',
+    'SearchApp.exe', 'SearchIndexer.exe','OneApp.IGCC.WinService.exe',
 
     # Windows 보안 및 업데이트
     'SecurityHealthService.exe', 'SecurityHealthSystray.exe',
@@ -37,6 +38,7 @@ WINDOWS_SYSTEM_PROCESSES = {
     'spoolsv.exe', 'conhost.exe', 'backgroundTaskHost.exe',
     'ctfmon.exe', 'TextInputHost.exe', 'TabTip.exe',
     'LogonUI.exe', 'LockApp.exe', 'UserOOBEBroker.exe',
+    'FileCoAuth.exe',
 
     # Windows 이벤트 및 로그
     'wininit.exe', 'WmiPrvSE.exe', 'audiodg.exe',

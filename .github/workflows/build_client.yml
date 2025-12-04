@@ -34,13 +34,6 @@ jobs:
         python -c "import wmi; print('wmi OK')"
         python -c "import win32serviceutil, win32service, win32event, servicemanager; print('pywin32 OK')"
 
-    - name: Build EXE with PyInstaller
-      working-directory: ./client
-      run: |
-        pyinstaller build.spec
-        echo Built files:
-        dir dist
-
     - name: Extract version from tag
       id: version
       shell: pwsh
@@ -48,6 +41,22 @@ jobs:
         $tag = "${{ github.ref }}"
         $version = $tag -replace 'refs/tags/client-v', ''
         echo "version=$version" >> $env:GITHUB_OUTPUT
+        Write-Host "추출된 버전: $version"
+
+    - name: Update version in main.py
+      shell: pwsh
+      run: |
+        $VERSION = "${{ steps.version.outputs.version }}"
+        (Get-Content client/main.py) -replace '__version__ = ".*"', "__version__ = `"$VERSION`"" | Set-Content client/main.py
+        Write-Host "버전 업데이트 완료: $VERSION"
+        Get-Content client/main.py | Select-String "__version__"
+
+    - name: Build EXE with PyInstaller
+      working-directory: ./client
+      run: |
+        pyinstaller build.spec
+        echo Built files:
+        dir dist
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -64,12 +73,41 @@ jobs:
           ## 요구사항
           - Windows 10/11
           - 관리자 권한
+          
+          ## 주요 기능
+          - 5분 주기 하트비트
+          - 10초 명령 폴링
+          - 자동 버전 체크
         draft: false
         prerelease: true
         files: |
           ./client/dist/WCMS-Client.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Notify server about new version
+      if: ${{ secrets.SERVER_URL != '' && secrets.UPDATE_TOKEN != '' }}
+      shell: pwsh
+      run: |
+        $VERSION = "${{ steps.version.outputs.version }}"
+        $DOWNLOAD_URL = "https://github.com/${{ github.repository }}/releases/download/client-v$VERSION/WCMS-Client.exe"
+        
+        $body = @{
+          version = $VERSION
+          download_url = $DOWNLOAD_URL
+          changelog = "GitHub Actions 자동 빌드 v$VERSION"
+        } | ConvertTo-Json
+        
+        try {
+          Invoke-RestMethod -Uri "${{ secrets.SERVER_URL }}/api/client/version" `
+            -Method POST `
+            -Headers @{ "Authorization" = "Bearer ${{ secrets.UPDATE_TOKEN }}" } `
+            -Body $body `
+            -ContentType "application/json"
+          Write-Host "✅ 서버에 버전 정보 업데이트 완료"
+        } catch {
+          Write-Host "⚠️ 서버 업데이트 실패 (선택사항, 무시): $_"
+        }
 
     - name: Upload as Artifact
       uses: actions/upload-artifact@v4
