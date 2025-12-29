@@ -1,9 +1,53 @@
+"""
+명령 실행 모듈
+서버에서 수신한 명령(종료, 재시작, 설치, 계정 관리 등)을 실행합니다.
+"""
 import subprocess
+import logging
+from typing import Dict, Any
+
+logger = logging.getLogger('wcms')
 
 
 class CommandExecutor:
+    """Windows 명령 실행 클래스"""
+
     @staticmethod
-    def shutdown():
+    def execute_command(command_type: str, command_data: Dict[str, Any]) -> str:
+        """
+        명령 타입에 따라 적절한 명령 실행
+
+        Args:
+            command_type: 명령 타입 (shutdown, reboot, execute, etc)
+            command_data: 명령 데이터
+
+        Returns:
+            실행 결과 메시지
+        """
+        handlers = {
+            'shutdown': CommandExecutor.shutdown,
+            'reboot': CommandExecutor.reboot,
+            'execute': CommandExecutor.execute,
+            'install': lambda: CommandExecutor.install(command_data.get('app_name', '')),
+            'download': lambda: CommandExecutor.download(command_data.get('url', '')),
+            'create_user': lambda: CommandExecutor.create_user(**command_data),
+            'delete_user': lambda: CommandExecutor.delete_user(command_data.get('username', '')),
+            'change_password': lambda: CommandExecutor.change_password(**command_data),
+        }
+
+        handler = handlers.get(command_type)
+        if handler:
+            try:
+                return handler()
+            except Exception as e:
+                logger.error(f"명령 실행 오류 ({command_type}): {e}")
+                return f"오류: {str(e)}"
+        else:
+            return f"알 수 없는 명령 타입: {command_type}"
+
+    @staticmethod
+    def shutdown() -> str:
+        """PC 종료"""
         try:
             subprocess.run("shutdown /s /t 30", shell=True)
             return "종료 명령 실행됨"
@@ -11,7 +55,8 @@ class CommandExecutor:
             return f"종료 실패: {str(e)}"
 
     @staticmethod
-    def reboot():
+    def reboot() -> str:
+        """PC 재시작"""
         try:
             subprocess.run("shutdown /r /t 30", shell=True)
             return "재시작 명령 실행됨"
@@ -19,8 +64,25 @@ class CommandExecutor:
             return f"재시작 실패: {str(e)}"
 
     @staticmethod
-    def install(app_name):
-        """winget 설치"""
+    def execute(command: str) -> str:
+        """CMD 명령 실행"""
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            return result.stdout or result.stderr or "실행 완료"
+        except subprocess.TimeoutExpired:
+            return "명령 실행 타임아웃 (30초)"
+        except Exception as e:
+            return f"실행 실패: {str(e)}"
+
+    @staticmethod
+    def install(app_name: str) -> str:
+        """프로그램 설치 (winget)"""
         try:
             # winget이 설치되어 있는지 확인
             check_result = subprocess.run(
@@ -44,101 +106,47 @@ class CommandExecutor:
             )
 
             if result.returncode == 0:
-                return f"✅ 설치 완료: {app_name}\n{result.stdout}"
+                return f"설치 완료: {app_name}"
             else:
-                return f"❌ 설치 실패: {app_name}\n반환 코드: {result.returncode}\n{result.stderr}"
+                return f"설치 실패: {app_name} (반환 코드: {result.returncode})"
         except subprocess.TimeoutExpired:
-            return f"⏱️ 설치 타임아웃: {app_name} (5분 초과)"
+            return f"설치 타임아웃: {app_name} (5분 초과)"
         except Exception as e:
             return f"설치 실패: {str(e)}"
 
     @staticmethod
-    def execute(command):
-        """임의의 명령어 실행"""
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            output = ""
-            if result.stdout:
-                output += result.stdout
-            if result.stderr:
-                output += f"\n[STDERR]\n{result.stderr}"
-
-            if result.returncode != 0:
-                output = f"⚠️ 명령 실행 완료 (종료 코드: {result.returncode})\n{output}"
-            else:
-                output = f"✅ 명령 실행 성공\n{output}" if output else "✅ 명령 실행 성공 (출력 없음)"
-
-            return output
-        except subprocess.TimeoutExpired:
-            return f"⏱️ 명령 실행 타임아웃 (30초 초과): {command}"
-        except Exception as e:
-            return f"실행 실패: {str(e)}"
-
-    @staticmethod
-    def download_file(file_url, save_path):
+    def download(url: str) -> str:
         """파일 다운로드"""
         try:
             import requests
             import os
 
-            # 디렉토리 생성
-            directory = os.path.dirname(save_path)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory)
-                print(f"[*] 디렉토리 생성: {directory}")
+            # 파일명 추출
+            filename = url.split('/')[-1] or 'downloaded_file'
+            save_path = os.path.join(os.path.expanduser('~'), 'Downloads', filename)
 
-            # 다운로드 시작
-            print(f"[*] 다운로드 시작: {file_url}")
-            response = requests.get(file_url, stream=True, timeout=60)
+            # Downloads 디렉토리 생성
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            response = requests.get(url, stream=True, timeout=60)
             response.raise_for_status()
 
-            # 파일 크기 확인
             total_size = int(response.headers.get('content-length', 0))
-
-            # 스트리밍 다운로드
             downloaded = 0
+
             with open(save_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
 
-            # 파일 크기 확인
             actual_size = os.path.getsize(save_path)
-
-            result = f"✅ 다운로드 완료: {save_path}\n"
-            result += f"   파일 크기: {actual_size:,} bytes"
-            if total_size > 0:
-                result += f" ({actual_size/total_size*100:.1f}%)"
-
-            return result
-        except requests.exceptions.RequestException as e:
-            return f"❌ 다운로드 실패 (네트워크 오류): {str(e)}"
+            return f"다운로드 완료: {save_path} ({actual_size:,} bytes)"
         except Exception as e:
-            return f"❌ 다운로드 실패: {str(e)}"
+            return f"다운로드 실패: {str(e)}"
 
     @staticmethod
-    def manage_account(action, username, password=None, full_name=None, comment=None):
-        """Windows 계정 관리 통합 함수"""
-        try:
-            if action == 'create':
-                # 계정 생성
-                cmd = f'net user "{username}" "{password}" /add'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-
-                if result.returncode != 0:
-                    return f"❌ 계정 생성 실패: {result.stderr}"
-
-                # 전체 이름 설정 (옵션)
-                if full_name:
-                    subprocess.run(
+    def create_user(username: str, password: str, full_name: str = None, comment: str = None) -> str:
                         f'wmic useraccount where name="{username}" set fullname="{full_name}"',
                         shell=True, capture_output=True, timeout=30
                     )
@@ -150,7 +158,7 @@ class CommandExecutor:
                         shell=True, capture_output=True, timeout=30
                     )
 
-                return f"✅ 계정 생성 완료: {username}"
+                return f"계정 생성 완료: {username}"
 
             elif action == 'delete':
                 # 계정 삭제
@@ -158,9 +166,9 @@ class CommandExecutor:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
 
                 if result.returncode != 0:
-                    return f"❌ 계정 삭제 실패: {result.stderr}"
+                    return f"계정 삭제 실패: {result.stderr}"
 
-                return f"✅ 계정 삭제 완료: {username}"
+                return f"계정 삭제 완료: {username}"
 
             elif action == 'change_password':
                 # 비밀번호 변경
@@ -168,15 +176,15 @@ class CommandExecutor:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
 
                 if result.returncode != 0:
-                    return f"❌ 비밀번호 변경 실패: {result.stderr}"
+                    return f"비밀번호 변경 실패: {result.stderr}"
 
-                return f"✅ 비밀번호 변경 완료: {username}"
+                return f"비밀번호 변경 완료: {username}"
 
             else:
-                return f"❌ 알 수 없는 계정 관리 작업: {action}"
+                return f"알 수 없는 계정 관리 작업: {action}"
 
         except Exception as e:
-            return f"❌ 계정 관리 실패: {str(e)}"
+            return f"계정 관리 실패: {str(e)}"
 
     @staticmethod
     def create_user(username, password, full_name=None, comment=None):
@@ -206,7 +214,7 @@ class CommandExecutor:
             elif action == 'logout':
                 return CommandExecutor.execute('shutdown /l')
             else:
-                return f"❌ 알 수 없는 전원 관리 작업: {action}"
+                return f"알 수 없는 전원 관리 작업: {action}"
 
         elif cmd_type == 'shutdown':  # 하위 호환성
             return CommandExecutor.shutdown()
@@ -258,4 +266,4 @@ class CommandExecutor:
             )
 
         else:
-            return f"❌ 알 수 없는 명령 타입: {cmd_type}"
+            return f"알 수 없는 명령 타입: {cmd_type}"

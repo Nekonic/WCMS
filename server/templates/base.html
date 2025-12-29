@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Woosuk Computer Management System{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
@@ -215,20 +216,18 @@
                 </a>
                 {% endfor %}
                 <div class="divider" style="margin: 1em 0.8em;"></div>
-                {% if session.get('admin') %}
+                {% if session.get('username') %}
                 <a href="{{ url_for('system_status') }}">🔍 시스템 상태</a>
-                <a href="{{ url_for('command_test') }}">🧪 명령 테스트</a>
-                <a href="{{ url_for('room_manager') }}">🏫 실습실 관리</a>
-                <a href="{{ url_for('account_manager') }}">👤 계정 관리</a>
+                <a href="{{ url_for('command_history') }}">🧪 명령 기록</a>
+                <a href="{{ url_for('manage_rooms') }}">🏫 실습실 관리</a>
+                <a href="{{ url_for('admin_manager') }}">👤 계정 관리</a>
                 {% endif %}
             </div>
         </div>
         <div>
             <div class="divider"></div>
-            {% if session.get('admin') %}
-                <form action="{{ url_for('logout') }}" method="post">
-                    <button type="submit">🔓 로그아웃</button>
-                </form>
+            {% if session.get('username') %}
+                <a href="{{ url_for('logout') }}">🔓 로그아웃</a>
             {% else %}
                 <a href="{{ url_for('login') }}">🔐 로그인</a>
             {% endif %}
@@ -295,7 +294,7 @@ function openModal(pcId) {
             `;
 
             const footer = document.getElementById('modalFooter');
-            const isAdmin = {% if session.get('admin') %}true{% else %}false{% endif %};
+            const isAdmin = {% if session.get('username') %}true{% else %}false{% endif %};
 
             if (isAdmin) {
                 footer.innerHTML = `

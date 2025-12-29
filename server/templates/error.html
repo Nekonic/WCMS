@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}오류 발생 - WCMS{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">오류가 발생했습니다!</h4>
+                <p>{{ error }}</p>
+                <hr>
+                <p class="mb-0">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">홈으로 돌아가기</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

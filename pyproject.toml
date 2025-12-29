@@ -1,0 +1,26 @@
+# WCMS Meta Project Configuration
+# 이 파일은 메타 프로젝트 설정입니다.
+# 실제 의존성은 다음 파일들에 정의되어 있습니다:
+# - server/pyproject.toml (서버 의존성)
+# - client/pyproject.toml (클라이언트 의존성)
+
+[project]
+name = "wcms"
+version = "0.7.0"
+description = "WCMS - 실습실 PC 원격 관리 및 모니터링 시스템"
+readme = "README.md"
+license = "MIT"
+authors = [
+    {name = "WCMS Contributors"}
+]
+requires-python = ">=3.9"
+
+# 메타 프로젝트는 의존성을 정의하지 않습니다
+# 각 컴포넌트의 의존성을 따로 관리합니다
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["server", "client"]

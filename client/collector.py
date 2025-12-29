@@ -1,77 +1,31 @@
+"""
+시스템 정보 수집 모듈
+정적 정보(CPU, RAM, 디스크)와 동적 정보(CPU/RAM 사용률, 프로세스)를 수집합니다.
+"""
 import psutil
 import platform
 import socket
 import json
+import os
+import logging
+from typing import Dict, List, Any, Optional
 
-# Windows 기본 시스템 프로세스 리스트
-WINDOWS_SYSTEM_PROCESSES = {
-    # 커널 및 코어 프로세스
-    'System Idle','System Idle Process','System', 'Registry', 'MemCompression', 'Memory Compression',
-    'smss.exe', 'csrss.exe', 'wininit.exe', 'services.exe', 'lsass.exe',
-    'lsaiso.exe', 'winlogon.exe', 'fontdrvhost.exe',
-    'IntelCpHDCPSvc.exe','IntelCpHeciSvc.exe','MpDefenderCoreService',
-    'Defrag.exe',
+from utils import load_json_file
 
-    # 서비스 호스트 및 관련 프로세스
-    'svchost.exe', 'dllhost.exe', 'taskhost.exe', 'taskhostex.exe',
-    'taskhostw.exe', 'RuntimeBroker.exe', 'sihost.exe',
+logger = logging.getLogger('wcms')
 
-    # 탐색기 및 GUI 관련
-    'explorer.exe', 'dwm.exe', 'ShellExperienceHost.exe',
-    'StartMenuExperienceHost.exe', 'SearchHost.exe', 'SearchUI.exe',
-    'SearchApp.exe', 'SearchIndexer.exe','OneApp.IGCC.WinService.exe',
 
-    # Windows 보안 및 업데이트
-    'SecurityHealthService.exe', 'SecurityHealthSystray.exe',
-    'MsMpEng.exe', 'NisSrv.exe', 'SgrmBroker.exe',
-    'smartscreen.exe', 'MpCmdRun.exe','CHXSmartScreen.exe',
+def _load_system_processes() -> set:
+    """시스템 프로세스 목록을 JSON 파일에서 로드"""
+    json_path = os.path.join(os.path.dirname(__file__), 'data', 'system_processes.json')
+    processes = load_json_file(json_path, default=[])
+    return set(processes) if isinstance(processes, list) else set()
 
-    # Windows 업데이트 및 설치
-    'WUDFHost.exe', 'TiWorker.exe', 'TrustedInstaller.exe',
-    'MoUsoCoreWorker.exe', 'UsoClient.exe', 'wuauclt.exe',
+# 시스템 프로세스 로드 (한 번만)
+WINDOWS_SYSTEM_PROCESSES = _load_system_processes()
 
-    # Windows 스토어 및 앱
-    'ApplicationFrameHost.exe', 'WinStore.App.exe',
-    'AppInstaller.exe', 'WindowsInternal.ComposableShell.Experiences.TextInput.InputApp.exe',
 
-    # 시스템 서비스
-    'spoolsv.exe', 'conhost.exe', 'backgroundTaskHost.exe',
-    'ctfmon.exe', 'TextInputHost.exe', 'TabTip.exe',
-    'LogonUI.exe', 'LockApp.exe', 'UserOOBEBroker.exe',
-    'FileCoAuth.exe',
-
-    # Windows 이벤트 및 로그
-    'wininit.exe', 'WmiPrvSE.exe', 'audiodg.exe',
-
-    # 기타 Windows 기본 프로세스
-    'SystemSettingsBroker.exe', 'SystemSettings.exe',
-    'PickerHost.exe', 'Widgets.exe', 'WidgetService.exe',
-    'PhoneExperienceHost.exe', 'YourPhone.exe',
-    'ProcessWindowsTerminal',
-    'OneDrive.Sync.Service.exe', 'OneDrive.exe',
-    'LocationNotificationWindows.exe', 'SearchProtocolHost.exe',
-    'PresentationFontCache.exe',
-
-    # Windows 알림 및 UX
-    'MoNotificationUx.exe',
-
-    # 크로스 디바이스 및 동기화
-    'CrossDeviceService.exe', 'AggregatorHost.exe',
-
-    # 작업 관리자
-    'Taskmgr.exe',
-
-    # Intel 그래픽 서비스
-    'igfxCUIService.exe', 'igfxEM.exe',
-
-    # VMware 서비스 (가상화 환경에서 흔함)
-    'vmnat.exe', 'vmnetdhcp.exe', 'vmware-authd.exe', 'vmware-usbarbitrator64.exe',
-
-    # Microsoft Edge 관련
-    'msedge.exe', 'msedgewebview2.exe',
-}
-
-def collect_static_info():
+def collect_static_info() -> Optional[Dict[str, Any]]:
     """정적 시스템 정보 수집 (한 번만 수집)"""
     try:
         # CPU 정보 - WMI로 정확한 모델명 가져오기
@@ -190,7 +144,7 @@ def collect_static_info():
         return None
 
 
-def collect_dynamic_info():
+def collect_dynamic_info() -> Optional[Dict[str, Any]]:
     """동적 시스템 정보 수집 (주기적으로 수집)"""
     try:
         # CPU 사용률
@@ -259,7 +213,7 @@ def collect_dynamic_info():
         return None
 
 
-def collect_running_processes():
+def collect_running_processes() -> List[Dict[str, Any]]:
     """실행 중인 프로세스 목록 수집"""
     try:
         processes = []
