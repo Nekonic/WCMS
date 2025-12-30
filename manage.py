@@ -40,14 +40,14 @@ def check_uv():
 
 def install_dependencies():
     """의존성 설치"""
-    print_step("의존성 동기화 중 (uv sync)...")
-    # 루트 pyproject.toml에는 의존성이 없으므로 server/pyproject.toml을 기준으로 설치해야 함
-    # 하지만 uv는 작업 디렉토리의 pyproject.toml을 우선하므로, 
-    # server 디렉토리의 의존성을 루트 가상환경에 설치하도록 유도해야 합니다.
-    
-    # 방법 1: server/pyproject.toml을 사용하여 동기화 (가상환경은 루트에 생성됨)
-    # --project 옵션을 사용하여 server 디렉토리의 설정을 사용
+    print_step("서버 의존성 동기화 중 (uv sync)...")
     subprocess.run(["uv", "sync", "--project", "server"], check=True)
+    
+    if platform.system() == "Windows":
+        print_step("클라이언트 의존성 동기화 중 (uv sync)...")
+        subprocess.run(["uv", "sync", "--project", "client"], check=True)
+    else:
+        print_step("클라이언트 의존성 설치 건너뛰기 (Windows 전용)")
 
 def run_server(host="0.0.0.0", port=5050, mode="development"):
     """서버 실행"""
@@ -55,8 +55,9 @@ def run_server(host="0.0.0.0", port=5050, mode="development"):
     
     env = os.environ.copy()
     env["FLASK_ENV"] = mode
+    # PYTHONPATH에 server 디렉토리 추가
+    env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
     
-    # uv run을 실행할 때도 --project server 옵션을 주어 server의 의존성을 사용하도록 함
     cmd = ["uv", "run", "--project", "server", "python", "server/app.py"]
     
     print(f"접속 주소: http://{host}:{port}")
@@ -65,11 +66,37 @@ def run_server(host="0.0.0.0", port=5050, mode="development"):
     except KeyboardInterrupt:
         print("\n서버가 종료되었습니다.")
 
-def run_tests():
+def run_tests(target="all"):
     """테스트 실행"""
-    print_step("테스트 실행...")
-    # 테스트 실행 시에도 server 프로젝트 컨텍스트 사용
-    subprocess.run(["uv", "run", "--project", "server", "pytest"], check=True)
+    
+    if target in ["all", "server"]:
+        print_step("서버 테스트 실행...")
+        env = os.environ.copy()
+        # PYTHONPATH에 server 디렉토리 추가
+        env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
+        
+        try:
+            subprocess.run(["uv", "run", "--project", "server", "pytest", "tests/server"], env=env, check=True)
+        except subprocess.CalledProcessError:
+            print("서버 테스트 실패")
+            if target == "server":
+                sys.exit(1)
+
+    if target in ["all", "client"]:
+        if platform.system() != "Windows":
+            print_step("클라이언트 테스트 건너뛰기 (Windows 전용)")
+            return
+            
+        print_step("클라이언트 테스트 실행...")
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.path.join(os.getcwd(), "client")
+        
+        try:
+            subprocess.run(["uv", "run", "--project", "client", "pytest", "tests/client"], env=env, check=True)
+        except subprocess.CalledProcessError:
+            print("클라이언트 테스트 실패")
+            if target == "client":
+                sys.exit(1)
 
 def main():
     if len(sys.argv) < 2:
@@ -78,20 +105,23 @@ def main():
         command = sys.argv[1]
 
     check_uv()
-    install_dependencies()
-
-    if command == "run":
+    
+    if command == "install":
+        install_dependencies()
+    elif command == "run":
         run_server()
     elif command == "test":
-        run_tests()
+        target = sys.argv[2] if len(sys.argv) > 2 else "all"
+        run_tests(target)
     elif command == "help":
         print("사용법: python manage.py [command]")
         print("Commands:")
-        print("  run   : 서버 실행 (기본값)")
-        print("  test  : 단위 테스트 실행")
+        print("  run           : 서버 실행 (기본값)")
+        print("  test [target] : 테스트 실행 (target: all, server, client)")
+        print("  install       : 의존성 설치")
     else:
         print(f"알 수 없는 명령: {command}")
-        print("사용 가능한 명령: run, test")
+        print("사용 가능한 명령: run, test, install")
 
 if __name__ == "__main__":
     main()

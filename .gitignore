@@ -27,7 +27,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+flask_session
 # Virtual environments (pip)
 venv/
 env/

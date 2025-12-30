@@ -27,6 +27,7 @@
 |------|------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 시스템 아키텍처 설계 |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | 프로젝트 개발 상태 |
+| [CHANGELOG.md](CHANGELOG.md) | 변경 이력 |
 
 ### 개발 가이드
 | 문서 | 설명 |

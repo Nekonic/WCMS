@@ -28,15 +28,16 @@ class TestClientAPI:
     def test_client_heartbeat(self, client):
         """클라이언트 하트비트 API"""
         # 먼저 PC 등록
-        client.post('/api/client/register', json={
+        reg_response = client.post('/api/client/register', json={
             'machine_id': 'TEST-HEARTBEAT-001',
             'hostname': 'test-hb',
             'mac_address': '11:22:33:44:55:66'
         })
+        pc_id = reg_response.get_json()['pc_id']
 
         # 하트비트 전송
         response = client.post('/api/client/heartbeat', json={
-            'pc_id': 1,
+            'pc_id': pc_id,
             'cpu_usage': 45.5,
             'ram_used': 8.5,
             'ram_usage_percent': 53.1,
@@ -49,30 +50,46 @@ class TestClientAPI:
 
     def test_client_command_get(self, client):
         """클라이언트 명령 조회 API"""
-        response = client.get('/api/client/command?pc_id=1')
+        # 먼저 PC 등록
+        reg_response = client.post('/api/client/register', json={
+            'machine_id': 'TEST-CMD-GET-001',
+            'hostname': 'test-cmd',
+            'mac_address': '99:88:77:66:55:44'
+        })
+        pc_id = reg_response.get_json()['pc_id']
 
-        # PC가 등록되지 않았으면 404
-        assert response.status_code in [200, 404]
+        response = client.get(f'/api/client/command?pc_id={pc_id}')
+        assert response.status_code == 200
 
 
 class TestAdminAPI:
     """관리자 API 테스트"""
 
+    @pytest.fixture(autouse=True)
+    def login_admin(self, client):
+        """관리자 로그인 세션 설정"""
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
+
     def test_admin_list_pcs(self, client):
         """PC 목록 조회 API (인증 필요)"""
         response = client.get('/api/pcs')
-
-        # 로그인 필요하면 302 또는 401
-        # 기본적으로는 접근 가능해야 함
-        assert response.status_code in [200, 302, 401]
+        assert response.status_code == 200
 
     def test_admin_command_send(self, client):
         """관리자 명령 전송 API"""
-        # 테스트 명령 전송
-        response = client.post('/api/pc/1/shutdown', json={})
+        # 먼저 PC 등록
+        reg_response = client.post('/api/client/register', json={
+            'machine_id': 'TEST-ADMIN-CMD-001',
+            'hostname': 'test-admin-cmd',
+            'mac_address': '12:34:56:78:90:AB'
+        })
+        pc_id = reg_response.get_json()['pc_id']
 
-        # PC가 없으면 404, 있으면 200
-        assert response.status_code in [200, 404]
+        # 테스트 명령 전송
+        response = client.post(f'/api/pc/{pc_id}/shutdown', json={})
+        assert response.status_code == 200
 
 
 class TestHealthCheck:
@@ -81,7 +98,5 @@ class TestHealthCheck:
     def test_root_endpoint(self, client):
         """루트 엔드포인트 접근"""
         response = client.get('/')
-
-        # 200 또는 302 (리다이렉트) 중 하나
+        # 200 (성공) 또는 302 (리다이렉트) 허용
         assert response.status_code in [200, 302]
-
