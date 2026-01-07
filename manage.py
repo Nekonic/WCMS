@@ -121,7 +121,7 @@ def init_db():
     print("    관리자 ID: admin")
     print("    비밀번호 : admin")
 
-def run_server(host="0.0.0.0", port=5050, mode="development"):
+def run_server(host="0.0.0.0", port=5050, mode="development", use_gunicorn=False):
     """서버 실행"""
     print_step(f"서버 시작 ({mode} 모드)...")
     
@@ -130,7 +130,23 @@ def run_server(host="0.0.0.0", port=5050, mode="development"):
     # PYTHONPATH에 server 디렉토리 추가
     env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
     
-    cmd = ["uv", "run", "--project", "server", "python", "server/app.py"]
+    if use_gunicorn:
+        print_step("Gunicorn으로 서버 실행 중...")
+        # Gunicorn 실행 명령
+        # -k gevent: 비동기 워커 사용 (SocketIO 지원)
+        # -w 1: 워커 수 (SocketIO 사용 시 1개 권장, 여러 개 사용 시 Redis 등 메시지 큐 필요)
+        # --worker-connections 1000: 동시 접속 수
+        # -b host:port: 바인딩 주소
+        cmd = [
+            "uv", "run", "--project", "server", "gunicorn",
+            "-k", "gevent",
+            "-w", "1", 
+            "--worker-connections", "1000",
+            "-b", f"{host}:{port}",
+            "server.app:app"
+        ]
+    else:
+        cmd = ["uv", "run", "--project", "server", "python", "server/app.py"]
     
     print(f"접속 주소: http://{host}:{port}")
     try:
@@ -233,16 +249,20 @@ def main():
     elif command == "init-db":
         init_db()
     elif command == "run":
-        run_server()
+        # 옵션 파싱 (간단하게)
+        use_gunicorn = "--prod" in sys.argv
+        mode = "production" if use_gunicorn else "development"
+        run_server(mode=mode, use_gunicorn=use_gunicorn)
     elif command == "test":
         target = sys.argv[2] if len(sys.argv) > 2 else "all"
         run_tests(target)
     elif command == "build":
         build_client()
     elif command == "help":
-        print("사용법: python manage.py [command]")
+        print("사용법: python manage.py [command] [options]")
         print("Commands:")
         print("  run           : 서버 실행 (기본값)")
+        print("    --prod      : Gunicorn으로 프로덕션 모드 실행")
         print("  test [target] : 테스트 실행 (target: all, server, client, archive)")
         print("  init-db       : 데이터베이스 초기화")
         print("  install       : 의존성 설치")
