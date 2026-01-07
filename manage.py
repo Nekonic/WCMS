@@ -184,6 +184,42 @@ def run_tests(target="all"):
             if target == "client":
                 sys.exit(1)
 
+def build_client():
+    """클라이언트 EXE 빌드"""
+    if platform.system() != "Windows":
+        print_step("오류: 클라이언트 빌드는 Windows 환경에서만 가능합니다.")
+        return
+
+    print_step("클라이언트 EXE 빌드 시작...")
+    
+    # PyInstaller 설치 확인
+    try:
+        subprocess.run(["uv", "run", "--project", "client", "pyinstaller", "--version"], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        print("PyInstaller가 설치되어 있지 않습니다. 설치를 시도합니다...")
+        subprocess.run(["uv", "add", "--project", "client", "pyinstaller"], check=True)
+
+    # 빌드 실행
+    try:
+        # client 디렉토리로 이동하여 빌드 수행 (경로 문제 방지)
+        cwd = os.getcwd()
+        os.chdir("client")
+        
+        cmd = ["uv", "run", "pyinstaller", "--clean", "--noconfirm", "build.spec"]
+        subprocess.run(cmd, check=True)
+        
+        os.chdir(cwd)
+        
+        dist_path = os.path.join("client", "dist", "WCMS-Client.exe")
+        if os.path.exists(dist_path):
+            print_step(f"빌드 성공! 파일 위치: {dist_path}")
+        else:
+            print_step("빌드 완료되었으나 결과 파일을 찾을 수 없습니다.")
+            
+    except subprocess.CalledProcessError as e:
+        print(f"빌드 실패: {e}")
+        os.chdir(cwd) # 에러 발생 시에도 원래 디렉토리로 복귀
+
 def main():
     if len(sys.argv) < 2:
         command = "run"
@@ -201,6 +237,8 @@ def main():
     elif command == "test":
         target = sys.argv[2] if len(sys.argv) > 2 else "all"
         run_tests(target)
+    elif command == "build":
+        build_client()
     elif command == "help":
         print("사용법: python manage.py [command]")
         print("Commands:")
@@ -208,9 +246,10 @@ def main():
         print("  test [target] : 테스트 실행 (target: all, server, client, archive)")
         print("  init-db       : 데이터베이스 초기화")
         print("  install       : 의존성 설치")
+        print("  build         : 클라이언트 EXE 빌드 (Windows 전용)")
     else:
         print(f"알 수 없는 명령: {command}")
-        print("사용 가능한 명령: run, test, init-db, install")
+        print("사용 가능한 명령: run, test, init-db, install, build")
 
 if __name__ == "__main__":
     main()

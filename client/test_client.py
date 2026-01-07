@@ -6,6 +6,11 @@ WCMS 클라이언트 기능 테스트
 
 import sys
 import json
+import os
+
+# 현재 디렉토리를 sys.path에 추가하여 모듈 임포트 가능하게 함
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from collector import collect_static_info, collect_dynamic_info, collect_running_processes
 from executor import CommandExecutor
 
@@ -271,4 +276,3 @@ if __name__ == "__main__":
     else:
         print(f"\n{Colors.YELLOW}일부 테스트가 실패했습니다. 로그를 확인하세요.{Colors.END}")
         sys.exit(1)
-
