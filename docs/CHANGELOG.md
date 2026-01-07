@@ -16,7 +16,7 @@
   - 서비스 레이어: `server/services/` (PC, Command)
   - 유틸리티: `server/utils/` (Database, Auth, Validators)
   - 설정 관리: `server/config.py` (환경별 설정 분리)
-  
+
 - **클라이언트 개선** (Phase 2 - 60%)
   - 설정 중앙화: `client/config.py` (환경변수 지원)
   - 유틸리티: `client/utils.py` (네트워크 재시도, 안전한 요청)
@@ -29,13 +29,24 @@
   - 시스템 아키텍처 문서 (`docs/ARCHITECTURE.md`)
   - 리팩토링 계획 및 진행 상황 문서
 
+- **테스트 인프라 구축**
+  - archive 버전 검증 테스트: `tests/archive/test_complete.py` (32개 테스트)
+  - 리팩터링 버전 검증 테스트: `tests/server/test_complete.py` (21개 테스트)
+  - 전체 45개 테스트 통과
+
 ### 변경
 - 서버 아키텍처: 단일 파일 (1,270줄) → 모듈화 (13개 파일, 2,680줄)
 - 설계 패턴 적용: Repository, Blueprint, Service 레이어
 - 타입 힌팅 추가 (모든 새 함수)
 - 문서 구조: 루트 3개 + docs/ 8개 (명확한 역할 분리)
+- 프로젝트 구조 정리: archive, tests, docs, db, scripts 디렉토리 분리
 
 ### 수정
+- **[중요] CommandModel 스키마 호환성 버그 수정**
+  - 문제: 리팩터링 코드가 archive DB 스키마에 없는 컬럼 사용 시도
+  - 해결: 런타임 스키마 감지 및 호환성 레이어 추가
+  - 영향: 모든 명령 전송 API (shutdown, reboot, account 관리 등)
+  - 결과: archive DB와 리팩터링 DB 모두 지원 (마이그레이션 불필요)
 - 네트워크 통신 안정성 개선 (자동 재시도)
 - 설정 관리 개선 (하드코딩 → 환경변수)
 
