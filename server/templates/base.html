@@ -218,7 +218,6 @@
                 <div class="divider" style="margin: 1em 0.8em;"></div>
                 {% if session.get('username') %}
                 <a href="{{ url_for('system_status') }}">🔍 시스템 상태</a>
-                <a href="{{ url_for('command_history') }}">🧪 명령 기록</a>
                 <a href="{{ url_for('manage_rooms') }}">🏫 실습실 관리</a>
                 <a href="{{ url_for('admin_manager') }}">👤 계정 관리</a>
                 {% endif %}

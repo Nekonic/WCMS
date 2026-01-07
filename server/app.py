@@ -210,15 +210,6 @@ def create_app(config_name='development'):
         """명령 실행 테스트 페이지"""
         return render_template('command_test.html', username=session.get('username'))
 
-    # 누락된 경로 추가: /commands (command_history)
-    @app.route('/commands')
-    @require_admin
-    def command_history():
-        """전체 명령 실행 기록 (임시)"""
-        # process_history.html은 pc 객체가 필요하므로 재사용 불가
-        # 임시로 준비 중 메시지 표시 또는 index로 리다이렉트
-        return render_template('error.html', error='명령 기록 페이지는 준비 중입니다.')
-
     # 컨텍스트 프로세서 (모든 템플릿에 실습실 목록 주입)
     @app.context_processor
     def inject_rooms():

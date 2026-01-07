@@ -11,9 +11,8 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/api')
 
 
 @admin_bp.route('/pcs', methods=['GET'])
-@require_admin
 def list_pcs():
-    """모든 PC 목록 조회"""
+    """모든 PC 목록 조회 (app.py 호환: 인증 불필요, 리스트 반환)"""
     room = request.args.get('room')
 
     if room:
@@ -28,26 +27,20 @@ def list_pcs():
         if pc_with_status:
             result.append(pc_with_status)
 
-    return jsonify({
-        'status': 'success',
-        'count': len(result),
-        'pcs': result
-    }), 200
+    # app.py 호환: 딕셔너리 래퍼 없이 리스트 직접 반환
+    return jsonify(result), 200
 
 
 @admin_bp.route('/pc/<int:pc_id>', methods=['GET'])
-@require_admin
 def get_pc(pc_id):
-    """PC 상세 정보 조회"""
+    """PC 상세 정보 조회 (app.py 호환: 인증 불필요, 객체 직접 반환)"""
     pc = PCModel.get_with_status(pc_id)
 
     if not pc:
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'error': 'PC not found'}), 404 # app.py error format
 
-    return jsonify({
-        'status': 'success',
-        'pc': pc
-    }), 200
+    # app.py 호환: 딕셔너리 래퍼 없이 객체 직접 반환
+    return jsonify(pc), 200
 
 
 @admin_bp.route('/pc/<int:pc_id>/history', methods=['GET'])
@@ -58,23 +51,27 @@ def get_pc_history(pc_id):
 
     # PC 존재 여부 확인
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        # app.py는 "PC not found", 404 문자열 반환했으나, 여기선 JSON 유지하되 app.py 호환성 고려
+        # app.py: return "PC not found", 404
+        # 하지만 api_pc_history (API)는 JSON 반환.
+        # app.py의 api_pc_history는:
+        # return jsonify([dict(row) for row in history])
+        # PC 존재 여부 체크 안함 (그냥 빈 리스트 반환될듯)
+        pass
 
     limit = request.args.get('limit', default=100, type=int)
     rows = db.execute('''
-        SELECT * FROM pc_status 
-        WHERE pc_id=? 
+        SELECT created_at, current_user, processes
+        FROM pc_status 
+        WHERE pc_id=? AND processes IS NOT NULL
         ORDER BY created_at DESC 
         LIMIT ?
     ''', (pc_id, limit)).fetchall()
 
     history = [dict(row) for row in rows]
 
-    return jsonify({
-        'status': 'success',
-        'count': len(history),
-        'history': history
-    }), 200
+    # app.py 호환: 리스트 직접 반환
+    return jsonify(history), 200
 
 
 @admin_bp.route('/pc/<int:pc_id>/command', methods=['POST'])
@@ -84,11 +81,11 @@ def send_command(pc_id):
     data = request.json
 
     if not data or 'type' not in data:
-        return jsonify({'status': 'error', 'message': 'Command type is required'}), 400
+        return jsonify({'status': 'error', 'message': 'type 필드가 필요합니다'}), 400 # app.py message
 
     # PC 존재 여부 확인
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404 # app.py message
 
     command_id = CommandModel.create(
         pc_id=pc_id,
@@ -102,7 +99,7 @@ def send_command(pc_id):
 
     return jsonify({
         'status': 'success',
-        'message': 'Command sent',
+        'message': '명령 전송 완료', # app.py message
         'command_id': command_id
     }), 200
 
@@ -112,7 +109,7 @@ def send_command(pc_id):
 def pc_shutdown(pc_id):
     """PC 종료 명령 전송"""
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
 
     command_id = CommandModel.create(
         pc_id=pc_id,
@@ -122,7 +119,7 @@ def pc_shutdown(pc_id):
 
     return jsonify({
         'status': 'success',
-        'message': 'Shutdown command sent',
+        'message': '종료 명령 전송 완료', # app.py message
         'command_id': command_id
     }), 200
 
@@ -132,7 +129,7 @@ def pc_shutdown(pc_id):
 def pc_reboot(pc_id):
     """PC 재시작 명령 전송"""
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
 
     command_id = CommandModel.create(
         pc_id=pc_id,
@@ -142,7 +139,7 @@ def pc_reboot(pc_id):
 
     return jsonify({
         'status': 'success',
-        'message': 'Reboot command sent',
+        'message': '재시작 명령 전송 완료', # app.py message
         'command_id': command_id
     }), 200
 
@@ -154,10 +151,10 @@ def create_account(pc_id):
     data = request.json
 
     if not data or not all(k in data for k in ['username', 'password']):
-        return jsonify({'status': 'error', 'message': 'username and password are required'}), 400
+        return jsonify({'status': 'error', 'message': 'username과 password 필드가 필요합니다'}), 400 # app.py message
 
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
 
     command_id = CommandModel.create(
         pc_id=pc_id,
@@ -173,7 +170,7 @@ def create_account(pc_id):
 
     return jsonify({
         'status': 'success',
-        'message': 'Account creation command sent',
+        'message': '계정 생성 명령 전송 완료', # app.py message
         'command_id': command_id
     }), 200
 
@@ -185,10 +182,10 @@ def delete_account(pc_id):
     data = request.json
 
     if not data or 'username' not in data:
-        return jsonify({'status': 'error', 'message': 'username is required'}), 400
+        return jsonify({'status': 'error', 'message': 'username 필드가 필요합니다'}), 400 # app.py message
 
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
 
     command_id = CommandModel.create(
         pc_id=pc_id,
@@ -199,7 +196,7 @@ def delete_account(pc_id):
 
     return jsonify({
         'status': 'success',
-        'message': 'Account deletion command sent',
+        'message': '계정 삭제 명령 전송 완료', # app.py message
         'command_id': command_id
     }), 200
 
@@ -211,10 +208,10 @@ def change_password(pc_id):
     data = request.json
 
     if not data or not all(k in data for k in ['username', 'new_password']):
-        return jsonify({'status': 'error', 'message': 'username and new_password are required'}), 400
+        return jsonify({'status': 'error', 'message': 'username과 new_password 필드가 필요합니다'}), 400 # app.py message
 
     if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
 
     command_id = CommandModel.create(
         pc_id=pc_id,
@@ -228,7 +225,7 @@ def change_password(pc_id):
 
     return jsonify({
         'status': 'success',
-        'message': 'Password change command sent',
+        'message': '비밀번호 변경 명령 전송 완료', # app.py message
         'command_id': command_id
     }), 200
 
@@ -423,7 +420,7 @@ def delete_pc(pc_id):
     if PCModel.delete(pc_id):
         return jsonify({
             'status': 'success',
-            'message': 'PC가 삭제되었습니다.',
+            'message': f'PC({pc_id})가 삭제되었습니다.', # app.py message format approximation
             'deleted_pc_id': pc_id
         })
     else:

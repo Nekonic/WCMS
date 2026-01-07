@@ -49,6 +49,78 @@ def install_dependencies():
     else:
         print_step("클라이언트 의존성 설치 건너뛰기 (Windows 전용)")
 
+def init_db():
+    """데이터베이스 초기화"""
+    print_step("데이터베이스 초기화 중...")
+    
+    db_path = os.path.join("server", "db.sqlite3")
+    schema_path = os.path.join("server", "migrations", "schema.sql")
+    
+    if os.path.exists(db_path):
+        response = input(f"기존 데이터베이스({db_path})를 삭제하고 재설정하시겠습니까? (y/n): ")
+        if response.lower() == 'y':
+            os.remove(db_path)
+            print(f"기존 {db_path} 삭제됨.")
+        else:
+            print("초기화 취소.")
+            return
+
+    # 스키마 적용
+    if not os.path.exists(schema_path):
+        print(f"오류: 스키마 파일({schema_path})을 찾을 수 없습니다.")
+        return
+
+    import sqlite3
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        with open(schema_path, 'r') as f:
+            schema = f.read()
+        conn.executescript(schema)
+        conn.close()
+        print(f"[✓] {schema_path} 적용 완료.")
+    except Exception as e:
+        print(f"오류: DB 생성 실패 - {e}")
+        return
+
+    # 관리자 생성
+    print_step("관리자 계정 생성 중 (기본값: admin / admin)...")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
+    
+    try:
+        # uv run을 통해 create_admin.py 실행 (의존성 문제 해결)
+        subprocess.run(["uv", "run", "--project", "server", "python", "server/create_admin.py"], env=env, check=True)
+    except subprocess.CalledProcessError:
+        print("[!] 관리자 계정 생성 스크립트 실행 실패.")
+        print("    'python manage.py install'을 실행하여 의존성을 먼저 설치해주세요.")
+        return
+
+    # 관리자 생성 확인
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT count(*) FROM admins")
+        count = cursor.fetchone()[0]
+        conn.close()
+        if count > 0:
+            print(f"[✓] 관리자 계정 생성 확인됨 (총 {count}명).")
+        else:
+            print("[!] 경고: 관리자 계정이 DB에 생성되지 않았습니다.")
+    except Exception as e:
+        print(f"[!] 관리자 계정 확인 중 오류: {e}")
+
+    # 좌석 생성
+    print_step("좌석 배치 생성 중...")
+    try:
+        subprocess.run(["uv", "run", "--project", "server", "python", "server/create_seats.py"], env=env, check=True)
+    except subprocess.CalledProcessError:
+        print("[!] 좌석 배치 생성 실패.")
+
+    print("\n 초기화 완료.")
+    print("    관리자 ID: admin")
+    print("    비밀번호 : admin")
+
 def run_server(host="0.0.0.0", port=5050, mode="development"):
     """서버 실행"""
     print_step(f"서버 시작 ({mode} 모드)...")
@@ -69,6 +141,20 @@ def run_server(host="0.0.0.0", port=5050, mode="development"):
 def run_tests(target="all"):
     """테스트 실행"""
     
+    if target == "archive":
+        print_step("아카이브 서버 테스트 실행 (app.py 검증)...")
+        env = os.environ.copy()
+        # PYTHONPATH에 archive/code 디렉토리 추가
+        env["PYTHONPATH"] = os.path.join(os.getcwd(), "archive", "code")
+        
+        try:
+            # archive/code/test_server.py 실행
+            subprocess.run(["uv", "run", "--project", "server", "python", "archive/code/test_server.py"], env=env, check=True)
+        except subprocess.CalledProcessError:
+            print("아카이브 서버 테스트 실패")
+            sys.exit(1)
+        return
+
     if target in ["all", "server"]:
         print_step("서버 테스트 실행...")
         env = os.environ.copy()
@@ -108,6 +194,8 @@ def main():
     
     if command == "install":
         install_dependencies()
+    elif command == "init-db":
+        init_db()
     elif command == "run":
         run_server()
     elif command == "test":
@@ -117,11 +205,12 @@ def main():
         print("사용법: python manage.py [command]")
         print("Commands:")
         print("  run           : 서버 실행 (기본값)")
-        print("  test [target] : 테스트 실행 (target: all, server, client)")
+        print("  test [target] : 테스트 실행 (target: all, server, client, archive)")
+        print("  init-db       : 데이터베이스 초기화")
         print("  install       : 의존성 설치")
     else:
         print(f"알 수 없는 명령: {command}")
-        print("사용 가능한 명령: run, test, install")
+        print("사용 가능한 명령: run, test, init-db, install")
 
 if __name__ == "__main__":
     main()
