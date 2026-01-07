@@ -53,6 +53,28 @@ if sys.platform == 'win32':
             self.hStopEvent = win32event.CreateEvent(None, 0, 0, None)
             self.stop_event = threading.Event()
 
+        def GetAcceptedControls(self):
+            # PreShutdown 이벤트 수락 선언
+            rc = win32serviceutil.ServiceFramework.GetAcceptedControls(self)
+            rc |= win32service.SERVICE_ACCEPT_PRESHUTDOWN
+            return rc
+
+        def SvcOtherEx(self, control, event_type, data):
+            # PreShutdown 이벤트 핸들링
+            if control == win32service.SERVICE_CONTROL_PRESHUTDOWN:
+                import logging
+                logger = logging.getLogger('service_runtime')
+                logger.info("PreShutdown 이벤트 감지! 서버에 종료 신호를 보냅니다.")
+                
+                try:
+                    from main import send_shutdown_signal
+                    send_shutdown_signal()
+                except Exception as e:
+                    logger.error(f"종료 신호 전송 중 오류: {e}")
+                
+                self.SvcStop() # 서비스 종료 절차 시작
+            return win32service.NO_ERROR
+
         def SvcStop(self):
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
             try:

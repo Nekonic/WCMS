@@ -58,6 +58,9 @@ LOG_BACKUP_COUNT = int(os.getenv('WCMS_LOG_BACKUP_COUNT', '5'))
 # HTTP 요청 타임아웃 (초)
 REQUEST_TIMEOUT = int(os.getenv('WCMS_REQUEST_TIMEOUT', '30'))
 
+# 종료 신호 전송 타임아웃 (초) - 짧게 설정
+SHUTDOWN_TIMEOUT = int(os.getenv('WCMS_SHUTDOWN_TIMEOUT', '2'))
+
 # 네트워크 에러 시 재시도 횟수
 MAX_RETRIES = int(os.getenv('WCMS_MAX_RETRIES', '3'))
 
@@ -128,4 +131,3 @@ def print_config():
 if __name__ == '__main__':
     validate_config()
     print_config()
-

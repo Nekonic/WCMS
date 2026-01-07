@@ -54,6 +54,28 @@ class PCService:
             return 0
 
     @staticmethod
+    def set_offline_immediately(machine_id: str) -> bool:
+        """
+        특정 PC를 즉시 오프라인으로 전환 (종료 시 호출)
+        """
+        try:
+            db = get_db()
+            cursor = db.execute("""
+                UPDATE pc_info 
+                SET is_online=0, last_seen=CURRENT_TIMESTAMP
+                WHERE machine_id=?
+            """, (machine_id,))
+            
+            if cursor.rowcount > 0:
+                db.commit()
+                logger.info(f"[+] PC 종료 감지: {machine_id} -> Offline")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"[!] PC 종료 처리 실패 ({machine_id}): {e}")
+            return False
+
+    @staticmethod
     def start_background_checker(app, interval: int = 30):
         """백그라운드 오프라인 체크 스레드 시작"""
         def checker():

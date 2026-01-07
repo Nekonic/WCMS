@@ -11,7 +11,7 @@ from typing import Optional
 from config import (
     SERVER_URL, MACHINE_ID, HEARTBEAT_INTERVAL, COMMAND_POLL_INTERVAL,
     LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_MAX_BYTES, LOG_BACKUP_COUNT,
-    REQUEST_TIMEOUT, __version__, POWER_COMMAND_GRACE_PERIOD, validate_config
+    REQUEST_TIMEOUT, SHUTDOWN_TIMEOUT, __version__, POWER_COMMAND_GRACE_PERIOD, validate_config
 )
 from collector import collect_static_info, collect_dynamic_info
 from executor import CommandExecutor
@@ -126,6 +126,25 @@ def send_heartbeat():
     except Exception as e:
         logger.error(f"Heartbeat 오류: {e}")
         raise
+
+
+def send_shutdown_signal():
+    """윈도우 종료 시 서버에 오프라인 신호 전송 (단발성)"""
+    data = {"machine_id": MACHINE_ID}
+    try:
+        logger.info("서버에 종료 신호 전송 시도...")
+        # 재시도 없이 짧은 타임아웃으로 전송
+        r = requests.post(
+            f"{SERVER_URL}api/client/shutdown",
+            json=data,
+            timeout=SHUTDOWN_TIMEOUT
+        )
+        if r.status_code == 200:
+            logger.info("종료 신호 전송 성공")
+        else:
+            logger.warning(f"종료 신호 전송 실패: {r.status_code}")
+    except Exception as e:
+        logger.error(f"종료 신호 전송 오류: {e}")
 
 
 def is_power_command(cmd_type: str, cmd_params: dict) -> bool:

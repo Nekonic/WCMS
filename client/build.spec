@@ -1,9 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+
+# 데이터 파일 경로 설정
+data_files = []
+if os.path.exists('data/system_processes.json'):
+    data_files.append(('data/system_processes.json', 'data'))
+
 a = Analysis(
-    ['service.py', 'main.py', 'collector.py', 'executor.py'],  # 모든 소스 파일 명시
+    ['service.py', 'main.py', 'collector.py', 'executor.py', 'config.py', 'utils.py'],  # 모든 소스 파일 명시
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=data_files,
     hiddenimports=[
         'psutil',
         'psutil._pswindows',
@@ -69,5 +76,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None
+    icon=None,
+    uac_admin=True  # 관리자 권한 요구
 )

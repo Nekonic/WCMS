@@ -7,6 +7,7 @@ import json
 import time
 import os
 from models import PCModel, CommandModel
+from services.pc_service import PCService
 from utils import get_db
 
 client_bp = Blueprint('client', __name__, url_prefix='/api/client')
@@ -87,6 +88,23 @@ def heartbeat():
         return jsonify({'status': 'success', 'message': 'Heartbeat received'}), 200
     else:
         return jsonify({'status': 'error', 'message': 'Failed to record heartbeat'}), 500
+
+
+@client_bp.route('/shutdown', methods=['POST'])
+def shutdown_signal():
+    """클라이언트 종료 신호 수신 (즉시 오프라인 처리)"""
+    data = request.json
+    if not data or 'machine_id' not in data:
+        return jsonify({'status': 'error', 'message': 'machine_id is required'}), 400
+
+    machine_id = data['machine_id']
+    
+    if PCService.set_offline_immediately(machine_id):
+        return jsonify({'status': 'success', 'message': 'Shutdown signal received'}), 200
+    else:
+        # PC를 찾지 못했거나 업데이트 실패해도 클라이언트 종료를 막으면 안 되므로 200 반환 가능성 고려
+        # 하지만 명확한 에러 전달을 위해 404/500 사용. 클라이언트는 어차피 종료됨.
+        return jsonify({'status': 'error', 'message': 'Failed to process shutdown signal'}), 500
 
 
 @client_bp.route('/command', methods=['GET'])

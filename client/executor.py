@@ -49,7 +49,7 @@ class CommandExecutor:
     def shutdown() -> str:
         """PC 종료"""
         try:
-            subprocess.run("shutdown /s /t 30", shell=True)
+            subprocess.run("shutdown /s /t 3", shell=True)
             return "종료 명령 실행됨"
         except Exception as e:
             return f"종료 실패: {str(e)}"
@@ -58,7 +58,7 @@ class CommandExecutor:
     def reboot() -> str:
         """PC 재시작"""
         try:
-            subprocess.run("shutdown /r /t 30", shell=True)
+            subprocess.run("shutdown /r /t 3", shell=True)
             return "재시작 명령 실행됨"
         except Exception as e:
             return f"재시작 실패: {str(e)}"
@@ -144,47 +144,6 @@ class CommandExecutor:
             return f"다운로드 완료: {save_path} ({actual_size:,} bytes)"
         except Exception as e:
             return f"다운로드 실패: {str(e)}"
-
-    @staticmethod
-    def create_user(username: str, password: str, full_name: str = None, comment: str = None) -> str:
-                        f'wmic useraccount where name="{username}" set fullname="{full_name}"',
-                        shell=True, capture_output=True, timeout=30
-                    )
-
-                # 설명 설정 (옵션)
-                if comment:
-                    subprocess.run(
-                        f'net user "{username}" /comment:"{comment}"',
-                        shell=True, capture_output=True, timeout=30
-                    )
-
-                return f"계정 생성 완료: {username}"
-
-            elif action == 'delete':
-                # 계정 삭제
-                cmd = f'net user "{username}" /delete'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-
-                if result.returncode != 0:
-                    return f"계정 삭제 실패: {result.stderr}"
-
-                return f"계정 삭제 완료: {username}"
-
-            elif action == 'change_password':
-                # 비밀번호 변경
-                cmd = f'net user "{username}" "{password}"'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-
-                if result.returncode != 0:
-                    return f"비밀번호 변경 실패: {result.stderr}"
-
-                return f"비밀번호 변경 완료: {username}"
-
-            else:
-                return f"알 수 없는 계정 관리 작업: {action}"
-
-        except Exception as e:
-            return f"계정 관리 실패: {str(e)}"
 
     @staticmethod
     def create_user(username, password, full_name=None, comment=None):
