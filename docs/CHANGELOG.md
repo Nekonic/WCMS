@@ -10,6 +10,18 @@
 ## [Unreleased] - 0.7.0
 
 ### 추가
+- **PreShutdown 종료 감지 기능 완료** [x]
+  - 클라이언트: PreShutdown 이벤트 핸들링 (`client/service.py`)
+  - 클라이언트: 종료 신호 전송 함수 (`client/main.py`)
+  - 서버: `/api/client/shutdown` 엔드포인트 (`server/api/client.py`)
+  - 서버: `set_offline_immediately()` 서비스 (`server/services/pc_service.py`)
+  - 상세: `plan.md` 참고
+
+- **AI 컨텍스트 파일 생성** [x]
+  - `AI_CONTEXT.md`: AI/신규 개발자를 위한 빠른 온보딩 가이드
+  - 프로젝트 핵심 개념, 파일 맵, 작업 패턴, 의사결정 기록(ADR) 포함
+  - 새 세션에서 빠른 적응 가능
+
 - **서버 모듈화 완료** (Phase 1 - 100%)
   - 모델 레이어: `server/models/` (PC, Command, Admin)
   - API 레이어: `server/api/` (Client, Admin - Flask Blueprint)
@@ -23,11 +35,11 @@
   - 시스템 프로세스 JSON 외부화
   - `main.py` 리팩토링 (진행 중)
 
-- **문서 체계화**
-  - `docs/` 폴더로 개발자 문서 집중
-  - API 문서 추가 (`docs/API.md`)
-  - 시스템 아키텍처 문서 (`docs/ARCHITECTURE.md`)
-  - 리팩토링 계획 및 진행 상황 문서
+- **문서 체계화 및 정리** (2026-01-30)
+  - 존재하지 않는 문서 참조 제거
+  - 이모티콘 체크박스를 마크다운 표준으로 변경 ([x], [ ])
+  - AI 규칙: `.github/copilot-instructions.md` 단일화
+  - 중복 문서 제거 및 구조 간소화
 
 - **테스트 인프라 구축**
   - archive 버전 검증 테스트: `tests/archive/test_complete.py` (32개 테스트)
@@ -38,8 +50,9 @@
 - 서버 아키텍처: 단일 파일 (1,270줄) → 모듈화 (13개 파일, 2,680줄)
 - 설계 패턴 적용: Repository, Blueprint, Service 레이어
 - 타입 힌팅 추가 (모든 새 함수)
-- 문서 구조: 루트 3개 + docs/ 8개 (명확한 역할 분리)
+- 문서 구조: 명확한 역할 분리 및 중복 제거
 - 프로젝트 구조 정리: archive, tests, docs, db, scripts 디렉토리 분리
+- `plan.md`: 계획 문서 → 구현 완료 문서로 전환
 
 ### 수정
 - **[중요] CommandModel 스키마 호환성 버그 수정**

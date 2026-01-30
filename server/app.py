@@ -240,15 +240,13 @@ def create_app(config_name='development'):
     logger.info(f"앱 생성: {config_name} 모드")
     return app
 
+# Gunicorn 진입점 (전역 app 객체 생성)
+import os
+mode = os.getenv('FLASK_ENV', 'development')
+app = create_app(mode)
 
 if __name__ == '__main__':
-    import os
-
-    # 환경 변수에서 모드 읽기
-    mode = os.getenv('FLASK_ENV', 'development')
     debug = mode == 'development'
-
-    app = create_app(mode)
 
     logger.info(f"WCMS 서버 시작 (모드: {mode})")
     logger.info("http://0.0.0.0:5050 에서 접속 가능합니다.")

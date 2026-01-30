@@ -79,7 +79,7 @@ python manage.py test
 
 - [시스템 아키텍처 (ARCHITECTURE.md)](ARCHITECTURE.md): 시스템 구조 및 설계
 - [API 명세서 (API.md)](API.md): API 엔드포인트 상세 설명
-- [프로젝트 상태 (PROJECT_STATUS.md)](PROJECT_STATUS.md): 현재 개발 진행 상황
+- [변경 이력 (CHANGELOG.md)](CHANGELOG.md): 버전별 변경사항
 
 ---
 
