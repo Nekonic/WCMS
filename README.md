@@ -4,24 +4,68 @@ WCMS는 실습실 PC를 원격으로 관리하고 모니터링하기 위한 시�
 
 ## 📊 프로젝트 상태
 
-- **버전**: 0.7.0 (개발 중)
-- **최근 업데이트**: 2026-01-30
+- **버전**: 0.7.0
+- **최근 업데이트**: 2026-02-07
 - **주요 기능**: 
   - [x] PreShutdown 종료 감지
   - [x] Long-polling 명령 전송
-  - [x] 자동 업데이트
+  - [x] 한 줄 설치 스크립트
+  - [x] Docker 통합 테스트
 
 ## 🚀 빠른 시작
+
+### 서버 설치
 
 통합 관리 스크립트를 사용하여 간편하게 시작할 수 있습니다.
 
 ```bash
-# 서버 실행
+# 1. 의존성 설치
+python manage.py install
+
+# 2. 데이터베이스 초기화
+python manage.py init-db
+
+# 3. 서버 실행
 python manage.py run
 ```
 
 - **서버 주소**: http://localhost:5050
-- **기본 계정**: `admin` / `admin123`
+- **기본 계정**: `admin` / `admin`
+
+### 클라이언트 설치 (NEW!)
+
+한 줄 명령으로 클라이언트를 자동 설치할 수 있습니다:
+
+**Windows Batch (CMD):**
+```cmd
+curl -fsSL http://your-server:5050/install/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+**PowerShell:**
+```powershell
+iwr -Uri "http://your-server:5050/install/install.ps1" -OutFile install.ps1; .\install.ps1; del install.ps1
+```
+
+- 관리자 권한 필요
+- GitHub Releases에서 최신 버전 자동 다운로드
+- Windows 서비스로 자동 등록 및 시작
+
+### Docker 통합 테스트 (NEW!)
+
+실제 Windows 환경에서 클라이언트를 테스트하세요:
+
+```bash
+# Docker Compose 기반 통합 테스트
+python manage.py docker-test
+```
+
+- **Windows 11 컨테이너** (dockurr/windows)
+- **VNC 접속**: http://localhost:8006
+- **자동화된 E2E 테스트**
+
+자세한 내용은 [Docker 테스트 가이드](tests/DOCKER_TEST_GUIDE.md)를 참고하세요.
+
+---
 
 자세한 내용은 [시작 가이드](docs/GETTING_STARTED.md)를 참고하세요.
 
@@ -32,6 +76,7 @@ python manage.py run
 ### 빠른 온보딩
 - **[AI 컨텍스트 (AI_CONTEXT.md)](AI_CONTEXT.md)**: 🤖 AI/신규 개발자를 위한 빠른 이해 가이드
 - **[시작 가이드 (docs/GETTING_STARTED.md)](docs/GETTING_STARTED.md)**: 설치 및 실행 방법
+- **[Docker 테스트 가이드 (tests/DOCKER_TEST_GUIDE.md)](tests/DOCKER_TEST_GUIDE.md)**: 🐳 Docker 통합 테스트 사용법
 
 ### 상세 문서
 - **[아키텍처 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)**: 시스템 구조 및 설계
@@ -54,7 +99,11 @@ python manage.py run
 ## 🧪 테스트
 
 ```bash
+# 단위 테스트
 python manage.py test
+
+# Docker 통합 테스트 (Windows 환경 E2E)
+python manage.py docker-test
 ```
 
 ## 📝 라이선스

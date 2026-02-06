@@ -3,12 +3,55 @@ WCMS 클라이언트 설정 관리
 환경변수 기반 설정 중앙화
 """
 import os
+import json
 import psutil
 
 
 # ==================== 서버 연결 설정 ====================
 
-SERVER_URL = os.getenv('WCMS_SERVER_URL', 'http://aps.or.kr:8057/')
+def load_server_url() -> str:
+    """
+    서버 URL 로드 (우선순위 순서)
+
+    1순위: config.json 파일 (C:\\ProgramData\\WCMS\\config.json)
+    2순위: 환경변수 WCMS_SERVER_URL
+    3순위: 기본값 (http://localhost:5050 - 테스트/개발용)
+
+    Returns:
+        서버 URL 문자열
+    """
+    # 1순위: config.json 파일
+    config_paths = [
+        os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), 'WCMS', 'config.json'),
+        os.path.join(os.path.dirname(__file__), 'config.json'),  # 실행 파일과 같은 디렉토리
+    ]
+
+    for config_path in config_paths:
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                    if 'SERVER_URL' in config_data:
+                        url = config_data['SERVER_URL'].rstrip('/')
+                        print(f"[Config] 서버 URL 로드 (config.json): {url}")
+                        return url + '/'
+            except Exception as e:
+                print(f"[Config] config.json 읽기 실패 ({config_path}): {e}")
+
+    # 2순위: 환경변수
+    env_url = os.getenv('WCMS_SERVER_URL')
+    if env_url:
+        url = env_url.rstrip('/')
+        print(f"[Config] 서버 URL 로드 (환경변수): {url}")
+        return url + '/'
+
+    # 3순위: 기본값 (테스트/개발용)
+    default_url = 'http://localhost:5050/'
+    print(f"[Config] 서버 URL 로드 (기본값): {default_url}")
+    return default_url
+
+
+SERVER_URL = load_server_url()
 
 # Machine ID 생성 (MAC 주소 기반)
 MACHINE_ID = next(
@@ -22,13 +65,13 @@ MACHINE_ID = next(
 # ==================== 주기 설정 ====================
 
 # 하트비트 전송 주기 (초)
-HEARTBEAT_INTERVAL = int(os.getenv('WCMS_HEARTBEAT_INTERVAL', '300'))  # 5분
+HEARTBEAT_INTERVAL = int(os.getenv('WCMS_HEARTBEAT_INTERVAL', '600'))  # 10분
 
 # 명령 폴링 주기 (초)
 COMMAND_POLL_INTERVAL = int(os.getenv('WCMS_COMMAND_POLL_INTERVAL', '10'))  # 10초
 
 # 전원 명령 유예 시간 (초) - 부팅 직후 전원 명령 방지
-POWER_COMMAND_GRACE_PERIOD = int(os.getenv('WCMS_POWER_GRACE_PERIOD', '60'))  # 60초
+POWER_COMMAND_GRACE_PERIOD = int(os.getenv('WCMS_POWER_GRACE_PERIOD', '10'))  # 10초
 
 
 # ==================== 로깅 설정 ====================

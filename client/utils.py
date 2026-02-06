@@ -35,6 +35,7 @@ def retry_on_network_error(max_retries: int = 3, delay: int = 5, exponential_bac
                 try:
                     return func(*args, **kwargs)
                 except (
+                    ConnectionError,  # 일반 ConnectionError 포함
                     requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout,
                     requests.exceptions.RequestException

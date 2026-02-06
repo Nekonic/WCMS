@@ -49,21 +49,36 @@ def install_dependencies():
     else:
         print_step("클라이언트 의존성 설치 건너뛰기 (Windows 전용)")
 
-def init_db():
-    """데이터베이스 초기화"""
+def init_db(force=False):
+    """데이터베이스 초기화
+
+    Args:
+        force: True면 기존 DB를 묻지 않고 삭제
+    """
     print_step("데이터베이스 초기화 중...")
     
-    db_path = os.path.join("server", "db.sqlite3")
+    # 환경변수 또는 기본 경로 사용
+    db_path = os.getenv('WCMS_DB_PATH', os.path.join("server", "db.sqlite3"))
     schema_path = os.path.join("server", "migrations", "schema.sql")
     
+    # DB 디렉토리 생성
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+        print(f"DB 디렉토리 생성: {db_dir}")
+
     if os.path.exists(db_path):
-        response = input(f"기존 데이터베이스({db_path})를 삭제하고 재설정하시겠습니까? (y/n): ")
-        if response.lower() == 'y':
+        if force:
             os.remove(db_path)
             print(f"기존 {db_path} 삭제됨.")
         else:
-            print("초기화 취소.")
-            return
+            response = input(f"기존 데이터베이스({db_path})를 삭제하고 재설정하시겠습니까? (y/n): ")
+            if response.lower() == 'y':
+                os.remove(db_path)
+                print(f"기존 {db_path} 삭제됨.")
+            else:
+                print("초기화 취소.")
+                return
 
     # 스키마 적용
     if not os.path.exists(schema_path):
@@ -74,7 +89,7 @@ def init_db():
     
     try:
         conn = sqlite3.connect(db_path)
-        with open(schema_path, 'r') as f:
+        with open(schema_path, 'r', encoding='utf-8') as f:
             schema = f.read()
         conn.executescript(schema)
         conn.close()
@@ -155,17 +170,24 @@ def run_server(host="0.0.0.0", port=5050, mode="development", use_gunicorn=False
         print("\n서버가 종료되었습니다.")
 
 def run_tests(target="all"):
-    """테스트 실행"""
-    
+    """테스트 실행 (루트 .venv 사용)"""
+
+    # 루트 venv의 Python 경로
+    venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe") if platform.system() == "Windows" else os.path.join(os.getcwd(), ".venv", "bin", "python")
+
+    if not os.path.exists(venv_python):
+        print_step("오류: 루트 가상 환경을 찾을 수 없습니다.")
+        print("다음 명령으로 가상 환경을 생성해주세요:")
+        print("  uv sync --extra dev")
+        sys.exit(1)
+
     if target == "archive":
         print_step("아카이브 서버 테스트 실행 (app.py 검증)...")
         env = os.environ.copy()
-        # PYTHONPATH에 archive/code 디렉토리 추가
         env["PYTHONPATH"] = os.path.join(os.getcwd(), "archive", "code")
-        
+
         try:
-            # archive/code/test_server.py 실행
-            subprocess.run(["uv", "run", "--project", "server", "python", "archive/code/test_server.py"], env=env, check=True)
+            subprocess.run([venv_python, "archive/code/test_server.py"], env=env, check=True)
         except subprocess.CalledProcessError:
             print("아카이브 서버 테스트 실패")
             sys.exit(1)
@@ -173,12 +195,9 @@ def run_tests(target="all"):
 
     if target in ["all", "server"]:
         print_step("서버 테스트 실행...")
-        env = os.environ.copy()
-        # PYTHONPATH에 server 디렉토리 추가
-        env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
-        
+
         try:
-            subprocess.run(["uv", "run", "--project", "server", "pytest", "tests/server"], env=env, check=True)
+            subprocess.run([venv_python, "-m", "pytest", "tests/server", "-v", "--tb=short"], check=True)
         except subprocess.CalledProcessError:
             print("서버 테스트 실패")
             if target == "server":
@@ -188,17 +207,42 @@ def run_tests(target="all"):
         if platform.system() != "Windows":
             print_step("클라이언트 테스트 건너뛰기 (Windows 전용)")
             return
-            
+
         print_step("클라이언트 테스트 실행...")
-        env = os.environ.copy()
-        env["PYTHONPATH"] = os.path.join(os.getcwd(), "client")
-        
+
         try:
-            subprocess.run(["uv", "run", "--project", "client", "pytest", "tests/client"], env=env, check=True)
+            subprocess.run([venv_python, "-m", "pytest", "tests/client", "-v", "--tb=short"], check=True)
         except subprocess.CalledProcessError:
             print("클라이언트 테스트 실패")
             if target == "client":
                 sys.exit(1)
+
+def run_docker_test(skip_setup: bool = False):
+    """Docker Compose 기반 통합 테스트 실행"""
+    venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe") if platform.system() == "Windows" else os.path.join(os.getcwd(), ".venv", "bin", "python")
+
+    print_step("Docker Compose 통합 테스트 실행")
+
+    # 새 테스트 스크립트 실행 (Docker Compose 기반)
+    cmd = [venv_python, "tests/docker_test.py"]
+
+    # 추가 옵션 전달
+    if "--rebuild" in sys.argv:
+        cmd.append("--rebuild")
+    if "--no-cache" in sys.argv:
+        cmd.append("--no-cache")
+    if "--cleanup" in sys.argv:
+        cmd.append("--cleanup")
+    if "--skip-boot" in sys.argv:
+        cmd.append("--skip-boot")
+
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        print("Docker 통합 테스트 실패")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n테스트 중단됨")
 
 def build_client():
     """클라이언트 EXE 빌드"""
@@ -216,9 +260,9 @@ def build_client():
         subprocess.run(["uv", "add", "--project", "client", "pyinstaller"], check=True)
 
     # 빌드 실행
+    cwd = os.getcwd()
     try:
         # client 디렉토리로 이동하여 빌드 수행 (경로 문제 방지)
-        cwd = os.getcwd()
         os.chdir("client")
         
         cmd = ["uv", "run", "pyinstaller", "--clean", "--noconfirm", "build.spec"]
@@ -234,7 +278,10 @@ def build_client():
             
     except subprocess.CalledProcessError as e:
         print(f"빌드 실패: {e}")
-        os.chdir(cwd) # 에러 발생 시에도 원래 디렉토리로 복귀
+        os.chdir(cwd)
+    except Exception as e:
+        print(f"예상치 못한 오류: {e}")
+        os.chdir(cwd)
 
 def main():
     if len(sys.argv) < 2:
@@ -247,7 +294,8 @@ def main():
     if command == "install":
         install_dependencies()
     elif command == "init-db":
-        init_db()
+        force = "--force" in sys.argv
+        init_db(force=force)
     elif command == "run":
         # 옵션 파싱 (간단하게)
         use_gunicorn = "--prod" in sys.argv
@@ -256,20 +304,27 @@ def main():
     elif command == "test":
         target = sys.argv[2] if len(sys.argv) > 2 else "all"
         run_tests(target)
+    elif command == "docker-test":
+        run_docker_test()
     elif command == "build":
         build_client()
     elif command == "help":
         print("사용법: python manage.py [command] [options]")
         print("Commands:")
-        print("  run           : 서버 실행 (기본값)")
-        print("    --prod      : Gunicorn으로 프로덕션 모드 실행")
-        print("  test [target] : 테스트 실행 (target: all, server, client, archive)")
-        print("  init-db       : 데이터베이스 초기화")
-        print("  install       : 의존성 설치")
-        print("  build         : 클라이언트 EXE 빌드 (Windows 전용)")
+        print("  run              : 서버 실행 (기본값)")
+        print("    --prod         : Gunicorn으로 프로덕션 모드 실행")
+        print("  test [target]    : 테스트 실행 (target: all, server, client, archive)")
+        print("  docker-test      : Docker Compose 통합 테스트 (dockurr/windows + VNC)")
+        print("    --rebuild      : 서버 이미지 강제 재빌드")
+        print("    --no-cache     : Docker 빌드 캐시 사용 안 함")
+        print("    --cleanup      : 테스트 후 컨테이너 정리")
+        print("    --skip-boot    : Windows 부팅 대기 스킵")
+        print("  init-db          : 데이터베이스 초기화")
+        print("  install          : 의존성 설치")
+        print("  build            : 클라이언트 EXE 빌드 (Windows 전용)")
     else:
         print(f"알 수 없는 명령: {command}")
-        print("사용 가능한 명령: run, test, init-db, install, build")
+        print("사용 가능한 명령: run, test, docker-test, init-db, install, build")
 
 if __name__ == "__main__":
     main()

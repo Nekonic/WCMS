@@ -22,7 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT / 'server'))
 
 from config import get_config
 from utils import get_db, close_db, init_db_manager, require_admin
-from api import client_bp, admin_bp
+from api import client_bp, admin_bp, install_bp
 from services import PCService
 
 
@@ -62,6 +62,7 @@ def create_app(config_name='development'):
     # Blueprint 등록
     app.register_blueprint(client_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(install_bp)
 
     # ==================== 웹 페이지 라우트 (레거시 호환) ====================
 

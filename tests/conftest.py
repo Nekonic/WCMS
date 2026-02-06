@@ -5,19 +5,37 @@ import sys
 import os
 from pathlib import Path
 
-# 프로젝트 루트 추가
+# 프로젝트 루트
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+
+# server와 client 디렉토리를 sys.path에 추가 (클라이언트 테스트에서 필요)
+server_dir = str(project_root / "server")
+client_dir = str(project_root / "client")
+
+if server_dir not in sys.path:
+    sys.path.insert(0, server_dir)
+if client_dir not in sys.path:
+    sys.path.insert(0, client_dir)
 
 import pytest
-from flask import Flask
+
+# Flask는 서버 테스트에서만 필요함
+try:
+    from flask import Flask
+    HAS_FLASK = True
+except ImportError:
+    HAS_FLASK = False
 
 
 @pytest.fixture
 def app():
-    """Flask 앱 테스트용 픽스처"""
+    """Flask 앱 테스트용 픽스처 (서버 테스트용)"""
+    if not HAS_FLASK:
+        pytest.skip("Flask not installed")
+
+
     # server.app에서 앱 임포트
-    from server.app import create_app
+    from app import create_app
 
     app = create_app('test')  # 'test' 환경 설정 사용
 
@@ -38,10 +56,19 @@ def runner(app):
 
 
 @pytest.fixture(autouse=True)
-def reset_db(app):
-    """각 테스트 전후로 DB 초기화"""
-    from server.utils import get_db, init_db_manager
-    
+def reset_db(request):
+    """각 테스트 전후로 DB 초기화 (Flask 테스트에만 적용)"""
+    # Flask 테스트가 아니면 skip
+    if not HAS_FLASK or 'server' not in str(request.fspath):
+        yield
+        return
+
+    # Flask app 픽스처 요청
+    app = request.getfixturevalue('app')
+
+    # server 디렉토리는 이미 전역 sys.path에 추가됨
+    from utils import get_db, init_db_manager
+
     # 테스트 환경에서는 인메모리 DB 사용
     # app.config['DB_PATH']는 'test' 환경 설정에 의해 ':memory:'로 설정됨
     

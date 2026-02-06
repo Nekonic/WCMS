@@ -21,7 +21,7 @@ import argparse
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CLIENT_DIR = os.path.join(BASE_DIR, 'client')
 
-SERVER_URL = "http://aps.or.kr:8057"
+SERVER_URL = os.getenv('WCMS_SERVER_URL', 'http://localhost:5050')
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "!Q2w3e4r!@#123"
 TEST_MACHINE_ID = "TEST_PC_INTEGRATION"

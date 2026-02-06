@@ -1,0 +1,39 @@
+# WCMS 서버용 Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 시스템 패키지 설치
+RUN apt-get update && apt-get install -y \
+    curl \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 의존성 설치
+COPY pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv && \
+    uv pip install --system -r pyproject.toml
+
+# 애플리케이션 파일 복사
+COPY server/ ./server/
+COPY manage.py ./
+COPY docker-entrypoint.sh ./
+
+# 로그 및 DB 디렉토리 생성
+RUN mkdir -p logs db
+
+# entrypoint 실행 권한
+RUN chmod +x docker-entrypoint.sh
+
+# 포트 노출
+EXPOSE 5050
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:5050/ || exit 1
+
+# Entrypoint 설정
+ENTRYPOINT ["./docker-entrypoint.sh"]
+
+# 서버 실행
+CMD ["python", "manage.py", "run", "--host", "0.0.0.0", "--port", "5050"]

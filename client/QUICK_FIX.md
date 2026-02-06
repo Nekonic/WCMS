@@ -65,8 +65,9 @@ WCMS-Client.exe run
 **원인:** 서버에 접속 불가
 **해결:**
 ```cmd
-ping aps.or.kr
-curl http://aps.or.kr:8057
+# 서버 연결 테스트 (예시)
+ping your-server-hostname
+curl http://your-server:5050
 ```
 
 #### 로그 파일이 아예 없음

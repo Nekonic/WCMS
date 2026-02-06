@@ -7,7 +7,8 @@ import sqlite3
 import bcrypt
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'db.sqlite3')
+# 환경변수 또는 기본 경로 사용
+DB_PATH = os.getenv('WCMS_DB_PATH', os.path.join(os.path.dirname(__file__), 'db.sqlite3'))
 
 def create_admin(username='admin', password='admin'):
     """관리자 계정 생성"""

@@ -7,8 +7,15 @@ import platform
 import socket
 import json
 import os
+import sys
 import logging
 from typing import Dict, List, Any, Optional
+from pathlib import Path
+
+# 클라이언트 디렉토리를 sys.path에 추가 (이 모듈이 실행될 때마다)
+client_dir = Path(__file__).parent
+if str(client_dir) not in sys.path:
+    sys.path.insert(0, str(client_dir))
 
 from utils import load_json_file
 

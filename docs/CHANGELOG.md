@@ -7,15 +7,90 @@
 
 ---
 
-## [Unreleased] - 0.7.0
+## [Unreleased] - 0.8.0
+
+### 계획
+- [ ] Docker 환경에서 설치 스크립트 E2E 테스트
+- [ ] 클라이언트 자동 업데이트 강화 (자동 다운로드 및 설치)
+- [ ] 설치 스크립트 개선 (진행률 표시, 롤백 기능)
+
+---
+
+## [0.7.0] - 2026-02-07
 
 ### 추가
+- **한 줄 설치 스크립트 구현 (Phase 2 완료)** [x]
+  - **server/api/install.py**: 설치 API Blueprint 추가
+    - `/install/install.cmd` - Windows Batch 스크립트 동적 생성 (영어 메시지)
+    - `/install/install.ps1` - PowerShell 스크립트 동적 생성
+    - `/install/version` - `/api/client/version`으로 리다이렉트
+  - **GitHub Releases 기반 배포**: EXE는 GitHub에서 호스팅, 서버는 스크립트만 제공
+  - **동적 스크립트 생성**: 서버 URL을 자동으로 삽입하여 스크립트 생성
+  - **인코딩 문제 해결**: CMD 스크립트를 영어로 작성하여 Windows 코드페이지 문제 방지
+  - **사용법**: 
+    - CMD: `curl -fsSL http://server:5050/install/install.cmd -o install.cmd && install.cmd && del install.cmd`
+    - PS1: `iwr -Uri "http://server:5050/install/install.ps1" -OutFile install.ps1; .\install.ps1; del install.ps1`
+  - **기능**:
+    - 관리자 권한 확인
+    - 서버에서 최신 버전 조회 (`/api/client/version`)
+    - GitHub Releases에서 EXE 다운로드
+    - 자동 설치 및 서비스 등록
+    - 설정 파일 자동 생성 (`config.json`)
+    - 서비스 시작 및 상태 확인
+
+- **클라이언트 서버 URL 설정 개선** [x]
+  - **3단계 우선순위 시스템**:
+    - 1순위: `config.json` 파일 (설치 스크립트가 자동 생성)
+    - 2순위: 환경변수 `WCMS_SERVER_URL`
+    - 3순위: 기본값 `http://localhost:5050` (테스트/개발용)
+  - **프로덕션 주소 제거**: 하드코딩된 서버 주소 제거
+  - **유연한 배포**: 설치 시 자동으로 올바른 서버 주소 설정
+
+- **문서 정리** [x]
+  - 불필요한 개발 과정 문서 삭제 (5개)
+  - 핵심 문서만 유지 (9개)
+  - INDEX.md 간소화
+
+### 추가
+- **Docker 통합 테스트 인프라 구축** [x] (2026-02-07)
+  - Docker Compose 기반 테스트 환경 구성 (`docker-compose.yml`)
+  - dockurr/windows 이미지 활용 (실제 Windows 11 환경)
+  - **자동 DB 초기화**: entrypoint 스크립트로 스키마 적용 및 관리자 계정 자동 생성
+  - **로컬 ISO 파일 마운트**: `/boot.iso`로 직접 마운트 (VERSION 환경변수 무시)
+  - VNC 접속 지원 (웹 VNC: 8006, VNC: 5900, RDP: 3389)
+  - 서버 컨테이너 자동 빌드 (`Dockerfile.server`, `docker-entrypoint.sh`)
+  - 시스템 리소스 자동 감지 및 할당 (RAM, CPU)
+  - 새 테스트 스크립트: `tests/docker_test.py` (색상 출력, 사전 요구사항 확인)
+  - manage.py 통합: `python manage.py docker-test [옵션]`
+  - 환경 설정 파일: `.env.docker`
+  - **모든 테스트 통과**: 서버 헬스체크, 클라이언트 등록, Heartbeat (3/3)
+
+- **Windows 백업 및 복원 시스템** [x] (2026-02-07)
+  - 백업 스크립트: `scripts/backup-windows.ps1` (Docker 볼륨 → tar.gz)
+  - 복원 스크립트: `scripts/restore-windows.ps1` (대화형 선택 지원)
+  - 백업 가이드: `docs/DOCKER_WINDOWS_BACKUP.md`
+  - 설치 시간 절약: 10-15분 부팅 → 백업 복원으로 1-2분
+  - 자동 타임스탬프 파일명: `windows-clean-20260207_143022.tar.gz`
+  - 백업 크기: 10-18 GB (압축)
+
 - **PreShutdown 종료 감지 기능 완료** [x]
   - 클라이언트: PreShutdown 이벤트 핸들링 (`client/service.py`)
   - 클라이언트: 종료 신호 전송 함수 (`client/main.py`)
   - 서버: `/api/client/shutdown` 엔드포인트 (`server/api/client.py`)
   - 서버: `set_offline_immediately()` 서비스 (`server/services/pc_service.py`)
   - 상세: `plan.md` 참고
+
+- **테스트 환경 개선** [x] (2026-01-30)
+  - 문제: pytest conftest.py에서 Flask import 실패 (클라이언트 테스트)
+  - 해결: `tests/conftest.py` Flask import 조건부 처리
+  - 개선: `manage.py` test 명령 전 자동 의존성 설치
+  - 결과: `python manage.py test` 명령 정상 작동 (45개 테스트 통과)
+
+- **실시간 종료 감지 테스트 계획 추가** [x] (plan.md 섹션 4)
+  - 6가지 상세 테스트 시나리오
+  - PowerShell API 테스트 예제 코드
+  - 트러블슈팅 테이블
+  - 우선도별 리팩토링 5가지 항목
 
 - **AI 컨텍스트 파일 생성** [x]
   - `AI_CONTEXT.md`: AI/신규 개발자를 위한 빠른 온보딩 가이드
@@ -55,6 +130,20 @@
 - `plan.md`: 계획 문서 → 구현 완료 문서로 전환
 
 ### 수정
+- **Docker 서버 DB 초기화 수정** [x] (2026-02-07)
+  - 문제: manage.py가 환경변수 `WCMS_DB_PATH`를 무시하고 하드코딩 경로 사용
+  - 해결: `manage.py init-db`가 환경변수를 우선 사용하도록 수정
+  - 결과: 서버가 `/app/db/wcms.sqlite3` 경로로 올바르게 DB 접근
+  - 영향: `docker-entrypoint.sh` 스크립트가 정상 작동
+
+- **Docker 헬스체크 타임아웃 개선** [x] (2026-02-07)
+  - 문제: 60초 타임아웃이 너무 짧아 DB 초기화 중 실패
+  - 해결: `tests/docker_test.py`의 `wait_for_service()` 함수 개선
+    - 타임아웃 60초 → 120초 증가
+    - Docker 헬스체크 + HTTP 직접 확인 병행
+    - 진행상황 15초마다 출력
+  - 결과: 서버가 안정적으로 시작 완료 대기 (12초 소요)
+
 - **[중요] CommandModel 스키마 호환성 버그 수정**
   - 문제: 리팩터링 코드가 archive DB 스키마에 없는 컬럼 사용 시도
   - 해결: 런타임 스키마 감지 및 호환성 레이어 추가

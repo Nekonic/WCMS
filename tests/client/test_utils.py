@@ -1,8 +1,15 @@
 """
 클라이언트 유틸리티 단위 테스트
 """
-import pytest
-from client.utils import safe_request, retry_on_network_error, format_bytes
+import sys
+from pathlib import Path
+
+# client 디렉토리를 sys.path에 추가
+client_dir = Path(__file__).parent.parent.parent / "client"
+if str(client_dir) not in sys.path:
+    sys.path.insert(0, str(client_dir))
+
+from utils import safe_request, retry_on_network_error, format_bytes
 
 
 class TestSafeRequest:

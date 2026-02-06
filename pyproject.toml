@@ -1,8 +1,6 @@
 # WCMS Meta Project Configuration
-# 이 파일은 메타 프로젝트 설정입니다.
-# 실제 의존성은 다음 파일들에 정의되어 있습니다:
-# - server/pyproject.toml (서버 의존성)
-# - client/pyproject.toml (클라이언트 의존성)
+# Server와 Client의 모든 의존성을 포함합니다.
+# 단일 가상 환경에서 모든 테스트를 수행할 수 있습니다.
 
 [project]
 name = "wcms"
@@ -15,8 +13,42 @@ authors = [
 ]
 requires-python = ">=3.9"
 
-# 메타 프로젝트는 의존성을 정의하지 않습니다
-# 각 컴포넌트의 의존성을 따로 관리합니다
+# Server와 Client의 모든 의존성을 포함
+dependencies = [
+    # 공통 의존성
+    "requests>=2.32.5",
+
+    # Server 의존성
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "flask-socketio>=5.3.0",
+    "flask-session>=0.5.0",
+    "bcrypt>=4.0.0",
+    "python-socketio>=5.9.0",
+    "gunicorn>=21.2.0",
+    "gevent>=23.9.1",
+
+    # Client 의존성 (Windows 환경에서만 설치됨)
+    "psutil>=7.1.3",
+    "wmi>=1.5.1;platform_system=='Windows'",
+    "pywin32>=306;platform_system=='Windows'",
+]
+
+[project.optional-dependencies]
+# 개발/테스트 의존성
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "isort>=5.12.0",
+]
+
+# 클라이언트 빌드 의존성
+build = [
+    "pyinstaller>=6.0.0",
+]
 
 [build-system]
 requires = ["setuptools>=45", "wheel"]
@@ -24,3 +56,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["server", "client"]
+
+# UV 설정 (루트에서 단일 venv 사용)
+[tool.uv]
+# dev-dependencies는 deprecated됨 (dependency-groups 사용)
+# 대신 pyproject.toml의 optional-dependencies 사용
+
+[tool.uv.sources]
+# 로컬 프로젝트 참조 (필요시)
+# wcms-server = { path = "server", editable = true }
+# wcms-client = { path = "client", editable = true }
+
