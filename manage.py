@@ -140,20 +140,20 @@ def init_db(force=False):
             INSERT INTO client_versions (version, download_url, changelog)
             VALUES (?, ?, ?)
         ''', (
-            '0.7.0',
-            'https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe',
-            '자동 빌드 - v0.7.0 릴리스'
+            '0.8.0',
+            'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe',
+            'v0.8.0 - PIN Authentication and RESTful API'
         ))
         conn.commit()
         conn.close()
-        print("[✓] 클라이언트 버전 0.7.0 등록 완료.")
+        print("[✓] 클라이언트 버전 0.8.0 등록 완료.")
     except Exception as e:
         print(f"[!] 클라이언트 버전 삽입 실패: {e}")
 
     print("\n✅ 초기화 완료.")
     print("    관리자 ID: admin")
     print("    비밀번호 : admin")
-    print("    클라이언트 버전: 0.7.0")
+    print("    클라이언트 버전: 0.8.0"))
 
 def migrate_db(migration_file=None):
     """데이터베이스 마이그레이션 실행

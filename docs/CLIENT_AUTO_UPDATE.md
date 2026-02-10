@@ -1,4 +1,4 @@
-# 클라이언트 자동 업데이트 기능
+﻿# 클라이언트 자동 업데이트 기능
 
 ## 개요
 
@@ -88,9 +88,9 @@ def get_version():
 ```json
 {
   "status": "success",
-  "version": "0.7.0",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe",
-  "changelog": "자동 빌드 - v0.7.0 릴리스",
+  "version": "0.8.0",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
+  "changelog": "자동 빌드 - v0.8.0 릴리스",
   "released_at": "2025-12-30T12:00:00"
 }
 ```
@@ -122,9 +122,9 @@ def create_client_version():
 **요청 형식:**
 ```json
 {
-  "version": "0.7.0",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe",
-  "changelog": "자동 빌드 - v0.7.0 릴리스"
+  "version": "0.8.0",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
+  "changelog": "자동 빌드 - v0.8.0 릴리스"
 }
 ```
 
@@ -134,14 +134,14 @@ def create_client_version():
 ```yaml
 - name: Extract version from tag
   run: |
-    $version = "0.7.0"  # client-v0.7.0 태그에서 추출
+    $version = "0.8.0"  # client-v0.8.0 태그에서 추출
 ```
 
 #### 버전 업데이트
 ```yaml
 - name: Update version in main.py
   run: |
-    __version__ = "0.7.0"  # main.py의 버전 문자열 자동 업데이트
+    __version__ = "0.8.0"  # main.py의 버전 문자열 자동 업데이트
 ```
 
 #### 서버 알림
@@ -150,9 +150,9 @@ def create_client_version():
   run: |
     POST /api/client/version
     {
-      "version": "0.7.0",
-      "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe",
-      "changelog": "자동 빌드 - v0.7.0 릴리스"
+      "version": "0.8.0",
+      "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
+      "changelog": "자동 빌드 - v0.8.0 릴리스"
     }
 ```
 
@@ -167,8 +167,8 @@ def create_client_version():
 2. 관리자 로그인
 3. 좌측 메뉴 → "📦 클라이언트 버전" 클릭
 4. 버전 정보 입력
-   - 버전: 0.7.0
-   - 다운로드 URL: https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe
+   - 버전: 0.8.0
+   - 다운로드 URL: https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe
    - 변경사항: (선택) 업데이트 내용
 5. "등록" 버튼 클릭
 ```
@@ -189,9 +189,9 @@ curl -X POST http://localhost:5050/api/client/version \
   -H "Content-Type: application/json" \
   -H "Cookie: session=<세션쿠키>" \
   -d '{
-    "version": "0.7.0",
-    "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe",
-    "changelog": "자동 빌드 - v0.7.0 릴리스"
+    "version": "0.8.0",
+    "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
+    "changelog": "자동 빌드 - v0.8.0 릴리스"
   }'
 ```
 
@@ -202,8 +202,8 @@ curl -X POST http://localhost:5050/api/client/version \
 ```bash
 # 1. 클라이언트 코드 수정 (필요시)
 # 2. Git 태그 생성
-git tag client-v0.7.0
-git push origin client-v0.7.0
+git tag client-v0.8.0
+git push origin client-v0.8.0
 
 # 3. GitHub Actions 자동 실행
 # - EXE 빌드
@@ -278,7 +278,7 @@ uv run python app.py
 # 2. 버전 정보 수동 추가 (SQLite)
 sqlite3 db.sqlite3
 INSERT INTO client_versions (version, download_url, changelog)
-VALUES ('0.7.0', 'https://example.com/WCMS-Client.exe', 'Test version');
+VALUES ('0.8.0', 'https://example.com/WCMS-Client.exe', 'Test version');
 
 # 3. 클라이언트 실행
 cd client
@@ -346,4 +346,5 @@ curl -X POST http://localhost:5050/api/client/version \
 
 **마지막 업데이트**: 2025-12-30  
 **상태**: 정상 작동 ✅
+
 
