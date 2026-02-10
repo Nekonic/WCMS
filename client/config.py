@@ -4,10 +4,12 @@ WCMS 클라이언트 설정 관리
 """
 import os
 import json
+from typing import Optional
 import psutil
 
 
 # ==================== 서버 연결 설정 ====================
+
 
 def load_server_url() -> str:
     """
@@ -51,7 +53,48 @@ def load_server_url() -> str:
     return default_url
 
 
+def load_registration_pin() -> Optional[str]:
+    """
+    등록 PIN 로드 (v0.8.0)
+
+    1순위: config.json 파일의 REGISTRATION_PIN
+    2순위: 환경변수 WCMS_PIN
+    3순위: None (등록 시 오류 발생)
+
+    Returns:
+        PIN 문자열 또는 None
+    """
+    # 1순위: config.json 파일
+    config_paths = [
+        os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), 'WCMS', 'config.json'),
+        os.path.join(os.path.dirname(__file__), 'config.json'),
+    ]
+
+    for config_path in config_paths:
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                    if 'REGISTRATION_PIN' in config_data:
+                        pin = config_data['REGISTRATION_PIN']
+                        print(f"[Config] PIN 로드 (config.json): {'*' * len(pin)}")
+                        return pin
+            except Exception as e:
+                print(f"[Config] config.json 읽기 실패 ({config_path}): {e}")
+
+    # 2순위: 환경변수
+    env_pin = os.getenv('WCMS_PIN')
+    if env_pin:
+        print(f"[Config] PIN 로드 (환경변수): {'*' * len(env_pin)}")
+        return env_pin
+
+    # PIN 없음 (등록 시 오류 발생)
+    print("[Config] PIN 없음 - 등록 시 실패할 수 있음")
+    return None
+
+
 SERVER_URL = load_server_url()
+REGISTRATION_PIN = load_registration_pin()
 
 # Machine ID 생성 (MAC 주소 기반)
 MACHINE_ID = next(
@@ -62,13 +105,13 @@ MACHINE_ID = next(
 )
 
 
-# ==================== 주기 설정 ====================
+# ==================== 주기 설정 (v0.8.0 네트워크 최적화) ====================
 
-# 하트비트 전송 주기 (초)
-HEARTBEAT_INTERVAL = int(os.getenv('WCMS_HEARTBEAT_INTERVAL', '600'))  # 10분
+# 하트비트 전송 주기 (초) - 전체 하트비트
+HEARTBEAT_INTERVAL = int(os.getenv('WCMS_HEARTBEAT_INTERVAL', '300'))  # 5분
 
-# 명령 폴링 주기 (초)
-COMMAND_POLL_INTERVAL = int(os.getenv('WCMS_COMMAND_POLL_INTERVAL', '10'))  # 10초
+# 명령 폴링 주기 (초) - 경량 하트비트 통합
+COMMAND_POLL_INTERVAL = int(os.getenv('WCMS_COMMAND_POLL_INTERVAL', '2'))  # 2초 (네트워크 최적화)
 
 # 전원 명령 유예 시간 (초) - 부팅 직후 전원 명령 방지
 POWER_COMMAND_GRACE_PERIOD = int(os.getenv('WCMS_POWER_GRACE_PERIOD', '10'))  # 10초
@@ -117,7 +160,7 @@ USE_EXPONENTIAL_BACKOFF = os.getenv('WCMS_USE_EXPONENTIAL_BACKOFF', 'true').lowe
 # ==================== 버전 정보 ====================
 
 # 클라이언트 버전 (GitHub Actions에서 자동 교체)
-__version__ = "dev"
+__version__ = "0.8.0"
 
 
 # ==================== 시스템 프로세스 필터 ====================

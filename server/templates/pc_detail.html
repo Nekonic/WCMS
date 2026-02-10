@@ -127,6 +127,11 @@
                                     {% set usage_percent = 0 %}
                                 {% endif %}
 
+                                <!-- 도넛 차트 -->
+                                <div style="max-width: 200px; margin: 0 auto 20px;">
+                                    <canvas id="diskChart_{{ dev|replace('\\', '_')|replace(':', '') }}"></canvas>
+                                </div>
+
                                 <p class="mb-2">
                                     <strong style="font-size: 1.5em; color: #dc3545;">{{ usage_percent }}%</strong>
                                     <small class="text-muted">사용 중</small>
@@ -160,6 +165,69 @@
                                         여유: {{ free_gb|round(1) }} GB / 총: {{ total_gb|round(1) }} GB
                                     </small>
                                 </p>
+
+                                <script>
+                                // 도넛 차트 생성
+                                (function() {
+                                    const ctx = document.getElementById('diskChart_{{ dev|replace('\\', '_')|replace(':', '') }}');
+                                    if (ctx) {
+                                        new Chart(ctx, {
+                                            type: 'doughnut',
+                                            data: {
+                                                labels: ['사용 중', '여유'],
+                                                datasets: [{
+                                                    data: [{{ used_gb|round(2) }}, {{ free_gb|round(2) }}],
+                                                    backgroundColor: [
+                                                        {% if usage_percent > 90 %}
+                                                        'rgba(220, 38, 38, 0.8)',
+                                                        {% elif usage_percent > 75 %}
+                                                        'rgba(245, 158, 11, 0.8)',
+                                                        {% else %}
+                                                        'rgba(16, 185, 129, 0.8)',
+                                                        {% endif %}
+                                                        'rgba(107, 114, 128, 0.3)'
+                                                    ],
+                                                    borderColor: [
+                                                        {% if usage_percent > 90 %}
+                                                        'rgba(220, 38, 38, 1)',
+                                                        {% elif usage_percent > 75 %}
+                                                        'rgba(245, 158, 11, 1)',
+                                                        {% else %}
+                                                        'rgba(16, 185, 129, 1)',
+                                                        {% endif %}
+                                                        'rgba(107, 114, 128, 0.5)'
+                                                    ],
+                                                    borderWidth: 2
+                                                }]
+                                            },
+                                            options: {
+                                                responsive: true,
+                                                maintainAspectRatio: true,
+                                                plugins: {
+                                                    legend: {
+                                                        position: 'bottom',
+                                                        labels: {
+                                                            color: '#666',
+                                                            font: {
+                                                                size: 11
+                                                            }
+                                                        }
+                                                    },
+                                                    tooltip: {
+                                                        callbacks: {
+                                                            label: function(context) {
+                                                                const label = context.label || '';
+                                                                const value = context.parsed || 0;
+                                                                return label + ': ' + value.toFixed(1) + ' GB';
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }
+                                })();
+                                </script>
                             </div>
                         </div>
                     </div>

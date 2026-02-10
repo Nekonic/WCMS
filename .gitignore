@@ -9,6 +9,10 @@ __pycache__/
 *.egg
 MANIFEST
 
+# Plan files (temporary, not for version control)
+plan*.md
+docs/plan*.md
+
 # Virtual environments
 venv/
 env/
@@ -72,6 +76,12 @@ docker-compose.override.yml
 # Shared folder (호스트-컨테이너 파일 공유)
 shared/*
 !shared/README.md
+
+# ISO 파일 및 백업
+iso/
+backups/
+*.backup
+shared/
 
 # OS
 .DS_Store

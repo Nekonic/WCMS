@@ -18,21 +18,46 @@ class CommandExecutor:
         명령 타입에 따라 적절한 명령 실행
 
         Args:
-            command_type: 명령 타입 (shutdown, reboot, execute, etc)
-            command_data: 명령 데이터
+            command_type: 명령 타입 (shutdown, restart, execute, etc)
+            command_data: 명령 데이터 (parameters)
 
         Returns:
             실행 결과 메시지
         """
+        # v0.8.0: 'reboot' → 'restart'로 통일
+        if command_type == 'reboot':
+            command_type = 'restart'
+
         handlers = {
-            'shutdown': CommandExecutor.shutdown,
-            'reboot': CommandExecutor.reboot,
-            'execute': CommandExecutor.execute,
-            'install': lambda: CommandExecutor.install(command_data.get('app_name', '')),
-            'download': lambda: CommandExecutor.download(command_data.get('url', '')),
+            'shutdown': lambda: CommandExecutor.shutdown(
+                command_data.get('delay', 0),
+                command_data.get('message', '')
+            ),
+            'restart': lambda: CommandExecutor.reboot(
+                command_data.get('delay', 0),
+                command_data.get('message', '')
+            ),
+            'execute': lambda: CommandExecutor.execute(
+                command_data.get('command', '')
+            ),
+            'install': lambda: CommandExecutor.install(
+                command_data.get('app_name', '')
+            ),
+            'download': lambda: CommandExecutor.download(
+                command_data.get('url', '')
+            ),
             'create_user': lambda: CommandExecutor.create_user(**command_data),
-            'delete_user': lambda: CommandExecutor.delete_user(command_data.get('username', '')),
+            'delete_user': lambda: CommandExecutor.delete_user(
+                command_data.get('username', '')
+            ),
             'change_password': lambda: CommandExecutor.change_password(**command_data),
+            'message': lambda: CommandExecutor.show_message(
+                command_data.get('message', ''),
+                command_data.get('duration', 10)
+            ),
+            'kill_process': lambda: CommandExecutor.kill_process(
+                command_data.get('process_name', '')
+            ),
         }
 
         handler = handlers.get(command_type)
@@ -46,20 +71,40 @@ class CommandExecutor:
             return f"알 수 없는 명령 타입: {command_type}"
 
     @staticmethod
-    def shutdown() -> str:
-        """PC 종료"""
+    def shutdown(delay: int = 0, message: str = '') -> str:
+        """PC 종료
+
+        Args:
+            delay: 지연 시간 (초)
+            message: 사용자에게 표시할 메시지
+        """
         try:
-            subprocess.run("shutdown /s /t 3", shell=True)
-            return "종료 명령 실행됨"
+            delay = max(0, delay)  # 음수 방지
+            cmd = f'shutdown /s /t {delay}'
+            if message:
+                cmd += f' /c "{message}"'
+
+            subprocess.run(cmd, shell=True)
+            return f"종료 명령 실행됨 (지연: {delay}초)"
         except Exception as e:
             return f"종료 실패: {str(e)}"
 
     @staticmethod
-    def reboot() -> str:
-        """PC 재시작"""
+    def reboot(delay: int = 0, message: str = '') -> str:
+        """PC 재시작
+
+        Args:
+            delay: 지연 시간 (초)
+            message: 사용자에게 표시할 메시지
+        """
         try:
-            subprocess.run("shutdown /r /t 3", shell=True)
-            return "재시작 명령 실행됨"
+            delay = max(0, delay)  # 음수 방지
+            cmd = f'shutdown /r /t {delay}'
+            if message:
+                cmd += f' /c "{message}"'
+
+            subprocess.run(cmd, shell=True)
+            return f"재시작 명령 실행됨 (지연: {delay}초)"
         except Exception as e:
             return f"재시작 실패: {str(e)}"
 
@@ -161,68 +206,107 @@ class CommandExecutor:
         return CommandExecutor.manage_account('change_password', username, new_password)
 
     @staticmethod
-    def execute_command(cmd_type, cmd_data):
-        """통합 명령 실행"""
-        if cmd_type == 'power':
-            # 전원 관리
-            action = cmd_data.get('action')
-            if action == 'shutdown':
-                return CommandExecutor.shutdown()
-            elif action == 'restart':
-                return CommandExecutor.reboot()
-            elif action == 'logout':
-                return CommandExecutor.execute('shutdown /l')
+    def manage_account(action: str, username: str, password: str = None,
+                      full_name: str = None, comment: str = None) -> str:
+        """Windows 계정 관리 통합 함수
+
+        Args:
+            action: 작업 타입 ('create', 'delete', 'change_password')
+            username: 사용자 이름
+            password: 비밀번호 (create, change_password에서 필요)
+            full_name: 전체 이름 (create에서 선택사항)
+            comment: 설명 (create에서 선택사항)
+        """
+        try:
+            if action == 'create':
+                if not password:
+                    return "오류: 비밀번호가 필요합니다"
+
+                cmd = f'net user {username} {password} /add'
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+                if result.returncode == 0:
+                    # 전체 이름 설정 (선택사항)
+                    if full_name:
+                        subprocess.run(
+                            f'wmic useraccount where name="{username}" set fullname="{full_name}"',
+                            shell=True, capture_output=True
+                        )
+                    return f"사용자 계정 생성됨: {username}"
+                else:
+                    return f"사용자 생성 실패: {result.stderr}"
+
+            elif action == 'delete':
+                cmd = f'net user {username} /delete'
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+                if result.returncode == 0:
+                    return f"사용자 계정 삭제됨: {username}"
+                else:
+                    return f"사용자 삭제 실패: {result.stderr}"
+
+            elif action == 'change_password':
+                if not password:
+                    return "오류: 새 비밀번호가 필요합니다"
+
+                cmd = f'net user {username} {password}'
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+                if result.returncode == 0:
+                    return f"비밀번호 변경됨: {username}"
+                else:
+                    return f"비밀번호 변경 실패: {result.stderr}"
+
             else:
-                return f"알 수 없는 전원 관리 작업: {action}"
+                return f"알 수 없는 계정 작업: {action}"
 
-        elif cmd_type == 'shutdown':  # 하위 호환성
-            return CommandExecutor.shutdown()
+        except Exception as e:
+            return f"계정 관리 오류: {str(e)}"
 
-        elif cmd_type == 'reboot':  # 하위 호환성
-            return CommandExecutor.reboot()
 
-        elif cmd_type == 'install':
-            # winget 설치
-            app_id = cmd_data.get('app_id') or cmd_data.get('app_name')
-            return CommandExecutor.install(app_id)
+    @staticmethod
+    def show_message(message: str, duration: int = 10) -> str:
+        """사용자에게 메시지 표시
 
-        elif cmd_type == 'execute':
-            # CMD 명령 실행
-            return CommandExecutor.execute(cmd_data.get('command'))
+        Args:
+            message: 표시할 메시지
+            duration: 표시 시간 (초) - 실제로는 무시됨 (msg는 사용자가 직접 닫아야 함)
+        """
+        try:
+            # msg 명령은 사용자가 OK를 클릭할 때까지 표시됨
+            cmd = f'msg * "{message}"'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
 
-        elif cmd_type == 'download':
-            # 파일 다운로드
-            return CommandExecutor.download_file(
-                cmd_data.get('url'),
-                cmd_data.get('destination') or cmd_data.get('path')
-            )
+            if result.returncode == 0:
+                return f"메시지 표시됨: {message}"
+            else:
+                return f"메시지 표시 실패: {result.stderr}"
+        except Exception as e:
+            return f"메시지 표시 오류: {str(e)}"
 
-        elif cmd_type == 'account':
-            # 계정 관리
-            return CommandExecutor.manage_account(
-                cmd_data.get('action'),
-                cmd_data.get('username'),
-                cmd_data.get('password'),
-                cmd_data.get('full_name'),
-                cmd_data.get('comment')
-            )
+    @staticmethod
+    def kill_process(process_name: str) -> str:
+        """프로세스 강제 종료
 
-        elif cmd_type == 'create_user':  # 하위 호환성
-            return CommandExecutor.create_user(
-                cmd_data.get('username'),
-                cmd_data.get('password'),
-                cmd_data.get('full_name'),
-                cmd_data.get('comment')
-            )
+        Args:
+            process_name: 종료할 프로세스 이름 (예: chrome.exe, notepad.exe)
+        """
+        try:
+            if not process_name:
+                return "프로세스 이름이 지정되지 않음"
 
-        elif cmd_type == 'delete_user':  # 하위 호환성
-            return CommandExecutor.delete_user(cmd_data.get('username'))
+            # .exe 확장자 추가 (없는 경우)
+            if not process_name.lower().endswith('.exe'):
+                process_name += '.exe'
 
-        elif cmd_type == 'change_password':  # 하위 호환성
-            return CommandExecutor.change_password(
-                cmd_data.get('username'),
-                cmd_data.get('new_password') or cmd_data.get('password')
-            )
+            cmd = f'taskkill /F /IM "{process_name}"'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
 
-        else:
-            return f"알 수 없는 명령 타입: {cmd_type}"
+            if result.returncode == 0:
+                return f"프로세스 종료됨: {process_name}"
+            elif "찾을 수 없습니다" in result.stderr or "not found" in result.stderr.lower():
+                return f"프로세스를 찾을 수 없음: {process_name}"
+            else:
+                return f"프로세스 종료 실패: {result.stderr}"
+        except Exception as e:
+            return f"프로세스 종료 오류: {str(e)}"

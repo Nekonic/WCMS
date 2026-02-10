@@ -21,11 +21,17 @@ class DatabaseManager:
             g.db = sqlite3.connect(
                 self.db_path,
                 timeout=self.timeout,
-                check_same_thread=False
+                check_same_thread=False,
+                isolation_level=None  # autocommit 모드 (성능 향상)
             )
             g.db.row_factory = sqlite3.Row
-            g.db.execute('PRAGMA journal_mode=WAL')
+
+            # SQLite 최적화 설정
+            g.db.execute('PRAGMA journal_mode=WAL')  # Write-Ahead Logging
             g.db.execute(f'PRAGMA busy_timeout={self.busy_timeout}')
+            g.db.execute('PRAGMA synchronous=NORMAL')  # 성능 향상 (FULL → NORMAL)
+            g.db.execute('PRAGMA cache_size=-64000')  # 64MB 캐시 (성능 향상)
+            g.db.execute('PRAGMA temp_store=MEMORY')  # 임시 테이블 메모리 저장
         return g.db
 
     def close_connection(self, error=None):

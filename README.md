@@ -4,13 +4,14 @@ WCMS는 실습실 PC를 원격으로 관리하고 모니터링하기 위한 시�
 
 ## 📊 프로젝트 상태
 
-- **버전**: 0.7.0
+- **버전**: 0.7.1
 - **최근 업데이트**: 2026-02-07
 - **주요 기능**: 
   - [x] PreShutdown 종료 감지
   - [x] Long-polling 명령 전송
   - [x] 한 줄 설치 스크립트
   - [x] Docker 통합 테스트
+  - [x] 디스크/프로세스/명령 실행 버그 수정
 
 ## 🚀 빠른 시작
 
@@ -49,6 +50,27 @@ iwr -Uri "http://your-server:5050/install/install.ps1" -OutFile install.ps1; .\i
 - 관리자 권한 필요
 - GitHub Releases에서 최신 버전 자동 다운로드
 - Windows 서비스로 자동 등록 및 시작
+
+**⚠️ 사전 준비:** 설치 스크립트가 작동하려면 DB에 클라이언트 버전 정보가 필요합니다:
+
+**로컬 서버:**
+```bash
+# Windows
+sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.7.0', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe', 'Latest version');"
+
+# Linux/Mac
+sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.7.0', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe', 'Latest version');"
+```
+
+**Docker 서버:**
+```bash
+docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.7.0', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe', 'Latest version');"
+```
+
+**확인:**
+```bash
+curl http://localhost:5050/api/client/version
+```
 
 ### Docker 통합 테스트 (NEW!)
 

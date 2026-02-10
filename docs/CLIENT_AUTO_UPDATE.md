@@ -95,15 +95,29 @@ def get_version():
 }
 ```
 
-#### POST /api/client/version (GitHub Actions 업데이트용)
+#### POST /api/client/version (관리자 전용)
 
+**이전 (보안 취약):**
 ```python
-@client_bp.route('/version', methods=['POST'])
-def update_version():
-    """버전 정보 업데이트 (GitHub Actions에서 호출)"""
-    # client_versions 테이블에 새 버전 삽입
-    # 자동으로 released_at에 현재 시간 기록
+# Authorization 헤더로 인증 (환경변수 토큰)
+auth_token = request.headers.get('Authorization')
+expected_token = f"Bearer {os.environ.get('UPDATE_TOKEN')}"
 ```
+
+**현재 (보안 강화):**
+```python
+@admin_bp.route('/client/version', methods=['POST'])
+@require_admin  # 관리자 세션 필수
+def create_client_version():
+    """클라이언트 버전 등록 (관리자 전용)"""
+    # 로그인 세션으로 관리자 권한 확인
+    # session.get('username') 로깅
+```
+
+**장점:**
+- DB 초기화 시 외부에서 함부로 버전 등록 불가
+- 관리자 웹 페이지에서만 관리
+- 접근 로그 기록 (누가 언제 등록했는지)
 
 **요청 형식:**
 ```json
@@ -146,7 +160,44 @@ def update_version():
 
 ## 사용 방법
 
-### 새 버전 릴리스
+### 관리자 페이지에서 버전 등록 (권장)
+
+```
+1. 웹 UI 접속 (http://localhost:5050)
+2. 관리자 로그인
+3. 좌측 메뉴 → "📦 클라이언트 버전" 클릭
+4. 버전 정보 입력
+   - 버전: 0.7.0
+   - 다운로드 URL: https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe
+   - 변경사항: (선택) 업데이트 내용
+5. "등록" 버튼 클릭
+```
+
+**장점:**
+- 웹 UI에서 간편하게 관리
+- 인증 자동 처리 (로그인 세션 사용)
+- 등록된 버전 목록 확인 및 삭제 가능
+- 최신 버전 배지 표시
+
+### API로 버전 등록 (자동화용)
+
+관리자 권한 필요 (`@require_admin` 데코레이터)
+
+```bash
+# POST /api/client/version
+curl -X POST http://localhost:5050/api/client/version \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=<세션쿠키>" \
+  -d '{
+    "version": "0.7.0",
+    "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe",
+    "changelog": "자동 빌드 - v0.7.0 릴리스"
+  }'
+```
+
+**주의:** 이전 버전처럼 Authorization 헤더 인증은 제거되었습니다. 관리자 로그인 세션이 필요합니다.
+
+### 새 버전 릴리스 (GitHub Actions)
 
 ```bash
 # 1. 클라이언트 코드 수정 (필요시)

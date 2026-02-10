@@ -8,10 +8,11 @@ import pytest
 class TestClientAPI:
     """클라이언트 API 테스트"""
 
-    def test_client_register(self, client):
+    def test_client_register(self, client, test_pin):
         """클라이언트 등록 API"""
         response = client.post('/api/client/register', json={
             'machine_id': 'TEST-MACHINE-001',
+            'pin': test_pin,
             'hostname': 'test-pc',
             'mac_address': 'AA:BB:CC:DD:EE:FF',
             'cpu_model': 'Intel Core i5',
@@ -25,11 +26,12 @@ class TestClientAPI:
         assert data['status'] == 'success'
         assert 'pc_id' in data
 
-    def test_client_heartbeat(self, client):
+    def test_client_heartbeat(self, client, test_pin):
         """클라이언트 하트비트 API"""
         # 먼저 PC 등록
         reg_response = client.post('/api/client/register', json={
             'machine_id': 'TEST-HEARTBEAT-001',
+            'pin': test_pin,
             'hostname': 'test-hb',
             'mac_address': '11:22:33:44:55:66'
         })
@@ -48,18 +50,23 @@ class TestClientAPI:
         data = response.get_json()
         assert data['status'] == 'success'
 
-    def test_client_command_get(self, client):
+    def test_client_command_get(self, client, test_pin):
         """클라이언트 명령 조회 API"""
         # 먼저 PC 등록
         reg_response = client.post('/api/client/register', json={
             'machine_id': 'TEST-CMD-GET-001',
+            'pin': test_pin,
             'hostname': 'test-cmd',
             'mac_address': '99:88:77:66:55:44'
         })
         pc_id = reg_response.get_json()['pc_id']
 
-        response = client.get(f'/api/client/command?pc_id={pc_id}')
+        response = client.post('/api/client/commands', json={
+            'pc_id': pc_id
+        })
         assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
 
 
 class TestAdminAPI:
@@ -77,11 +84,12 @@ class TestAdminAPI:
         response = client.get('/api/pcs')
         assert response.status_code == 200
 
-    def test_admin_command_send(self, client):
+    def test_admin_command_send(self, client, test_pin):
         """관리자 명령 전송 API"""
         # 먼저 PC 등록
         reg_response = client.post('/api/client/register', json={
             'machine_id': 'TEST-ADMIN-CMD-001',
+            'pin': test_pin,
             'hostname': 'test-admin-cmd',
             'mac_address': '12:34:56:78:90:AB'
         })

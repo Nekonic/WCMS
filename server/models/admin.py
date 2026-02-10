@@ -3,7 +3,8 @@
 관리자 사용자 관련 데이터베이스 작업을 캡슐화
 """
 from typing import Optional, Dict, Any
-from utils import get_db, hash_password, check_password
+from utils.database import get_db
+from utils.auth import hash_password, check_password
 
 
 class AdminModel:

@@ -1,11 +1,12 @@
-"""
+﻿"""
 PC 모델 (Repository 패턴)
 PC 정보 관련 데이터베이스 작업을 캡슐화
 """
 import sqlite3
 import json
 from typing import Optional, List, Dict, Any
-from utils import get_db, validate_not_null
+from utils.database import get_db
+from utils.validators import validate_not_null
 
 
 class PCModel:
@@ -190,13 +191,14 @@ class PCModel:
                 WHERE id=?
             ''', (pc_id,))
 
-            # pc_status 삽입
+            # pc_dynamic_info 업데이트 (UNIQUE pc_id 제약으로 최신 상태만 유지)
             disk_usage_str = json.dumps(disk_usage) if disk_usage else '{}'
             processes_str = json.dumps(processes) if processes else '[]'
 
             db.execute('''
-                INSERT INTO pc_status (pc_id, cpu_usage, ram_used, ram_usage_percent, disk_usage, current_user, uptime, processes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO pc_dynamic_info 
+                (pc_id, cpu_usage, ram_used, ram_usage_percent, disk_usage, current_user, uptime, processes, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ''', (pc_id, cpu_usage, ram_used, ram_usage_percent, disk_usage_str, current_user, uptime, processes_str))
 
             db.commit()
@@ -241,9 +243,9 @@ class PCModel:
 
         db = get_db()
 
-        # 최신 상태 정보
+        # 최신 상태 정보 (UNIQUE pc_id 제약으로 항상 1개만 존재)
         status = db.execute(
-            'SELECT * FROM pc_status WHERE pc_id=? ORDER BY created_at DESC LIMIT 1',
+            'SELECT * FROM pc_dynamic_info WHERE pc_id=?',
             (pc_id,)
         ).fetchone()
 
@@ -256,17 +258,62 @@ class PCModel:
         if status:
             pc['cpu_usage'] = status['cpu_usage']
             pc['ram_used'] = status['ram_used']
+            pc['ram_usage_percent'] = status['ram_usage_percent']
+            pc['disk_usage'] = status['disk_usage']
+            pc['current_user'] = status['current_user']
+            pc['uptime'] = status['uptime']
             pc['processes'] = status['processes']
         else:
             pc['cpu_usage'] = None
             pc['ram_used'] = 0
+            pc['ram_usage_percent'] = 0
+            pc['disk_usage'] = '{}'
+            pc['current_user'] = None
+            pc['uptime'] = 0
             pc['processes'] = '[]'
 
         if specs:
             pc['cpu_model'] = specs['cpu_model']
+            pc['cpu_cores'] = specs['cpu_cores']
+            pc['cpu_threads'] = specs['cpu_threads']
             pc['ram_total'] = specs['ram_total']
             pc['disk_info'] = specs['disk_info']
             pc['os_edition'] = specs['os_edition']
+            pc['os_version'] = specs['os_version']
+
+        # disk_info_parsed 생성 (정적 disk_info + 동적 disk_usage 병합)
+        disk_info_parsed = {}
+        try:
+            # disk_info 파싱 (정적 정보: total_gb, fstype, mountpoint)
+            # 이중 JSON 인코딩 처리 (필요시 재파싱)
+            disk_raw = pc.get('disk_info') or '{}'
+            while isinstance(disk_raw, str):
+                try:
+                    disk_raw = json.loads(disk_raw)
+                except (json.JSONDecodeError, TypeError):
+                    break
+            disk_info_data = disk_raw if isinstance(disk_raw, dict) else {}
+
+            # disk_usage 파싱 (동적 정보: used_gb, free_gb, percent)
+            # 이중 JSON 인코딩 처리 (필요시 재파싱)
+            disk_usage_raw = pc.get('disk_usage') or '{}'
+            while isinstance(disk_usage_raw, str):
+                try:
+                    disk_usage_raw = json.loads(disk_usage_raw)
+                except (json.JSONDecodeError, TypeError):
+                    break
+            disk_usage_data = disk_usage_raw if isinstance(disk_usage_raw, dict) else {}
+
+            # 병합: disk_info를 기반으로 disk_usage 추가
+            for dev, info in disk_info_data.items():
+                disk_info_parsed[dev] = dict(info)  # 복사
+                if dev in disk_usage_data:
+                    disk_info_parsed[dev].update(disk_usage_data[dev])
+        except Exception as e:
+            # JSON 파싱 실패 시 빈 딕셔너리
+            disk_info_parsed = {}
+
+        pc['disk_info_parsed'] = disk_info_parsed
 
         return pc
 
@@ -280,3 +327,4 @@ class PCModel:
             return True
         except Exception:
             return False
+
