@@ -72,6 +72,12 @@ def register_client():
         logger.warning("정적 정보 수집 실패, 등록할 수 없습니다.")
         return False
 
+    # 동적 정보도 함께 수집 (첫 등록 시 디스크/프로세스 정보 즉시 표시)
+    dynamic_info = collect_dynamic_info()
+    if not dynamic_info:
+        logger.warning("동적 정보 수집 실패, 기본값으로 진행합니다.")
+        dynamic_info = {}
+
     # PIN 체크 (v0.8.0)
     if not REGISTRATION_PIN:
         logger.error("등록 PIN이 설정되지 않았습니다. config.json에 REGISTRATION_PIN을 추가하세요.")
@@ -80,7 +86,8 @@ def register_client():
     reg_data = {
         "machine_id": MACHINE_ID,
         "pin": REGISTRATION_PIN,  # v0.8.0: PIN 추가
-        **static_info
+        **static_info,
+        "system_info": dynamic_info  # 동적 정보 포함 (디스크/프로세스)
     }
 
     try:

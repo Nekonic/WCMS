@@ -64,10 +64,10 @@ def get_pc_history(pc_id):
 
     limit = request.args.get('limit', default=100, type=int)
     rows = db.execute('''
-        SELECT created_at, current_user, processes
+        SELECT updated_at, current_user, processes
         FROM pc_dynamic_info 
         WHERE pc_id=? AND processes IS NOT NULL
-        ORDER BY created_at DESC 
+        ORDER BY updated_at DESC 
         LIMIT ?
     ''', (pc_id, limit)).fetchall()
 

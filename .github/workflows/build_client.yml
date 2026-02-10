@@ -47,16 +47,26 @@ jobs:
         echo "version=$version" >> $env:GITHUB_OUTPUT
         Write-Host "추출된 버전: $version"
 
-    - name: Update version in main.py
+    - name: Update version in main.py and config.py
       shell: pwsh
       run: |
         $VERSION = "${{ steps.version.outputs.version }}"
-        $filePath = "client/main.py"
-        $content = Get-Content $filePath -Raw
+        
+        # Update main.py
+        $mainPath = "client/main.py"
+        $content = Get-Content $mainPath -Raw
         $newContent = $content -replace '__version__\s*=\s*"[^"]*"', ('__version__ = "' + $VERSION + '"')
-        $newContent | Set-Content $filePath -NoNewline
-        Write-Host "=== Version updated to: $VERSION ==="
-        Get-Content $filePath | Select-String "__version__"
+        $newContent | Set-Content $mainPath -NoNewline
+        Write-Host "=== main.py version updated to: $VERSION ==="
+        Get-Content $mainPath | Select-String "__version__"
+        
+        # Update config.py
+        $configPath = "client/config.py"
+        $content = Get-Content $configPath -Raw
+        $newContent = $content -replace '__version__\s*=\s*"[^"]*"', ('__version__ = "' + $VERSION + '"')
+        $newContent | Set-Content $configPath -NoNewline
+        Write-Host "=== config.py version updated to: $VERSION ==="
+        Get-Content $configPath | Select-String "__version__"
 
     - name: Build EXE with PyInstaller
       working-directory: ./client
@@ -72,19 +82,60 @@ jobs:
         body: |
           # WCMS Client v${{ steps.version.outputs.version }}
 
-          ## 설치 방법
+          ## 설치 방법 (v0.8.0 - PIN 인증 필수)
+          
+          ### 자동 설치 (권장)
+          관리자 권한 CMD에서 실행:
+          ```cmd
+          curl -fsSL http://your-server:5050/install/install.cmd -o install.cmd && install.cmd && del install.cmd
+          ```
+          
+          ### 수동 설치
           1. `WCMS-Client.exe`를 다운로드합니다.
-          2. 파일을 우클릭하여 "관리자 권한으로 실행"을 선택하면 서비스가 자동으로 설치 및 시작됩니다.
-          3. 설치 후 재부팅 시에도 자동 시작됩니다.
+          2. `C:\Program Files\WCMS`에 복사합니다.
+          3. 관리자 권한 CMD에서 실행:
+             ```
+             cd "C:\Program Files\WCMS"
+             WCMS-Client.exe install
+             sc config WCMS-Client start= auto
+             net start WCMS-Client
+             ```
+          4. `C:\ProgramData\WCMS\config.json` 생성:
+             ```json
+             {
+               "SERVER_URL": "http://your-server:5050/",
+               "REGISTRATION_PIN": "123456",
+               "HEARTBEAT_INTERVAL": 300,
+               "COMMAND_POLL_INTERVAL": 2,
+               "LOG_LEVEL": "INFO"
+             }
+             ```
 
           ## 요구사항
           - Windows 10/11
           - 관리자 권한
+          - **서버에서 생성한 6자리 PIN** (관리자에게 문의)
           
-          ## 주요 기능
-          - 5분 주기 하트비트
-          - 10초 명령 폴링
-          - 자동 버전 체크 및 업데이트 알림
+          ## v${{ steps.version.outputs.version }} 주요 기능
+          - PIN 기반 등록 인증
+          - RESTful API 지원 (새 서버 필수)
+          - 2초 명령 폴링 (기존 5초)
+          - 경량 하트비트 통합 (네트워크 60% 절감)
+          - Shutdown/Restart에 delay/message 지원
+          - 메시지 표시, 프로세스 종료 명령
+          - IP 변경 자동 감지
+          
+          ## Breaking Changes
+          - 서버 v0.8.0 이상 필수
+          - PIN 없이는 등록 불가
+          - 이전 버전 서버와 호환 안 됨
+          
+          ## 서비스 관리
+          - 상태 확인: `sc query WCMS-Client`
+          - 시작: `net start WCMS-Client`
+          - 중지: `net stop WCMS-Client`
+          - 제거: `WCMS-Client.exe remove`
+          - 로그: `C:\ProgramData\WCMS\logs\client.log`
         draft: false
         prerelease: false
         files: |
@@ -111,7 +162,7 @@ jobs:
         $body = @{
           version = $VERSION
           download_url = $DOWNLOAD_URL
-          changelog = "자동 빌드 - v$VERSION 릴리스"
+          changelog = "v$VERSION - PIN Authentication and RESTful API"
         } | ConvertTo-Json
         
         try {

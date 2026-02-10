@@ -81,6 +81,15 @@ def register():
     # 토큰 사용 처리
     RegistrationTokenModel.mark_used(pin)
 
+    # 동적 정보 저장 (v0.8.0 - 등록 시 디스크/프로세스 정보도 함께)
+    system_info = data.get('system_info')
+    if system_info:
+        try:
+            PCModel.update_dynamic_info(pc_id, system_info)
+            logger.debug(f"등록 시 동적 정보 저장 완료: PC {pc_id}")
+        except Exception as e:
+            logger.warning(f"등록 시 동적 정보 저장 실패: {e}")
+
     logger.info(f"PC 등록 성공: {hostname} (machine_id={machine_id}, pin={pin})")
 
     return jsonify({

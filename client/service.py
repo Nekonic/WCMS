@@ -12,7 +12,7 @@ if sys.platform == 'win32':
     import logging
     from logging.handlers import RotatingFileHandler
 
-    SERVICE_NAME = "WCMSClient"
+    SERVICE_NAME = "WCMS-Client"
 
     def setup_install_logging():
         try:

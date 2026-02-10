@@ -153,7 +153,7 @@ def init_db(force=False):
     print("\n✅ 초기화 완료.")
     print("    관리자 ID: admin")
     print("    비밀번호 : admin")
-    print("    클라이언트 버전: 0.8.0"))
+    print("    클라이언트 버전: 0.8.0")
 
 def migrate_db(migration_file=None):
     """데이터베이스 마이그레이션 실행

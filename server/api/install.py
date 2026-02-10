@@ -189,22 +189,76 @@ if %errorLevel% equ 0 (
     timeout /t 5 >nul
 )
 
-REM Install new service with auto-start
-echo [INFO] Running install command...
-start /B "" "%INSTALL_DIR%\\WCMS-Client.exe" --startup auto install >nul 2>&1
-timeout /t 5 >nul
-echo [INFO] Checking service registration...
+REM Install service (pywin32 service)
+echo [INFO] Installing service...
+echo [DEBUG] Running: "%INSTALL_DIR%\\WCMS-Client.exe" install
+echo [INFO] Logging to: %CONFIG_DIR%\\install.log
+echo [INFO] Please wait, this may take up to 30 seconds...
+echo.
+
+REM Run service install with 30-second timeout using PowerShell
+powershell -Command "$process = Start-Process -FilePath '%INSTALL_DIR%\\WCMS-Client.exe' -ArgumentList 'install' -NoNewWindow -PassThru -RedirectStandardOutput '%CONFIG_DIR%\\install.log' -RedirectStandardError '%CONFIG_DIR%\\install.log'; $timeout = 30; if (-not $process.WaitForExit($timeout * 1000)) { Write-Host '[WARN] Installation timed out after 30 seconds'; $process.Kill(); exit 2 } else { exit $process.ExitCode }"
+set INSTALL_EXIT=%errorLevel%
+
+echo.
+echo [DEBUG] Install command completed with exit code: %INSTALL_EXIT%
+
+REM Show install.log contents
+if exist "%CONFIG_DIR%\\install.log" (
+    echo.
+    echo ========== Installation Log ==========
+    type "%CONFIG_DIR%\\install.log"
+    echo ======================================
+    echo.
+)
+
+if %INSTALL_EXIT% equ 2 (
+    echo [WARN] Service installation timed out after 30 seconds
+    echo.
+    echo The service may still be installing in the background.
+    echo Waiting 5 more seconds to check service status...
+    timeout /t 5 >nul
+) else if %INSTALL_EXIT% neq 0 (
+    echo [ERROR] Service installation failed with exit code %INSTALL_EXIT%
+    echo.
+    echo Check the log above for details.
+    echo Full log saved at: %CONFIG_DIR%\\install.log
+    echo.
+    echo Common issues:
+    echo   - pywin32 module not bundled in EXE
+    echo   - Missing DLL dependencies
+    echo   - Insufficient permissions
+    echo.
+    echo Try running the EXE directly to see more details:
+    echo   "%INSTALL_DIR%\\WCMS-Client.exe" install
+    echo.
+    pause
+    exit /b 1
+) else (
+    echo [INFO] Waiting for service registration...
+    timeout /t 5 >nul
+)
+
+REM Set service to auto-start
+echo [INFO] Configuring auto-start...
+sc config WCMS-Client start= auto
+if %errorLevel% neq 0 (
+    echo [WARN] Failed to configure auto-start
+)
 
 REM Verify service was installed
+echo [INFO] Checking service registration...
 sc query WCMS-Client >nul 2>&1
 if %errorLevel% neq 0 (
     echo [ERROR] Service installation failed - service not found
+    echo.
+    echo The executable ran but service was not registered.
     echo Check logs at: %CONFIG_DIR%\\logs\\
     echo.
     pause
     exit /b 1
 )
-echo [OK] Service installed (auto-start enabled)
+echo [OK] Service installed and registered (auto-start enabled)
 
 REM ====================================
 REM 9. Start Service
@@ -310,7 +364,26 @@ if (-not $isAdmin) {{
 Write-Host "[OK] 관리자 권한 확인" -ForegroundColor $SuccessColor
 
 # ====================================
-# 2. 서버 연결 및 최신 버전 조회
+# 2. PIN 입력 (v0.8.0)
+# ====================================
+Write-Host ""
+Write-Host "등록 PIN을 입력하세요." -ForegroundColor $InfoColor
+Write-Host "(관리자에게 6자리 PIN을 문의하세요)" -ForegroundColor $InfoColor
+Write-Host ""
+
+do {{
+    $Pin = Read-Host "Registration PIN (6 digits)"
+    
+    if ($Pin -notmatch '^[0-9]{{6}}$') {{
+        Write-Host "[ERROR] PIN은 정확히 6자리 숫자여야 합니다." -ForegroundColor $ErrorColor
+        Write-Host ""
+    }}
+}} while ($Pin -notmatch '^[0-9]{{6}}$')
+
+Write-Host "[OK] PIN 형식 확인: $Pin" -ForegroundColor $SuccessColor
+
+# ====================================
+# 3. 서버 연결 및 최신 버전 조회
 # ====================================
 Write-Host "[INFO] 서버에서 최신 버전 확인 중..." -ForegroundColor $InfoColor
 
@@ -378,20 +451,26 @@ try {{
 }}
 
 # ====================================
-# 6. config.json 생성
+# 6. config.json 생성 (v0.8.0 - PIN 포함)
 # ====================================
 Write-Host "[INFO] 설정 파일 생성 중..." -ForegroundColor $InfoColor
 
+# SERVER_URL 정규화 (끝에 / 추가)
+if (-not $ServerUrl.EndsWith('/')) {{
+    $ServerUrl = $ServerUrl + '/'
+}}
+
 $Config = @{{
     SERVER_URL = $ServerUrl
+    REGISTRATION_PIN = $Pin
     HEARTBEAT_INTERVAL = 300
-    POLL_TIMEOUT = 10
+    COMMAND_POLL_INTERVAL = 2
     LOG_LEVEL = "INFO"
 }} | ConvertTo-Json -Depth 10
 
 try {{
     Set-Content -Path "$ConfigDir\\config.json" -Value $Config -Encoding UTF8
-    Write-Host "[OK] 설정 파일 생성 완료" -ForegroundColor $SuccessColor
+    Write-Host "[OK] 설정 파일 생성 완료 (PIN 포함)" -ForegroundColor $SuccessColor
 }} catch {{
     Write-Host "[ERROR] 설정 파일 생성 실패" -ForegroundColor $ErrorColor
     Write-Host "오류 상세: $_" -ForegroundColor $ErrorColor
@@ -406,12 +485,12 @@ try {{
 Write-Host "[INFO] Windows 서비스 설치 중..." -ForegroundColor $InfoColor
 
 # 기존 서비스 확인 및 중지
-$existingService = Get-Service -Name "WCMSClient" -ErrorAction SilentlyContinue
+$existingService = Get-Service -Name "WCMS-Client" -ErrorAction SilentlyContinue
 if ($existingService) {{
     Write-Host "[INFO] 기존 서비스 감지. 중지 및 제거 중..." -ForegroundColor $InfoColor
     
     if ($existingService.Status -eq "Running") {{
-        Stop-Service -Name "WCMSClient" -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name "WCMS-Client" -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }}
     
@@ -421,10 +500,15 @@ if ($existingService) {{
 
 # 새 서비스 설치
 try {{
-    $installOutput = & "$InstallDir\\WCMS-Client.exe" --startup auto install 2>&1
+    $installOutput = & "$InstallDir\\WCMS-Client.exe" install 2>&1
     if ($LASTEXITCODE -ne 0) {{
         throw "서비스 설치 실패: $installOutput"
     }}
+    Start-Sleep -Seconds 2
+    
+    # Auto-start 설정
+    sc.exe config WCMS-Client start= auto | Out-Null
+    
     Write-Host "[OK] 서비스 설치 완료" -ForegroundColor $SuccessColor
 }} catch {{
     Write-Host "[ERROR] 서비스 설치 실패" -ForegroundColor $ErrorColor
@@ -439,11 +523,11 @@ try {{
 # ====================================
 Write-Host "[INFO] 서비스 시작 중..." -ForegroundColor $InfoColor
 try {{
-    Start-Service -Name "WCMSClient"
+    Start-Service -Name "WCMS-Client"
     Write-Host "[OK] 서비스 시작 완료" -ForegroundColor $SuccessColor
 }} catch {{
     Write-Host "[WARN] 서비스 시작 실패" -ForegroundColor $WarnColor
-    Write-Host "수동으로 시작하려면: Start-Service -Name 'WCMSClient'" -ForegroundColor $WarnColor
+    Write-Host "수동으로 시작하려면: Start-Service -Name 'WCMS-Client'" -ForegroundColor $WarnColor
     Write-Host ""
 }}
 
@@ -454,7 +538,7 @@ Write-Host ""
 Write-Host "[INFO] 설치 확인 중..." -ForegroundColor $InfoColor
 Start-Sleep -Seconds 2
 
-$Service = Get-Service -Name "WCMSClient" -ErrorAction SilentlyContinue
+$Service = Get-Service -Name "WCMS-Client" -ErrorAction SilentlyContinue
 if ($Service -and $Service.Status -eq "Running") {{
     Write-Host ""
     Write-Host "========================================" -ForegroundColor $SuccessColor
@@ -468,9 +552,9 @@ if ($Service -and $Service.Status -eq "Running") {{
     Write-Host "========================================" -ForegroundColor $SuccessColor
     Write-Host ""
     Write-Host "관리 명령:" -ForegroundColor $InfoColor
-    Write-Host "  상태 확인: Get-Service -Name 'WCMSClient'"
-    Write-Host "  중지: Stop-Service -Name 'WCMSClient'"
-    Write-Host "  시작: Start-Service -Name 'WCMSClient'"
+    Write-Host "  상태 확인: Get-Service -Name 'WCMS-Client'"
+    Write-Host "  중지: Stop-Service -Name 'WCMS-Client'"
+    Write-Host "  시작: Start-Service -Name 'WCMS-Client'"
     Write-Host "  제거: & '$InstallDir\\WCMS-Client.exe' remove"
     Write-Host "========================================" -ForegroundColor $InfoColor
     Write-Host ""
@@ -487,7 +571,7 @@ if ($Service -and $Service.Status -eq "Running") {{
     Write-Host ""
     Write-Host "[WARN] 서비스가 실행되지 않았습니다." -ForegroundColor $WarnColor
     Write-Host "다음 명령으로 수동 시작하세요:" -ForegroundColor $WarnColor
-    Write-Host "  Start-Service -Name 'WCMSClient'"
+    Write-Host "  Start-Service -Name 'WCMS-Client'"
     Write-Host ""
     Write-Host "로그 확인: $ConfigDir\\logs\\" -ForegroundColor $InfoColor
     Write-Host "========================================" -ForegroundColor $WarnColor
