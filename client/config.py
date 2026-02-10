@@ -160,7 +160,7 @@ USE_EXPONENTIAL_BACKOFF = os.getenv('WCMS_USE_EXPONENTIAL_BACKOFF', 'true').lowe
 # ==================== 버전 정보 ====================
 
 # 클라이언트 버전 (GitHub Actions에서 자동 교체)
-__version__ = "0.8.0"
+__version__ = "0.0.0-dev"
 
 
 # ==================== 시스템 프로세스 필터 ====================

@@ -10,11 +10,13 @@ WCMS 서버 메인 애플리케이션
 """
 import logging
 import sys
+import os
 from pathlib import Path
 
 from flask import Flask, render_template, redirect, url_for, session, request
 from flask_cors import CORS
 from flask_session import Session
+import cachelib
 
 # 프로젝트 루트 경로
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -34,7 +36,6 @@ logging.basicConfig(
 logger = logging.getLogger('wcms')
 
 # Flask 기본 로거 설정 (개발 시 환경변수 DEBUG=1 설정)
-import os
 if os.getenv('DEBUG') == '1':
     # 개발 모드: 모든 요청 로그 표시
     logging.getLogger('werkzeug').setLevel(logging.INFO)
@@ -55,8 +56,16 @@ def create_app(config_name='development'):
     # CORS 활성화
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-    # 세션 설정
-    app.config['SESSION_TYPE'] = 'filesystem'
+    # 세션 설정 (flask_session DeprecationWarning 해결)
+    # FileSystemSessionInterface 대신 cachelib 직접 사용
+    session_dir = os.path.join(app.root_path, 'flask_session')
+    if not os.path.exists(session_dir):
+        os.makedirs(session_dir)
+
+    app.config['SESSION_TYPE'] = 'cachelib'
+    app.config['SESSION_SERIALIZATION_FORMAT'] = 'json'
+    app.config['SESSION_CACHELIB'] = cachelib.FileSystemCache(threshold=500, cache_dir=session_dir)
+
     Session(app)
 
     # DB 초기화/정리

@@ -54,9 +54,11 @@ def collect_static_info() -> Optional[Dict[str, Any]]:
         ram = psutil.virtual_memory()
         ram_total_gb = round(ram.total / (1024 ** 3), 2)  # GB 단위, 소수점 2자리
 
-        # 디스크 정보 - GB 단위로 변경
+        # 디스크 정보 - GB 단위로 변경 (고정 디스크만)
         disk_info = {}
-        for partition in psutil.disk_partitions():
+        for partition in psutil.disk_partitions(all=False):
+            if 'fixed' not in partition.opts.lower():
+                continue
             try:
                 usage = psutil.disk_usage(partition.mountpoint)
                 disk_info[partition.device] = {
@@ -142,7 +144,7 @@ def collect_static_info() -> Optional[Dict[str, Any]]:
             "cpu_cores": cpu_cores,
             "cpu_threads": cpu_threads,
             "ram_total": ram_total_gb,  # GB 단위
-            "disk_info": json.dumps(disk_info),
+            "disk_info": disk_info,  # dict 그대로 전송 (이중 인코딩 방지)
             "os_edition": os_edition,
             "os_version": os_version
         }
@@ -162,9 +164,11 @@ def collect_dynamic_info() -> Optional[Dict[str, Any]]:
         ram_used_gb = round(ram.used / (1024 ** 3), 2)  # GB 단위
         ram_usage_percent = ram.percent
 
-        # 디스크 사용량 - GB 단위로 변경
+        # 디스크 사용량 - GB 단위로 변경 (고정 디스크만)
         disk_usage = {}
-        for partition in psutil.disk_partitions():
+        for partition in psutil.disk_partitions(all=False):
+            if 'fixed' not in partition.opts.lower():
+                continue
             try:
                 usage = psutil.disk_usage(partition.mountpoint)
                 disk_usage[partition.device] = {
@@ -209,11 +213,11 @@ def collect_dynamic_info() -> Optional[Dict[str, Any]]:
             "cpu_usage": cpu_usage,
             "ram_used": ram_used_gb,  # GB 단위
             "ram_usage_percent": ram_usage_percent,
-            "disk_usage": json.dumps(disk_usage),
+            "disk_usage": disk_usage,  # dict 그대로 전송 (이중 인코딩 방지)
             "ip_address": ip_address,
             "current_user": current_user,
             "uptime": uptime,
-            "processes": json.dumps(processes)
+            "processes": processes  # list 그대로 전송 (이중 인코딩 방지)
         }
     except Exception as e:
         print(f"[!] 동적 정보 수집 오류: {e}")
@@ -238,4 +242,3 @@ def collect_running_processes() -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"[!] 프로세스 목록 수집 오류: {e}")
         return []
-

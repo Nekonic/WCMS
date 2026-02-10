@@ -111,6 +111,8 @@ class CommandExecutor:
     @staticmethod
     def execute(command: str) -> str:
         """CMD 명령 실행"""
+        if not command:
+            return "오류: 실행할 명령어가 없습니다."
         try:
             result = subprocess.run(
                 command,

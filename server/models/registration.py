@@ -94,7 +94,10 @@ class RegistrationTokenModel:
             return (False, "PIN has been manually expired")
 
         # 시간 만료 체크
-        expires_at = datetime.fromisoformat(token_data['expires_at'])
+        expires_at = token_data['expires_at']
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+
         if datetime.now() > expires_at:
             return (False, "PIN expired")
 

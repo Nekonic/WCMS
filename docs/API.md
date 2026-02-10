@@ -348,6 +348,7 @@ Content-Type: application/json
 - `kill_process`: 프로세스 종료
 - `execute`: CMD 실행
 - `install`: 프로그램 설치
+- `download`: 파일 다운로드
 - `create_user`: 사용자 생성
 - `delete_user`: 사용자 삭제
 - `change_password`: 비밀번호 변경

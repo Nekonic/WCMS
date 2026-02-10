@@ -31,13 +31,14 @@ def get_install_cmd_script(server_url: str) -> str:
         server_url = server_url + '/'
 
     return f'''@echo off
-REM WCMS Client Auto-Install Script (v0.8.0)
+chcp 65001 >nul
+REM WCMS Client Auto-Install Script (v0.8.2)
 REM GitHub: https://github.com/{GITHUB_REPO}
 
 SETLOCAL EnableDelayedExpansion
 
 echo ========================================
-echo  WCMS Client Auto-Install (v0.8.0)
+echo  WCMS Client Auto-Install (v0.8.2)
 echo ========================================
 echo.
 
@@ -190,56 +191,42 @@ if %errorLevel% equ 0 (
 )
 
 REM Install service (pywin32 service)
-echo [INFO] Installing service...
-echo [DEBUG] Running: "%INSTALL_DIR%\\WCMS-Client.exe" install
-echo [INFO] Logging to: %CONFIG_DIR%\\install.log
-echo [INFO] Please wait, this may take up to 30 seconds...
+echo [INFO] Installing Windows service...
+echo [DEBUG] Executing: "%INSTALL_DIR%\\WCMS-Client.exe" install
+echo [INFO] Maximum wait time: 10 seconds
 echo.
 
-REM Run service install with 30-second timeout using PowerShell
-powershell -Command "$process = Start-Process -FilePath '%INSTALL_DIR%\\WCMS-Client.exe' -ArgumentList 'install' -NoNewWindow -PassThru -RedirectStandardOutput '%CONFIG_DIR%\\install.log' -RedirectStandardError '%CONFIG_DIR%\\install.log'; $timeout = 30; if (-not $process.WaitForExit($timeout * 1000)) { Write-Host '[WARN] Installation timed out after 30 seconds'; $process.Kill(); exit 2 } else { exit $process.ExitCode }"
-set INSTALL_EXIT=%errorLevel%
+REM Create logs directory
+if not exist "%CONFIG_DIR%\\logs" mkdir "%CONFIG_DIR%\\logs"
+
+REM Use PowerShell to run with timeout and kill if hung
+powershell -Command "& {{ $job = Start-Job -ScriptBlock {{ & '%INSTALL_DIR%\\WCMS-Client.exe' install 2>&1 }}; $completed = Wait-Job $job -Timeout 10; if ($completed) {{ Receive-Job $job; Remove-Job $job }} else {{ Write-Host '[WARN] Installation timed out after 10 seconds, stopping process...'; Stop-Job $job; Remove-Job $job; Get-Process 'WCMS-Client' -ErrorAction SilentlyContinue | Stop-Process -Force }}}}"
 
 echo.
-echo [DEBUG] Install command completed with exit code: %INSTALL_EXIT%
+echo [INFO] Installation command completed or timed out
+echo [INFO] Waiting for service registration...
+timeout /t 2 >nul
 
-REM Show install.log contents
-if exist "%CONFIG_DIR%\\install.log" (
+REM Check if service was actually registered
+echo [INFO] Checking service registration...
+sc query WCMS-Client >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Service not registered
     echo.
-    echo ========== Installation Log ==========
-    type "%CONFIG_DIR%\\install.log"
-    echo ======================================
+    echo The installation command above should show the actual error.
+    echo If you see "ModuleNotFoundError" or "ImportError", the EXE
+    echo was not built correctly with pywin32 dependencies.
     echo.
-)
-
-if %INSTALL_EXIT% equ 2 (
-    echo [WARN] Service installation timed out after 30 seconds
-    echo.
-    echo The service may still be installing in the background.
-    echo Waiting 5 more seconds to check service status...
-    timeout /t 5 >nul
-) else if %INSTALL_EXIT% neq 0 (
-    echo [ERROR] Service installation failed with exit code %INSTALL_EXIT%
-    echo.
-    echo Check the log above for details.
-    echo Full log saved at: %CONFIG_DIR%\\install.log
-    echo.
-    echo Common issues:
-    echo   - pywin32 module not bundled in EXE
-    echo   - Missing DLL dependencies
-    echo   - Insufficient permissions
-    echo.
-    echo Try running the EXE directly to see more details:
-    echo   "%INSTALL_DIR%\\WCMS-Client.exe" install
+    echo Please check:
+    echo   1. Install log: %CONFIG_DIR%\\logs\\install.log
+    echo   2. Rebuild with: python manage.py build
     echo.
     pause
     exit /b 1
-) else (
-    echo [INFO] Waiting for service registration...
-    timeout /t 5 >nul
 )
 
-REM Set service to auto-start
+echo [OK] Service successfully registered!
+echo.
 echo [INFO] Configuring auto-start...
 sc config WCMS-Client start= auto
 if %errorLevel% neq 0 (
@@ -270,23 +257,20 @@ set START_EXIT=%errorLevel%
 if %START_EXIT% neq 0 (
     echo [WARN] Service start failed ^(exit code: %START_EXIT%^)
     echo.
-    echo Common causes:
-    echo   - Invalid PIN (check with administrator)
-    echo   - Service crashes on startup
-    echo   - Config file issues
-    echo   - Missing dependencies
+    echo This is OK - the service will start automatically on next boot.
+    echo The service is configured to auto-start.
     echo.
-    echo To troubleshoot:
-    echo   1. Check logs: %CONFIG_DIR%\\logs\\
-    echo   2. Verify PIN: %PIN%
-    echo   3. Try manual start: net start WCMS-Client
-    echo   4. Check service status: sc query WCMS-Client
+    echo To manually start now:
+    echo   net start WCMS-Client
     echo.
-    pause
-    exit /b 1
+    echo To check service status:
+    echo   sc query WCMS-Client
+    echo.
+    echo Installation will continue...
+    timeout /t 3 >nul
+) else (
+    echo [OK] Service started successfully
 )
-
-echo [OK] Service started successfully
 
 REM ====================================
 REM 10. Installation Complete
@@ -303,6 +287,27 @@ echo Server URL: %CONFIG_URL%
 echo Registration PIN: %PIN%
 echo Polling Interval: 2 seconds
 echo.
+
+REM Show log files for troubleshooting
+echo ========== Log Files ==========
+if exist "%CONFIG_DIR%\\logs\\install.log" (
+    echo.
+    echo [install.log]
+    powershell -Command "Get-Content '%CONFIG_DIR%\\logs\\install.log' -Encoding UTF8 -ErrorAction SilentlyContinue"
+)
+if exist "%CONFIG_DIR%\\logs\\installer.log" (
+    echo.
+    echo [installer.log]
+    powershell -Command "Get-Content '%CONFIG_DIR%\\logs\\installer.log' -Encoding UTF8 -ErrorAction SilentlyContinue"
+)
+if exist "%CONFIG_DIR%\\logs\\client.log" (
+    echo.
+    echo [client.log - last 30 lines]
+    powershell -Command "Get-Content '%CONFIG_DIR%\\logs\\client.log' -Encoding UTF8 -Tail 30 -ErrorAction SilentlyContinue"
+)
+echo ==============================
+echo.
+
 echo The service is now running and will:
 echo   - Register with server using PIN
 echo   - Send heartbeat every 5 minutes
@@ -313,7 +318,7 @@ echo To check service status:
 echo   sc query WCMS-Client
 echo.
 echo To view logs:
-echo   type "%CONFIG_DIR%\\logs\\wcms.log"
+echo   type "%CONFIG_DIR%\\logs\\client.log"
 echo.
 pause
 
@@ -670,4 +675,3 @@ def get_version():
     # (중복 코드 방지)
     from flask import redirect, url_for
     return redirect(url_for('client.get_version'))
-

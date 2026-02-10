@@ -67,6 +67,12 @@ def check_for_updates():
 @retry_on_network_error(max_retries=3, delay=5)
 def register_client():
     """서버에 클라이언트 정보를 등록 (v0.8.0 - PIN 인증)"""
+    # 등록 플래그 파일 확인 추가
+    registered_flag = os.path.join(os.path.dirname(LOG_DIR), 'registered.flag')
+    if os.path.exists(registered_flag):
+        logger.info("이미 등록된 PC입니다 (registered.flag 존재)")
+        return True
+
     static_info = collect_static_info()
     if not static_info:
         logger.warning("정적 정보 수집 실패, 등록할 수 없습니다.")
@@ -96,6 +102,11 @@ def register_client():
         if r and r.status_code == 200:
             result = r.json()
             logger.info(f"등록 성공: {result.get('message')}")
+            try:
+                with open(registered_flag, 'w') as f:
+                    f.write(f"Registered at {datetime.now().isoformat()}\n")
+            except:
+                pass
             return True
         elif r and r.status_code == 403:
             # PIN 검증 실패
@@ -111,6 +122,11 @@ def register_client():
             msg = r.json().get('message', '')
             if "이미 등록된 PC" in msg:
                 logger.info("이미 등록된 PC입니다. Heartbeat를 시작합니다.")
+                try:
+                    with open(registered_flag, 'w') as f:
+                        f.write(f"Registered at {datetime.now().isoformat()}\n")
+                except:
+                    pass
                 return True
             else:
                 logger.error(f"등록 실패: {r.status_code} - {r.text}")
@@ -141,6 +157,13 @@ def send_heartbeat():
             return True
         elif r and r.status_code == 404:
             logger.warning("Heartbeat 실패: 서버에 등록되지 않은 PC입니다. 재등록을 시도합니다.")
+            # 등록 플래그 삭제하여 재등록 유도
+            registered_flag = os.path.join(os.path.dirname(LOG_DIR), 'registered.flag')
+            if os.path.exists(registered_flag):
+                try:
+                    os.remove(registered_flag)
+                except:
+                    pass
             register_client()
             return False
         else:

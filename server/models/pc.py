@@ -84,7 +84,14 @@ class PCModel:
         pc_id = cursor.lastrowid
 
         # pc_specs 삽입
-        disk_info_str = json.dumps(disk_info) if disk_info else '{}'
+        # disk_info가 이미 JSON 문자열이면 그대로, dict면 변환
+        if isinstance(disk_info, str):
+            disk_info_str = disk_info
+        elif isinstance(disk_info, dict):
+            disk_info_str = json.dumps(disk_info)
+        else:
+            disk_info_str = '{}'
+
         db.execute('''
             INSERT INTO pc_specs (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info, os_edition, os_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -130,8 +137,14 @@ class PCModel:
             ''', (hostname, ip_address, mac_address, pc_id))
 
             # pc_specs 업데이트
-            disk_info_str = json.dumps(disk_info) if disk_info else '{}'
-            
+            # disk_info가 이미 JSON 문자열이면 그대로, dict면 변환
+            if isinstance(disk_info, str):
+                disk_info_str = disk_info
+            elif isinstance(disk_info, dict):
+                disk_info_str = json.dumps(disk_info)
+            else:
+                disk_info_str = '{}'
+
             # pc_specs가 존재하는지 확인
             specs_exist = db.execute('SELECT 1 FROM pc_specs WHERE pc_id=?', (pc_id,)).fetchone()
             
@@ -192,8 +205,21 @@ class PCModel:
             ''', (pc_id,))
 
             # pc_dynamic_info 업데이트 (UNIQUE pc_id 제약으로 최신 상태만 유지)
-            disk_usage_str = json.dumps(disk_usage) if disk_usage else '{}'
-            processes_str = json.dumps(processes) if processes else '[]'
+            # disk_usage가 이미 JSON 문자열이면 그대로, dict면 변환
+            if isinstance(disk_usage, str):
+                disk_usage_str = disk_usage
+            elif isinstance(disk_usage, dict):
+                disk_usage_str = json.dumps(disk_usage)
+            else:
+                disk_usage_str = '{}'
+
+            # processes가 이미 JSON 문자열이면 그대로, list면 변환
+            if isinstance(processes, str):
+                processes_str = processes
+            elif isinstance(processes, list):
+                processes_str = json.dumps(processes)
+            else:
+                processes_str = '[]'
 
             db.execute('''
                 INSERT OR REPLACE INTO pc_dynamic_info 
@@ -281,7 +307,72 @@ class PCModel:
             pc['os_edition'] = specs['os_edition']
             pc['os_version'] = specs['os_version']
 
-        # disk_info_parsed 생성 (정적 disk_info + 동적 disk_usage 병합)
+        # disk_info_parsed 생성
+        pc = PCModel.get_disk_info_parsed(pc)
+
+        return pc
+
+    @staticmethod
+    def update_dynamic_info(pc_id: int, dynamic_data: Dict[str, Any]) -> bool:
+        """동적 정보 업데이트 (등록 시 또는 하트비트 시)
+
+        Args:
+            pc_id: PC ID
+            dynamic_data: 동적 정보 딕셔너리
+                - cpu_usage: CPU 사용률
+                - ram_used: RAM 사용량 (GB)
+                - ram_usage_percent: RAM 사용률
+                - disk_usage: 디스크 사용량 (JSON string)
+                - current_user: 현재 로그인 사용자
+                - uptime: 가동 시간 (초)
+                - processes: 실행 중인 프로세스 (JSON string)
+
+        Returns:
+            성공 여부
+        """
+        try:
+            db = get_db()
+
+            # JSON 데이터 처리 (이미 JSON 문자열이면 그대로, dict/list면 변환)
+            disk_usage = dynamic_data.get('disk_usage')
+            if isinstance(disk_usage, dict):
+                disk_usage = json.dumps(disk_usage)
+            elif not isinstance(disk_usage, str):
+                disk_usage = '{}'
+
+            processes = dynamic_data.get('processes')
+            if isinstance(processes, list):
+                processes = json.dumps(processes)
+            elif not isinstance(processes, str):
+                processes = '[]'
+
+            # INSERT OR REPLACE (UNIQUE pc_id 제약 활용)
+            db.execute('''
+                INSERT OR REPLACE INTO pc_dynamic_info 
+                (pc_id, cpu_usage, ram_used, ram_usage_percent, disk_usage, current_user, uptime, processes, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (
+                pc_id,
+                dynamic_data.get('cpu_usage', 0.0),
+                dynamic_data.get('ram_used', 0.0),
+                dynamic_data.get('ram_usage_percent', 0.0),
+                disk_usage,
+                dynamic_data.get('current_user'),
+                dynamic_data.get('uptime', 0),
+                processes
+            ))
+
+            db.commit()
+            return True
+        except Exception as e:
+            import logging
+            logger = logging.getLogger('wcms.pc_model')
+            logger.error(f"동적 정보 업데이트 실패: pc_id={pc_id}, error={e}", exc_info=True)
+            return False
+
+    @staticmethod
+    def get_disk_info_parsed(pc: Dict[str, Any]) -> Dict[str, Any]:
+        """disk_info_parsed 생성 (정적 disk_info + 동적 disk_usage 병합)"""
         disk_info_parsed = {}
         try:
             # disk_info 파싱 (정적 정보: total_gb, fstype, mountpoint)
@@ -327,4 +418,3 @@ class PCModel:
             return True
         except Exception:
             return False
-

@@ -133,27 +133,14 @@ if sys.platform == 'win32':
             # 명시적 관리 명령 전달 (install/start/stop/remove/status ...)
             win32serviceutil.HandleCommandLine(WCMSClientService)
         else:
-            # 인자 없이 실행되면: 관리자 권한 확인 후 서비스 자동 설치/시작
-            if not is_admin():
-                logger.error('관리자 권한이 필요합니다. EXE를 우클릭 후 "관리자 권한으로 실행"을 선택하세요.')
-                sys.exit(1)
-            try:
-                exe = sys.executable  # 현재 실행 중인 EXE
-                if not is_service_installed():
-                    logger.info('서비스가 설치되어 있지 않습니다. 자동으로 설치합니다...')
-                    # 설치 (자동 시작)
-                    subprocess.check_call([exe, '--startup', 'auto', 'install'])
-                    logger.info('서비스 설치 완료')
-                # 시작
-                logger.info('서비스를 시작합니다...')
-                subprocess.check_call([exe, 'start'])
-                logger.info('서비스 시작 완료. 백그라운드에서 동작하며, 재부팅 시 자동 시작됩니다.')
-            except subprocess.CalledProcessError as e:
-                logger.error(f'서비스 설치/시작 실패: {e}')
-                sys.exit(e.returncode or 1)
-            except Exception as e:
-                logger.error(f'예상치 못한 오류: {e}')
-                sys.exit(1)
+            # 인자 없이 실행되면: 사용법 출력 후 종료 (중복 실행 방지)
+            logger.error('사용법: WCMS-Client.exe [install|start|stop|remove]')
+            print('\n사용법: WCMS-Client.exe [install|start|stop|remove|restart]')
+            print('  install - 서비스 설치')
+            print('  start   - 서비스 시작')
+            print('  stop    - 서비스 중지')
+            print('  remove  - 서비스 제거')
+            sys.exit(1)
 else:
     if __name__ == '__main__':
         print('WCMS Client Service는 Windows에서만 지원됩니다.')

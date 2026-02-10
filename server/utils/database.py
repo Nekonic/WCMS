@@ -3,8 +3,22 @@
 DB 연결 관리 및 쿼리 헬퍼 함수
 """
 import sqlite3
+import datetime
 from flask import g
 from typing import Optional, List, Dict, Any, Union
+
+
+# Python 3.12+ 호환성을 위한 datetime 어댑터 등록
+def adapt_datetime(val):
+    """datetime 객체를 ISO 포맷 문자열로 변환"""
+    return val.isoformat(" ")
+
+def convert_datetime(val):
+    """ISO 포맷 문자열을 datetime 객체로 변환"""
+    return datetime.datetime.fromisoformat(val.decode())
+
+sqlite3.register_adapter(datetime.datetime, adapt_datetime)
+sqlite3.register_converter("timestamp", convert_datetime)
 
 
 class DatabaseManager:
@@ -21,6 +35,7 @@ class DatabaseManager:
             g.db = sqlite3.connect(
                 self.db_path,
                 timeout=self.timeout,
+                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
                 check_same_thread=False,
                 isolation_level=None  # autocommit 모드 (성능 향상)
             )
@@ -159,4 +174,3 @@ def dicts_from_rows(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
         딕셔너리 리스트
     """
     return [dict(row) for row in rows]
-
