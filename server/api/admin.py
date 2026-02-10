@@ -1040,3 +1040,40 @@ def send_kill_process_command(pc_id: int):
             'message': str(e)
         }), 500
 
+
+@admin_bp.route('/admin/processes', methods=['GET'])
+@require_admin
+def get_all_processes():
+    """수집된 모든 프로세스 목록 조회 (중복 제거)"""
+    db = get_db()
+    try:
+        # 최근 1시간 내에 업데이트된 PC들의 프로세스 목록 조회
+        rows = db.execute('''
+            SELECT processes 
+            FROM pc_dynamic_info 
+            WHERE processes IS NOT NULL 
+              AND processes != '[]'
+              AND datetime(updated_at) > datetime('now', '-1 hour')
+        ''').fetchall()
+
+        all_processes = set()
+        for row in rows:
+            try:
+                proc_list = json.loads(row['processes'])
+                if isinstance(proc_list, list):
+                    all_processes.update(proc_list)
+            except:
+                pass
+
+        return jsonify({
+            'status': 'success',
+            'total': len(all_processes),
+            'processes': sorted(list(all_processes))
+        }), 200
+
+    except Exception as e:
+        logger.error(f"프로세스 목록 조회 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500

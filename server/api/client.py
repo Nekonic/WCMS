@@ -163,17 +163,12 @@ def heartbeat():
             uptime=info.get('uptime', 0),
             processes=info.get('processes')
         )
-    # 경량 하트비트: CPU, RAM만 저장
+    # 경량 하트비트: CPU, RAM만 저장 (기존 값 유지)
     else:
-        success = PCModel.update_heartbeat(
+        success = PCModel.update_light_heartbeat(
             pc_id=pc_id,
             cpu_usage=info.get('cpu_usage', 0),
-            ram_used=info.get('ram_used', 0),
-            ram_usage_percent=info.get('ram_usage_percent', 0),
-            disk_usage=None,
-            current_user=None,
-            uptime=info.get('uptime', 0),
-            processes=None
+            ram_usage_percent=info.get('ram_usage_percent', 0)
         )
 
     if success:
@@ -287,16 +282,15 @@ def poll_commands():
                 'UPDATE pc_info SET ip_address=?, last_seen=CURRENT_TIMESTAMP WHERE id=?',
                 (ip_address, pc_id)
             )
+            db.commit()
 
-        # CPU/RAM 업데이트 (pc_dynamic_info)
+        # CPU/RAM 업데이트 (pc_dynamic_info) - 부분 업데이트 사용
         if cpu_usage is not None or ram_usage is not None:
-            db.execute('''
-                INSERT OR REPLACE INTO pc_dynamic_info 
-                (pc_id, cpu_usage, ram_used, ram_usage_percent, uptime, disk_usage, current_user, processes, updated_at)
-                VALUES (?, ?, 0, ?, 0, '{}', NULL, '[]', CURRENT_TIMESTAMP)
-            ''', (pc_id, cpu_usage or 0, ram_usage or 0))
-
-        db.commit()
+            PCModel.update_light_heartbeat(
+                pc_id=pc_id,
+                cpu_usage=cpu_usage or 0,
+                ram_usage_percent=ram_usage or 0
+            )
 
     # 대기 중인 명령 조회
     commands = CommandModel.get_pending_for_pc(pc_id)

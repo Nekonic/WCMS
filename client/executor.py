@@ -41,10 +41,11 @@ class CommandExecutor:
                 command_data.get('command', '')
             ),
             'install': lambda: CommandExecutor.install(
-                command_data.get('app_name', '')
+                command_data.get('app_id', '')  # app_name -> app_id로 변경
             ),
             'download': lambda: CommandExecutor.download(
-                command_data.get('url', '')
+                command_data.get('url', ''),
+                command_data.get('destination') # destination 파라미터 추가
             ),
             'create_user': lambda: CommandExecutor.create_user(**command_data),
             'delete_user': lambda: CommandExecutor.delete_user(
@@ -128,8 +129,10 @@ class CommandExecutor:
             return f"실행 실패: {str(e)}"
 
     @staticmethod
-    def install(app_name: str) -> str:
+    def install(app_id: str) -> str:
         """프로그램 설치 (winget)"""
+        if not app_id:
+            return "오류: 설치할 프로그램의 App ID가 필요합니다."
         try:
             # winget이 설치되어 있는지 확인
             check_result = subprocess.run(
@@ -145,7 +148,7 @@ class CommandExecutor:
 
             # winget으로 설치 (자동 동의 옵션 포함)
             result = subprocess.run(
-                f'winget install -e --id {app_name} --silent --accept-package-agreements --accept-source-agreements',
+                f'winget install -e --id {app_id} --silent --accept-package-agreements --accept-source-agreements',
                 shell=True,
                 capture_output=True,
                 text=True,
@@ -153,39 +156,42 @@ class CommandExecutor:
             )
 
             if result.returncode == 0:
-                return f"설치 완료: {app_name}"
+                return f"설치 완료: {app_id}"
             else:
-                return f"설치 실패: {app_name} (반환 코드: {result.returncode})"
+                return f"설치 실패: {app_id} (반환 코드: {result.returncode})"
         except subprocess.TimeoutExpired:
-            return f"설치 타임아웃: {app_name} (5분 초과)"
+            return f"설치 타임아웃: {app_id} (5분 초과)"
         except Exception as e:
             return f"설치 실패: {str(e)}"
 
     @staticmethod
-    def download(url: str) -> str:
+    def download(url: str, destination: str = None) -> str:
         """파일 다운로드"""
+        if not url:
+            return "오류: 다운로드할 파일의 URL이 필요합니다."
         try:
             import requests
             import os
 
-            # 파일명 추출
-            filename = url.split('/')[-1] or 'downloaded_file'
-            save_path = os.path.join(os.path.expanduser('~'), 'Downloads', filename)
-
-            # Downloads 디렉토리 생성
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            # 저장 경로 설정
+            if destination:
+                save_path = destination
+                # 디렉토리 생성
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            else:
+                # 파일명 추출
+                filename = url.split('/')[-1] or 'downloaded_file'
+                downloads_folder = os.path.join(os.path.expanduser('~'), 'Downloads')
+                os.makedirs(downloads_folder, exist_ok=True)
+                save_path = os.path.join(downloads_folder, filename)
 
             response = requests.get(url, stream=True, timeout=60)
             response.raise_for_status()
-
-            total_size = int(response.headers.get('content-length', 0))
-            downloaded = 0
 
             with open(save_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
-                        downloaded += len(chunk)
 
             actual_size = os.path.getsize(save_path)
             return f"다운로드 완료: {save_path} ({actual_size:,} bytes)"

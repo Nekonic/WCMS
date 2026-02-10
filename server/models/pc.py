@@ -233,6 +233,54 @@ class PCModel:
             return False
 
     @staticmethod
+    def update_light_heartbeat(pc_id: int, cpu_usage: float, ram_usage_percent: float) -> bool:
+        """경량 하트비트 업데이트 (CPU, RAM만 업데이트, 나머지는 유지)"""
+        try:
+            db = get_db()
+
+            # pc_info 업데이트
+            db.execute('''
+                UPDATE pc_info 
+                SET is_online=1, last_seen=CURRENT_TIMESTAMP
+                WHERE id=?
+            ''', (pc_id,))
+
+            # pc_dynamic_info 업데이트 (부분 업데이트)
+            # 1. UPDATE 시도
+            cursor = db.execute('''
+                UPDATE pc_dynamic_info 
+                SET cpu_usage=?, ram_usage_percent=?, updated_at=CURRENT_TIMESTAMP
+                WHERE pc_id=?
+            ''', (cpu_usage, ram_usage_percent, pc_id))
+
+            # 2. 업데이트된 행이 없으면 INSERT (최초 하트비트인 경우)
+            if cursor.rowcount == 0:
+                # 초기 disk_usage를 pc_specs에서 가져와 생성
+                specs = db.execute('SELECT disk_info FROM pc_specs WHERE pc_id=?', (pc_id,)).fetchone()
+                initial_disk_usage = {}
+                if specs and specs['disk_info']:
+                    try:
+                        disk_info_data = json.loads(specs['disk_info'])
+                        for dev in disk_info_data:
+                            initial_disk_usage[dev] = {"used_gb": 0, "free_gb": 0, "percent": 0}
+                    except:
+                        pass
+                
+                db.execute('''
+                    INSERT INTO pc_dynamic_info 
+                    (pc_id, cpu_usage, ram_used, ram_usage_percent, disk_usage, current_user, uptime, processes, updated_at)
+                    VALUES (?, ?, 0, ?, ?, NULL, 0, '[]', CURRENT_TIMESTAMP)
+                ''', (pc_id, cpu_usage, ram_usage_percent, json.dumps(initial_disk_usage)))
+
+            db.commit()
+            return True
+        except Exception as e:
+            import logging
+            logger = logging.getLogger('wcms.pc_model')
+            logger.error(f"경량 하트비트 업데이트 실패: {e}")
+            return False
+
+    @staticmethod
     def set_offline(pc_id: int) -> bool:
         """PC를 오프라인으로 설정"""
         try:

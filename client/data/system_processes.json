@@ -69,6 +69,7 @@
   "PickerHost.exe",
   "Widgets.exe",
   "WidgetService.exe",
+  "MicrosoftEdgeUpdate.exe",
   "PhoneExperienceHost.exe",
   "YourPhone.exe",
   "ProcessWindowsTerminal",
@@ -78,6 +79,7 @@
   "SearchProtocolHost.exe",
   "PresentationFontCache.exe",
   "MoNotificationUx.exe",
+  "MpDefenderCoreService.exe",
   "CrossDeviceService.exe",
   "AggregatorHost.exe",
   "Taskmgr.exe",
@@ -87,6 +89,7 @@
   "vmnetdhcp.exe",
   "vmware-authd.exe",
   "vmware-usbarbitrator64.exe",
+  "VSSVC.exe",
   "msedge.exe",
   "msedgewebview2.exe"
 ]
