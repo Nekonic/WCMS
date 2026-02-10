@@ -16,6 +16,23 @@ CREATE TABLE admins (
 CREATE INDEX idx_admins_username ON admins(username);
 CREATE INDEX idx_admins_active ON admins(is_active);
 
+-- ==================== 등록 토큰 (v0.8.0 PIN 인증) ====================
+CREATE TABLE pc_registration_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT UNIQUE NOT NULL,
+    usage_type TEXT NOT NULL DEFAULT 'single',
+    expires_in INTEGER NOT NULL DEFAULT 600,
+    is_expired BOOLEAN DEFAULT 0,
+    used_count INTEGER DEFAULT 0,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_registration_tokens_token ON pc_registration_tokens(token);
+CREATE INDEX idx_registration_tokens_expires ON pc_registration_tokens(expires_at);
+CREATE INDEX idx_registration_tokens_created_by ON pc_registration_tokens(created_by);
+
 -- ==================== PC 기본 정보 ====================
 CREATE TABLE pc_info (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,12 +45,17 @@ CREATE TABLE pc_info (
     is_online BOOLEAN DEFAULT 0,
     last_seen TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- v0.8.0: PIN 인증 시스템
+    is_verified BOOLEAN DEFAULT 0,
+    registered_with_token TEXT,
+    verified_at TIMESTAMP
 );
 
 CREATE INDEX idx_pc_info_machine_id ON pc_info(machine_id);
 CREATE INDEX idx_pc_info_room ON pc_info(room_name, is_online);
 CREATE INDEX idx_pc_info_online ON pc_info(is_online, last_seen DESC);
+CREATE INDEX idx_pc_info_verified ON pc_info(is_verified);  -- v0.8.0
 
 -- ==================== PC 하드웨어 스펙 (정적 정보) ====================
 -- 거의 변하지 않는 정보 - 1회만 저장
@@ -56,9 +78,9 @@ CREATE INDEX idx_pc_specs_pc_id ON pc_specs(pc_id);
 
 -- ==================== PC 동적 상태 (자주 변하는 정보만) ====================
 -- 10분마다 수집되는 정보
-CREATE TABLE pc_status (
+CREATE TABLE pc_dynamic_info (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pc_id INTEGER NOT NULL,
+    pc_id INTEGER UNIQUE NOT NULL,
     cpu_usage REAL NOT NULL,         -- 0.0 ~ 100.0
     ram_used REAL NOT NULL,          -- GB 단위 (소수점)
     ram_usage_percent REAL NOT NULL, -- 0.0 ~ 100.0
@@ -66,24 +88,16 @@ CREATE TABLE pc_status (
     current_user TEXT,
     uptime INTEGER NOT NULL,         -- 초 단위
     processes TEXT,                  -- JSON: ["chrome.exe", "Code.exe"]
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (pc_id) REFERENCES pc_info(id) ON DELETE CASCADE
 );
 
 -- 파티셔닝 대신 인덱스로 최적화
-CREATE INDEX idx_pc_status_pc_id_time ON pc_status(pc_id, created_at DESC);
-CREATE INDEX idx_pc_status_created_at ON pc_status(created_at DESC);
-
--- 오래된 데이터 자동 삭제 트리거 (옵션: 3개월 이상 데이터)
-CREATE TRIGGER cleanup_old_status
-AFTER INSERT ON pc_status
-BEGIN
-    DELETE FROM pc_status
-    WHERE created_at < datetime('now', '-3 months');
-END;
+CREATE INDEX idx_pc_dynamic_info_pc_id ON pc_dynamic_info(pc_id);
+CREATE INDEX idx_pc_dynamic_info_updated ON pc_dynamic_info(updated_at DESC);
 
 -- ==================== 명령 큐 (최적화) ====================
-CREATE TABLE pc_command (
+CREATE TABLE commands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pc_id INTEGER NOT NULL,
     admin_username TEXT,             -- 명령을 내린 관리자
@@ -103,17 +117,17 @@ CREATE TABLE pc_command (
 );
 
 -- 복합 인덱스로 쿼리 최적화
-CREATE INDEX idx_pc_command_pending ON pc_command(pc_id, status, priority DESC, created_at ASC)
+CREATE INDEX idx_commands_pending ON commands(pc_id, status, priority DESC, created_at ASC)
     WHERE status = 'pending';
-CREATE INDEX idx_pc_command_pc_status ON pc_command(pc_id, status, created_at DESC);
-CREATE INDEX idx_pc_command_admin ON pc_command(admin_username, created_at DESC);
+CREATE INDEX idx_commands_pc_status ON commands(pc_id, status, created_at DESC);
+CREATE INDEX idx_commands_admin ON commands(admin_username, created_at DESC);
 
 -- 완료된 명령 자동 아카이브 (30일 후)
 CREATE TRIGGER archive_completed_commands
-AFTER UPDATE ON pc_command
+AFTER UPDATE ON commands
 WHEN NEW.status IN ('completed', 'error')
 BEGIN
-    DELETE FROM pc_command
+    DELETE FROM commands
     WHERE id = NEW.id
     AND completed_at < datetime('now', '-30 days');
 END;
@@ -210,9 +224,21 @@ BEGIN
     UPDATE seat_map SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
--- PC 온라인 상태 자동 업데이트
-CREATE TRIGGER update_pc_online_status
-AFTER INSERT ON pc_status
+-- PC 온라인 상태 자동 업데이트 (INSERT)
+CREATE TRIGGER update_pc_online_status_insert
+AFTER INSERT ON pc_dynamic_info
+FOR EACH ROW
+BEGIN
+    UPDATE pc_info
+    SET is_online = 1,
+        last_seen = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.pc_id;
+END;
+
+-- PC 온라인 상태 자동 업데이트 (UPDATE)
+CREATE TRIGGER update_pc_online_status_update
+AFTER UPDATE ON pc_dynamic_info
 FOR EACH ROW
 BEGIN
     UPDATE pc_info
@@ -224,22 +250,22 @@ END;
 
 -- 명령 실행 시작 시 started_at 자동 설정
 CREATE TRIGGER set_command_started_at
-AFTER UPDATE ON pc_command
+AFTER UPDATE ON commands
 FOR EACH ROW
 WHEN NEW.status = 'executing' AND OLD.status = 'pending'
 BEGIN
-    UPDATE pc_command
+    UPDATE commands
     SET started_at = CURRENT_TIMESTAMP
     WHERE id = NEW.id;
 END;
 
 -- 명령 완료 시 completed_at 자동 설정
 CREATE TRIGGER set_command_completed_at
-AFTER UPDATE ON pc_command
+AFTER UPDATE ON commands
 FOR EACH ROW
 WHEN NEW.status IN ('completed', 'error') AND OLD.status != NEW.status
 BEGIN
-    UPDATE pc_command
+    UPDATE commands
     SET completed_at = CURRENT_TIMESTAMP
     WHERE id = NEW.id;
 END;
@@ -259,18 +285,9 @@ SELECT
     ps.cpu_usage,
     ps.ram_usage_percent,
     ps.current_user,
-    ps.created_at as status_updated_at
+    ps.updated_at as status_updated_at
 FROM pc_info pi
-LEFT JOIN (
-    SELECT
-        pc_id,
-        cpu_usage,
-        ram_usage_percent,
-        current_user,
-        created_at,
-        ROW_NUMBER() OVER (PARTITION BY pc_id ORDER BY created_at DESC) as rn
-    FROM pc_status
-) ps ON pi.id = ps.pc_id AND ps.rn = 1;
+LEFT JOIN pc_dynamic_info ps ON pi.id = ps.pc_id;
 
 -- 2. 전체 뷰: 상세 페이지용
 CREATE VIEW v_pc_status_full AS
@@ -304,18 +321,10 @@ SELECT
     status.current_user,
     status.uptime,
     status.processes,
-    status.created_at as status_updated_at
+    status.updated_at as status_updated_at
 FROM pc_info pi
 LEFT JOIN pc_specs specs ON pi.id = specs.pc_id
-LEFT JOIN (
-    SELECT
-        pc_id,
-        cpu_usage, ram_used, ram_usage_percent,
-        disk_usage, current_user, uptime, processes,
-        created_at,
-        ROW_NUMBER() OVER (PARTITION BY pc_id ORDER BY created_at DESC) as rn
-    FROM pc_status
-) status ON pi.id = status.pc_id AND status.rn = 1;
+LEFT JOIN pc_dynamic_info status ON pi.id = status.pc_id;
 
 -- 3. 대기 중인 명령 뷰
 CREATE VIEW v_pending_commands AS
@@ -332,7 +341,7 @@ SELECT
     pi.machine_id,
     pi.room_name,
     pi.is_online
-FROM pc_command c
+FROM commands c
 JOIN pc_info pi ON c.pc_id = pi.id
 WHERE c.status = 'pending'
 ORDER BY c.priority ASC, c.created_at ASC;
@@ -350,7 +359,7 @@ SELECT
         THEN (julianday(completed_at) - julianday(started_at)) * 86400
         ELSE NULL
     END) as avg_execution_time_seconds
-FROM pc_command
+FROM commands
 GROUP BY pc_id;
 
 -- 5. 실습실 현황 요약 뷰
@@ -424,7 +433,7 @@ PRAGMA synchronous = NORMAL;
 */
 
 -- ==================== 클라이언트 버전 관리 ====================
-CREATE TABLE IF NOT EXISTS client_versions (
+CREATE TABLE client_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     version TEXT NOT NULL,
     download_url TEXT,

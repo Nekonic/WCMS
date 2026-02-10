@@ -1,10 +1,10 @@
-"""
+﻿"""
 명령 모델 (Repository 패턴)
 PC 명령 관련 데이터베이스 작업을 캡슐화
 """
 import json
 from typing import Optional, List, Dict, Any
-from utils import get_db
+from utils.database import get_db
 
 
 class CommandModel:
@@ -22,25 +22,25 @@ class CommandModel:
         # 먼저 테이블 스키마 확인
         try:
             # 테이블 정보 조회
-            columns_info = db.execute("PRAGMA table_info(pc_command)").fetchall()
+            columns_info = db.execute("PRAGMA table_info(commands)").fetchall()
             columns = {col['name'] for col in columns_info}
 
             if 'admin_username' in columns and 'max_retries' in columns and 'timeout_seconds' in columns:
                 # 리팩터링된 스키마 (확장 컬럼 사용)
                 cursor = db.execute('''
-                    INSERT INTO pc_command (pc_id, admin_username, command_type, command_data, priority, status, max_retries, timeout_seconds)
+                    INSERT INTO commands (pc_id, admin_username, command_type, command_data, priority, status, max_retries, timeout_seconds)
                     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
                 ''', (pc_id, admin_username, command_type, command_data_str, priority, max_retries, timeout_seconds))
             else:
                 # archive 스키마 (기본 컬럼만 사용)
                 cursor = db.execute('''
-                    INSERT INTO pc_command (pc_id, command_type, command_data, priority, status)
+                    INSERT INTO commands (pc_id, command_type, command_data, priority, status)
                     VALUES (?, ?, ?, ?, 'pending')
                 ''', (pc_id, command_type, command_data_str, priority))
         except Exception:
             # 에러 발생 시 기본 스키마 사용
             cursor = db.execute('''
-                INSERT INTO pc_command (pc_id, command_type, command_data, status)
+                INSERT INTO commands (pc_id, command_type, command_data, status)
                 VALUES (?, ?, ?, 'pending')
             ''', (pc_id, command_type, command_data_str))
 
@@ -52,7 +52,7 @@ class CommandModel:
         """명령 ID로 조회"""
         db = get_db()
         row = db.execute(
-            'SELECT * FROM pc_command WHERE id=?',
+            'SELECT * FROM commands WHERE id=?',
             (command_id,)
         ).fetchone()
         return dict(row) if row else None
@@ -62,7 +62,7 @@ class CommandModel:
         """특정 PC의 대기 중인 명령 조회"""
         db = get_db()
         rows = db.execute('''
-            SELECT * FROM pc_command 
+            SELECT * FROM commands 
             WHERE pc_id=? AND status='pending' 
             ORDER BY priority ASC, created_at ASC
         ''', (pc_id,)).fetchall()
@@ -73,7 +73,7 @@ class CommandModel:
         """모든 대기 중인 명령 조회"""
         db = get_db()
         rows = db.execute('''
-            SELECT * FROM pc_command 
+            SELECT * FROM commands 
             WHERE status='pending' 
             ORDER BY priority ASC, created_at ASC
         ''').fetchall()
@@ -85,7 +85,7 @@ class CommandModel:
         try:
             db = get_db()
             db.execute('''
-                UPDATE pc_command 
+                UPDATE commands 
                 SET status='executing', started_at=CURRENT_TIMESTAMP 
                 WHERE id=?
             ''', (command_id,))
@@ -98,30 +98,48 @@ class CommandModel:
     def complete(command_id: int, result: str) -> bool:
         """명령 완료"""
         try:
+            import logging
+            logger = logging.getLogger('wcms.command_model')
+
             db = get_db()
-            db.execute('''
-                UPDATE pc_command 
+            cursor = db.execute('''
+                UPDATE commands 
                 SET status='completed', result=?, completed_at=CURRENT_TIMESTAMP 
                 WHERE id=?
             ''', (result, command_id))
             db.commit()
-            return True
-        except Exception:
+
+            rows_affected = cursor.rowcount
+            logger.info(f"명령 완료 처리: cmd_id={command_id}, rows_affected={rows_affected}")
+            return rows_affected > 0
+        except Exception as e:
+            import logging
+            logger = logging.getLogger('wcms.command_model')
+            logger.error(f"명령 완료 처리 실패: cmd_id={command_id}, error={e}", exc_info=True)
             return False
 
     @staticmethod
     def set_error(command_id: int, error_message: str) -> bool:
         """명령 에러 설정"""
         try:
+            import logging
+            logger = logging.getLogger('wcms.command_model')
+
             db = get_db()
-            db.execute('''
-                UPDATE pc_command 
+            cursor = db.execute('''
+                UPDATE commands 
                 SET status='error', error_message=?, completed_at=CURRENT_TIMESTAMP 
                 WHERE id=?
             ''', (error_message, command_id))
             db.commit()
-            return True
-        except Exception:
+
+            rows_affected = cursor.rowcount
+            logger.info(f"명령 오류 처리: cmd_id={command_id}, rows_affected={rows_affected}")
+            return rows_affected > 0
+        except Exception as e:
+            import logging
+            logger = logging.getLogger('wcms.command_model')
+            logger.error(f"명령 오류 처리 실패: cmd_id={command_id}, error={e}", exc_info=True)
             return False
 
     @staticmethod
@@ -130,7 +148,7 @@ class CommandModel:
         try:
             db = get_db()
             db.execute('''
-                UPDATE pc_command 
+                UPDATE commands 
                 SET status='timeout', error_message='Command execution timeout', completed_at=CURRENT_TIMESTAMP 
                 WHERE id=?
             ''', (command_id,))
@@ -149,7 +167,7 @@ class CommandModel:
                 return False
 
             # 스키마 확인
-            columns_info = db.execute("PRAGMA table_info(pc_command)").fetchall()
+            columns_info = db.execute("PRAGMA table_info(commands)").fetchall()
             columns = {col['name'] for col in columns_info}
 
             retry_count = command.get('retry_count', 0) + 1
@@ -160,21 +178,21 @@ class CommandModel:
                 if retry_count >= max_retries:
                     # 최대 재시도 횟수 초과
                     db.execute('''
-                        UPDATE pc_command
+                        UPDATE commands
                         SET status='error', error_message='Max retries exceeded', retry_count=?, completed_at=CURRENT_TIMESTAMP
                         WHERE id=?
                     ''', (retry_count, command_id))
                 else:
                     # 재시도
                     db.execute('''
-                        UPDATE pc_command
+                        UPDATE commands
                         SET status='pending', retry_count=?
                         WHERE id=?
                     ''', (retry_count, command_id))
             else:
                 # archive 스키마 - retry_count 없이 그냥 pending으로 변경
                 db.execute('''
-                    UPDATE pc_command
+                    UPDATE commands
                     SET status='pending'
                     WHERE id=?
                 ''', (command_id,))
@@ -189,7 +207,7 @@ class CommandModel:
         """상태별 명령 조회"""
         db = get_db()
         rows = db.execute('''
-            SELECT * FROM pc_command 
+            SELECT * FROM commands 
             WHERE status=? 
             ORDER BY created_at DESC
         ''', (status,)).fetchall()
@@ -200,10 +218,10 @@ class CommandModel:
         """명령 통계 조회"""
         db = get_db()
 
-        total = db.execute('SELECT COUNT(*) as count FROM pc_command').fetchone()
-        pending = db.execute("SELECT COUNT(*) as count FROM pc_command WHERE status='pending'").fetchone()
-        completed = db.execute("SELECT COUNT(*) as count FROM pc_command WHERE status='completed'").fetchone()
-        errors = db.execute("SELECT COUNT(*) as count FROM pc_command WHERE status='error'").fetchone()
+        total = db.execute('SELECT COUNT(*) as count FROM commands').fetchone()
+        pending = db.execute("SELECT COUNT(*) as count FROM commands WHERE status='pending'").fetchone()
+        completed = db.execute("SELECT COUNT(*) as count FROM commands WHERE status='completed'").fetchone()
+        errors = db.execute("SELECT COUNT(*) as count FROM commands WHERE status='error'").fetchone()
 
         return {
             'total': total['count'] if total else 0,
@@ -217,7 +235,7 @@ class CommandModel:
         """최근 명령 조회"""
         db = get_db()
         rows = db.execute('''
-            SELECT * FROM pc_command 
+            SELECT * FROM commands 
             ORDER BY created_at DESC 
             LIMIT ?
         ''', (limit,)).fetchall()
@@ -229,7 +247,7 @@ class CommandModel:
         try:
             db = get_db()
             cursor = db.execute('''
-                DELETE FROM pc_command 
+                DELETE FROM commands 
                 WHERE created_at < datetime('now', '-' || ? || ' days')
                 AND status IN ('completed', 'error', 'timeout')
             ''', (days,))
@@ -237,3 +255,4 @@ class CommandModel:
             return cursor.rowcount
         except Exception:
             return 0
+

@@ -90,12 +90,25 @@ document.addEventListener("DOMContentLoaded", function() {
                 let processesHtml = '<span style="color: #777;">없음</span>';
                 if (record.processes) {
                     try {
-                        const processes = JSON.parse(record.processes);
-                        if (processes.length > 0) {
-                            processesHtml = processes.map(p => `<span class="badge">${p}</span>`).join('');
+                        // 이중 JSON 인코딩 처리
+                        let processesData = record.processes;
+
+                        // 문자열이면 파싱 시도 (재귀적으로)
+                        while (typeof processesData === 'string') {
+                            try {
+                                processesData = JSON.parse(processesData);
+                            } catch(e) {
+                                break;
+                            }
+                        }
+
+                        // 배열인지 확인
+                        if (Array.isArray(processesData) && processesData.length > 0) {
+                            processesHtml = processesData.map(p => `<span class="badge">${p}</span>`).join('');
                         }
                     } catch(e) {
-                        processesHtml = '<span style="color: #f00;">오류</span>';
+                        console.error('Process parsing error:', e, record.processes);
+                        processesHtml = '<span style="color: #f00;">파싱 오류</span>';
                     }
                 }
 

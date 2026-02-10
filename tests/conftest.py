@@ -8,14 +8,29 @@ from pathlib import Path
 # 프로젝트 루트
 project_root = Path(__file__).parent.parent
 
-# server와 client 디렉토리를 sys.path에 추가 (클라이언트 테스트에서 필요)
+# server와 client 디렉토리를 sys.path에 추가
+# server 테스트: server를 우선 추가
+# client 테스트: client를 우선 추가
 server_dir = str(project_root / "server")
 client_dir = str(project_root / "client")
 
+# 항상 server를 먼저 추가 (공통 설정)
 if server_dir not in sys.path:
     sys.path.insert(0, server_dir)
-if client_dir not in sys.path:
-    sys.path.insert(0, client_dir)
+
+# client는 나중에 추가하되, client 테스트에서만 우선순위를 높임
+def pytest_configure(config):
+    """pytest 설정 초기화"""
+    # 테스트 경로에 따라 sys.path 조정
+    test_paths = [str(p) for p in config.args if p]
+    is_client_test = any('client' in p for p in test_paths)
+
+    if is_client_test and client_dir not in sys.path:
+        # 클라이언트 테스트일 때는 client를 앞에 추가
+        sys.path.insert(0, client_dir)
+    elif client_dir not in sys.path:
+        # 서버 테스트일 때는 client를 뒤에 추가
+        sys.path.append(client_dir)
 
 import pytest
 
@@ -29,17 +44,56 @@ except ImportError:
 
 @pytest.fixture
 def app():
-    """Flask 앱 테스트용 픽스처 (서버 테스트용)"""
+    """Flask 앱 테스트용 픽스처 (서버 테스트용)
+
+    실제 서버 실행(python manage.py run)과 동일하게 설정:
+    - schema.sql로 DB 생성
+    - 기본 관리자 계정 생성 (admin/admin)
+    - 클라이언트 버전 데이터 삽입
+    """
     if not HAS_FLASK:
         pytest.skip("Flask not installed")
 
-
     # server.app에서 앱 임포트
     from app import create_app
+    import bcrypt
 
     app = create_app('test')  # 'test' 환경 설정 사용
 
     with app.app_context():
+        # DB 초기화 (schema.sql 로드)
+        from utils.database import get_db, init_db_manager
+
+        init_db_manager(app.config['DB_PATH'])
+        db = get_db()
+
+        # schema.sql 파일 사용
+        schema_path = project_root / 'server' / 'migrations' / 'schema.sql'
+        if schema_path.exists():
+            with open(schema_path, 'r', encoding='utf-8') as f:
+                sql_content = f.read()
+                db.executescript(sql_content)
+                db.commit()
+
+        # 기본 관리자 계정 생성 (실제 서버와 동일)
+        password_hash = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        db.execute('''
+            INSERT INTO admins (username, password_hash, email, is_active)
+            VALUES (?, ?, ?, ?)
+        ''', ('admin', password_hash, 'admin@wcms.local', 1))
+        db.commit()
+
+        # 클라이언트 버전 데이터 삽입 (실제 서버와 동일)
+        db.execute('''
+            INSERT INTO client_versions (version, download_url, changelog)
+            VALUES (?, ?, ?)
+        ''', (
+            '0.7.0',
+            'https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe',
+            '자동 빌드 - v0.7.0 릴리스'
+        ))
+        db.commit()
+
         yield app
 
 
@@ -50,139 +104,57 @@ def client(app):
 
 
 @pytest.fixture
+def admin_session(client, app):
+    """관리자 세션 (로그인된 상태)"""
+    with client.session_transaction() as sess:
+        sess['admin'] = True
+        sess['username'] = 'admin'
+    return client
+
+
+@pytest.fixture
+def test_pin(app):
+    """테스트용 PIN 생성 (실제 RegistrationTokenModel.create와 동일)
+
+    Returns:
+        str: 6자리 PIN
+    """
+    from models.registration import RegistrationTokenModel
+
+    # 실제 모델을 사용하여 토큰 생성
+    token = RegistrationTokenModel.create(
+        created_by='admin',
+        usage_type='multi',
+        expires_in=3600
+    )
+
+    return token['token']
+
+
+
+@pytest.fixture
+def registered_pc(client, app, test_pin):
+    """등록된 PC (PIN 인증 완료)
+
+    Returns:
+        tuple: (pc_id, machine_id)
+    """
+    # PC 등록
+    machine_id = 'TEST-FIXTURE-001'
+    response = client.post('/api/client/register', json={
+        'machine_id': machine_id,
+        'pin': test_pin,
+        'hostname': 'TEST-FIXTURE-PC',
+        'mac_address': 'AA:BB:CC:DD:EE:99',
+        'cpu_cores': 4,
+        'ram_total': 16.0
+    })
+
+    pc_id = response.get_json()['pc_id']
+
+    return (pc_id, machine_id)
+
+@pytest.fixture
 def runner(app):
     """Flask CLI 테스트 러너"""
     return app.test_cli_runner()
-
-
-@pytest.fixture(autouse=True)
-def reset_db(request):
-    """각 테스트 전후로 DB 초기화 (Flask 테스트에만 적용)"""
-    # Flask 테스트가 아니면 skip
-    if not HAS_FLASK or 'server' not in str(request.fspath):
-        yield
-        return
-
-    # Flask app 픽스처 요청
-    app = request.getfixturevalue('app')
-
-    # server 디렉토리는 이미 전역 sys.path에 추가됨
-    from utils import get_db, init_db_manager
-
-    # 테스트 환경에서는 인메모리 DB 사용
-    # app.config['DB_PATH']는 'test' 환경 설정에 의해 ':memory:'로 설정됨
-    
-    with app.app_context():
-        # DB 매니저 초기화 (이미 되어 있을 수 있지만 확실하게)
-        init_db_manager(app.config['DB_PATH'])
-        
-        db = get_db()
-        
-        # 스키마 로드 및 실행
-        schema_path = project_root / 'server' / 'migrations' / 'schema.sql'
-        if schema_path.exists():
-            with open(schema_path, 'r', encoding='utf-8') as f:
-                db.executescript(f.read())
-        else:
-            # 스키마 파일이 없으면 기본 테이블 생성 (테스트용)
-            db.executescript("""
-                CREATE TABLE IF NOT EXISTS pc_info (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    machine_id TEXT UNIQUE NOT NULL,
-                    hostname TEXT,
-                    ip_address TEXT,
-                    mac_address TEXT,
-                    room_name TEXT,
-                    seat_number TEXT,
-                    is_online INTEGER DEFAULT 0,
-                    last_seen TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS pc_specs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pc_id INTEGER NOT NULL,
-                    cpu_model TEXT,
-                    cpu_cores INTEGER,
-                    cpu_threads INTEGER,
-                    ram_total REAL,
-                    disk_info TEXT,
-                    os_edition TEXT,
-                    os_version TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (pc_id) REFERENCES pc_info (id) ON DELETE CASCADE
-                );
-                CREATE TABLE IF NOT EXISTS pc_status (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pc_id INTEGER NOT NULL,
-                    cpu_usage REAL,
-                    ram_used REAL,
-                    ram_usage_percent REAL,
-                    disk_usage TEXT,
-                    current_user TEXT,
-                    uptime INTEGER,
-                    processes TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (pc_id) REFERENCES pc_info (id) ON DELETE CASCADE
-                );
-                CREATE TABLE IF NOT EXISTS pc_command (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pc_id INTEGER NOT NULL,
-                    admin_username TEXT,
-                    command_type TEXT NOT NULL,
-                    command_data TEXT,
-                    priority INTEGER DEFAULT 5,
-                    status TEXT DEFAULT 'pending',
-                    result TEXT,
-                    error_message TEXT,
-                    retry_count INTEGER DEFAULT 0,
-                    max_retries INTEGER DEFAULT 3,
-                    timeout_seconds INTEGER DEFAULT 300,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    started_at TIMESTAMP,
-                    completed_at TIMESTAMP,
-                    FOREIGN KEY (pc_id) REFERENCES pc_info (id) ON DELETE CASCADE
-                );
-                CREATE TABLE IF NOT EXISTS admins (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    email TEXT,
-                    is_active INTEGER DEFAULT 1,
-                    last_login TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS seat_layout (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    room_name TEXT UNIQUE NOT NULL,
-                    rows INTEGER NOT NULL,
-                    cols INTEGER NOT NULL,
-                    description TEXT,
-                    is_active INTEGER DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS seat_map (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    room_name TEXT NOT NULL,
-                    row INTEGER NOT NULL,
-                    col INTEGER NOT NULL,
-                    pc_id INTEGER,
-                    FOREIGN KEY (room_name) REFERENCES seat_layout (room_name) ON DELETE CASCADE,
-                    FOREIGN KEY (pc_id) REFERENCES pc_info (id) ON DELETE SET NULL
-                );
-                CREATE TABLE IF NOT EXISTS client_versions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    version VARCHAR(50) NOT NULL UNIQUE,
-                    download_url TEXT NOT NULL,
-                    changelog TEXT,
-                    released_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
-        
-        db.commit()
-        
-        yield
-
-        # 테스트 후 정리 (인메모리 DB는 연결 닫으면 사라짐)
-        db.close()

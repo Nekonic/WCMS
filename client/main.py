@@ -1,5 +1,4 @@
 import threading
-import json
 import psutil
 import requests
 import os
@@ -9,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from config import (
-    SERVER_URL, MACHINE_ID, HEARTBEAT_INTERVAL, COMMAND_POLL_INTERVAL,
+    SERVER_URL, MACHINE_ID, REGISTRATION_PIN, HEARTBEAT_INTERVAL, COMMAND_POLL_INTERVAL,
     LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_MAX_BYTES, LOG_BACKUP_COUNT,
     REQUEST_TIMEOUT, SHUTDOWN_TIMEOUT, __version__, POWER_COMMAND_GRACE_PERIOD, validate_config
 )
@@ -67,14 +66,20 @@ def check_for_updates():
 
 @retry_on_network_error(max_retries=3, delay=5)
 def register_client():
-    """서버에 클라이언트 정보를 등록"""
+    """서버에 클라이언트 정보를 등록 (v0.8.0 - PIN 인증)"""
     static_info = collect_static_info()
     if not static_info:
         logger.warning("정적 정보 수집 실패, 등록할 수 없습니다.")
         return False
 
+    # PIN 체크 (v0.8.0)
+    if not REGISTRATION_PIN:
+        logger.error("등록 PIN이 설정되지 않았습니다. config.json에 REGISTRATION_PIN을 추가하세요.")
+        return False
+
     reg_data = {
         "machine_id": MACHINE_ID,
+        "pin": REGISTRATION_PIN,  # v0.8.0: PIN 추가
         **static_info
     }
 
@@ -85,6 +90,16 @@ def register_client():
             result = r.json()
             logger.info(f"등록 성공: {result.get('message')}")
             return True
+        elif r and r.status_code == 403:
+            # PIN 검증 실패
+            error_msg = r.json().get('message', 'PIN 검증 실패')
+            logger.error(f"등록 실패 (PIN 오류): {error_msg}")
+            logger.error("올바른 PIN을 config.json에 설정하세요.")
+            return False
+        elif r and r.status_code == 400:
+            error_msg = r.json().get('message', '잘못된 요청')
+            logger.error(f"등록 실패: {error_msg}")
+            return False
         elif r and r.status_code == 500:
             msg = r.json().get('message', '')
             if "이미 등록된 PC" in msg:
@@ -98,6 +113,7 @@ def register_client():
             return False
     except Exception as e:
         logger.error(f"등록 중 오류 발생: {e}")
+        raise  # retry decorator에서 재시도
 @retry_on_network_error(max_retries=3, delay=5)
 def send_heartbeat():
     """서버에 동적 정보를 Heartbeat로 전송"""
@@ -173,23 +189,72 @@ def should_skip_command(cmd_type: str, cmd_params: dict) -> bool:
 
 
 def poll_command(stop_event: threading.Event):
-    """Long-polling으로 명령 대기"""
+    """명령 폴링 + 경량 하트비트 통합 (v0.8.0 네트워크 최적화)
+
+    - POST 방식으로 명령 조회
+    - 경량 하트비트 (CPU, RAM, IP) 함께 전송
+    - 2초마다 폴링 (즉시 응답)
+    """
+    import socket
+
+    def get_ip_address():
+        """현재 IP 주소 조회"""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "Unknown"
+
+    logger.info("명령 폴링 시작 (경량 하트비트 통합)")
+
     while not stop_event.is_set():
         try:
+            # 경량 하트비트 데이터 수집
+            cpu_usage = psutil.cpu_percent(interval=0.1)
+            ram_usage = psutil.virtual_memory().percent
+            ip_address = get_ip_address()
+
+            # POST 방식으로 명령 조회 + 경량 하트비트 전송
             r = safe_request(
-                f"{SERVER_URL}api/client/command",
-                method='GET',
-                params={"machine_id": MACHINE_ID},
-                timeout=COMMAND_POLL_INTERVAL + 10,
+                f"{SERVER_URL}api/client/commands",  # 변경: command → commands
+                method='POST',
+                json={
+                    "machine_id": MACHINE_ID,
+                    "heartbeat": {
+                        "cpu_usage": cpu_usage,
+                        "ram_usage_percent": ram_usage,
+                        "ip_address": ip_address
+                    }
+                },
+                timeout=REQUEST_TIMEOUT,
                 max_retries=2
             )
-            if r and r.status_code == 200:
-                commands = r.json().get('commands', [])
 
-                for cmd in commands:
+            if r and r.status_code == 200:
+                data = r.json()
+
+                # 새 API 응답 형식 체크
+                if data.get('status') != 'success':
+                    logger.error(f"API 오류: {data.get('error', {}).get('message', 'Unknown error')}")
+                    if stop_event.wait(5):
+                        break
+                    continue
+
+                response_data = data.get('data', {})
+
+                # IP 변경 감지
+                if response_data.get('ip_changed'):
+                    logger.info(f"IP 주소 변경됨: {ip_address}")
+
+                # 명령 처리 (v0.8.0: 새 API 형식)
+                if response_data.get('has_command'):
+                    cmd = response_data.get('command', {})
                     cmd_id = cmd.get('id')
                     cmd_type = cmd.get('type')
-                    cmd_data = cmd.get('data', {})
+                    cmd_data = cmd.get('parameters', {})
 
                     logger.info(f"명령 수신: {cmd_type} | ID: {cmd_id}")
 
@@ -198,37 +263,54 @@ def poll_command(stop_event: threading.Event):
                         result = f"명령 건너뜀: 부팅 후 {POWER_COMMAND_GRACE_PERIOD}초 이내의 전원 관리 명령"
                         logger.info(result)
                         send_command_result(cmd_id, 'skipped', result)
-                        continue
+                    else:
+                        # 전원 관리 명령이면 추가 경고 출력
+                        if is_power_command(cmd_type, cmd_data):
+                            elapsed = (datetime.now() - BOOT_TIME).total_seconds()
+                            logger.warning(f"전원 관리 명령 실행 (부팅 후 {int(elapsed)}초 경과)")
 
-                    # 전원 관리 명령이면 추가 경고 출력
-                    if is_power_command(cmd_type, cmd_data):
-                        elapsed = (datetime.now() - BOOT_TIME).total_seconds()
-                        logger.warning(f"전원 관리 명령 실행 (부팅 후 {int(elapsed)}초 경과)")
+                        # 명령 실행
+                        result = CommandExecutor.execute_command(cmd_type, cmd_data)
+                        logger.info(f"명령 결과: {result}")
 
-                    # 명령 실행
-                    result = CommandExecutor.execute_command(cmd_type, cmd_data)
-                    logger.info(f"명령 결과: {result}")
-
-                    # 결과를 서버로 보고
-                    send_command_result(cmd_id, 'completed', result)
+                        # 결과를 서버로 보고
+                        send_command_result(cmd_id, 'completed', result)
+                else:
+                    logger.debug(f"명령 없음 (경량 하트비트 전송됨)")
             else:
-                logger.debug(f"명령 없음 또는 오류: {r.status_code if r else 'No response'}")
+                logger.debug(f"명령 조회 오류: {r.status_code if r else 'No response'}")
 
         except Exception as e:
             logger.error(f"명령 조회 오류: {e}")
             if stop_event.wait(5):
                 break
 
+        # 2초 대기 (폴링 주기)
+        if stop_event.wait(COMMAND_POLL_INTERVAL):
+            break
+
 
 def send_command_result(command_id: int, status: str, result: str):
-    """명령 실행 결과를 서버로 보고"""
+    """명령 실행 결과를 서버로 보고 (v0.8.0 - 새 API)"""
     try:
+        # 상태 매핑: completed/skipped → success, error → error
+        api_status = 'success' if status in ['completed', 'skipped'] else 'error'
+
         data = {
-            "command_id": command_id,
-            "status": status,
-            "result": result
+            "status": api_status,
+            "output": result,
+            "error_message": result if status == 'error' else None
         }
-        r = safe_request(f"{SERVER_URL}api/client/command/result", method='POST', json=data, timeout=REQUEST_TIMEOUT, max_retries=2)
+
+        # 새 API: RESTful 경로 사용
+        r = safe_request(
+            f"{SERVER_URL}api/client/commands/{command_id}/result",
+            method='POST',
+            json=data,
+            timeout=REQUEST_TIMEOUT,
+            max_retries=2
+        )
+
         if r and r.status_code == 200:
             logger.debug(f"명령 결과 전송 완료: CMD#{command_id}")
         else:

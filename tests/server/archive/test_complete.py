@@ -166,6 +166,13 @@ class RefactoredServerCompleteTest(unittest.TestCase):
 
         db.commit()
 
+    def _create_test_pin(self):
+        """테스트용 PIN 생성 (v0.8.0)"""
+        with self.app.app_context():
+            from models.registration import RegistrationTokenModel
+            token = RegistrationTokenModel.create('test_admin', 'multi', 3600)
+            return token['token']
+
     def login_admin(self):
         """관리자 로그인 (세션 설정)"""
         with self.client.session_transaction() as sess:
@@ -176,8 +183,10 @@ class RefactoredServerCompleteTest(unittest.TestCase):
 
     def test_01_client_register_success(self):
         """클라이언트 등록 - 정상 케이스"""
+        pin = self._create_test_pin()  # v0.8.0: PIN 필수
         data = {
             'machine_id': 'test-machine-001',
+            'pin': pin,  # v0.8.0: PIN 추가
             'hostname': 'TEST-PC-001',
             'mac_address': '00:11:22:33:44:55',
             'ip_address': '192.168.1.100',

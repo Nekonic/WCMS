@@ -18,7 +18,7 @@ GITHUB_RELEASES_BASE = f"https://github.com/{GITHUB_REPO}/releases/download"
 
 def get_install_cmd_script(server_url: str) -> str:
     """
-    install.cmd 스크립트 생성 (동적)
+    install.cmd 스크립트 생성 (v0.8.0 - PIN 인증 포함)
 
     Args:
         server_url: 서버 URL (예: http://localhost:5050)
@@ -26,14 +26,18 @@ def get_install_cmd_script(server_url: str) -> str:
     Returns:
         Windows Batch 스크립트 문자열
     """
+    # SERVER_URL 정규화 (끝에 슬래시 보장)
+    if not server_url.endswith('/'):
+        server_url = server_url + '/'
+
     return f'''@echo off
-REM WCMS Client Auto-Install Script
+REM WCMS Client Auto-Install Script (v0.8.0)
 REM GitHub: https://github.com/{GITHUB_REPO}
 
 SETLOCAL EnableDelayedExpansion
 
 echo ========================================
-echo  WCMS Client Auto-Install
+echo  WCMS Client Auto-Install (v0.8.0)
 echo ========================================
 echo.
 
@@ -51,10 +55,34 @@ if %errorLevel% neq 0 (
 echo [OK] Administrator privileges verified
 
 REM ====================================
-REM 2. Connect to Server and Get Latest Version
+REM 2. PIN Input (v0.8.0)
+REM ====================================
+:ASK_PIN
+echo.
+echo Please enter the 6-digit registration PIN.
+echo (Ask your administrator for the PIN)
+echo.
+set /p PIN="Registration PIN (6 digits): "
+
+REM PIN Format Validation
+echo %PIN%| findstr /r "^[0-9][0-9][0-9][0-9][0-9][0-9]$" >nul
+if %errorLevel% neq 0 (
+    echo [ERROR] PIN must be exactly 6 digits.
+    goto ASK_PIN
+)
+
+echo [OK] PIN format valid: %PIN%
+
+REM ====================================
+REM 3. Connect to Server and Get Latest Version
 REM ====================================
 echo [INFO] Checking latest version from server...
-SET SERVER_URL={server_url}
+SET "SERVER_URL={server_url}"
+
+REM Remove trailing slash if exists (will be added in API calls)
+if "%SERVER_URL:~-1%"=="/" SET "SERVER_URL=%SERVER_URL:~0,-1%"
+
+echo [INFO] Server URL: %SERVER_URL%
 
 REM Parse JSON with PowerShell
 for /f "delims=" %%i in ('powershell -Command "try {{ $r = Invoke-RestMethod -Uri '%SERVER_URL%/api/client/version' -TimeoutSec 10; Write-Output $r.version }} catch {{ Write-Output 'ERROR' }}"') do set VERSION=%%i
@@ -80,7 +108,7 @@ if "%DOWNLOAD_URL%"=="ERROR" (
 echo [INFO] Download URL: %DOWNLOAD_URL%
 
 REM ====================================
-REM 3. Download Client
+REM 4. Download Client
 REM ====================================
 echo [INFO] Downloading WCMS Client...
 SET TEMP_DIR=%TEMP%\\WCMS-Install
@@ -98,7 +126,7 @@ if %errorLevel% neq 0 (
 echo [OK] Download complete
 
 REM ====================================
-REM 4. Create Installation Directories
+REM 5. Create Installation Directories
 REM ====================================
 echo [INFO] Creating installation directories...
 SET INSTALL_DIR=C:\\Program Files\\WCMS
@@ -108,7 +136,7 @@ if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%"
 
 REM ====================================
-REM 5. Copy Files
+REM 6. Copy Files
 REM ====================================
 echo [INFO] Copying files...
 copy /Y "%EXE_PATH%" "%INSTALL_DIR%\\WCMS-Client.exe" >nul
@@ -121,21 +149,32 @@ if %errorLevel% neq 0 (
 echo [OK] File copy complete
 
 REM ====================================
-REM 6. Create config.json
+REM 7. Create config.json (v0.8.0 with PIN)
 REM ====================================
 echo [INFO] Creating configuration file...
+
+REM Ensure SERVER_URL ends with / for config.json
+SET "CONFIG_URL=%SERVER_URL%/"
+
 (
     echo {{
-    echo   "SERVER_URL": "%SERVER_URL%",
+    echo   "SERVER_URL": "%CONFIG_URL%",
+    echo   "REGISTRATION_PIN": "%PIN%",
     echo   "HEARTBEAT_INTERVAL": 300,
-    echo   "POLL_TIMEOUT": 10,
+    echo   "COMMAND_POLL_INTERVAL": 2,
     echo   "LOG_LEVEL": "INFO"
     echo }}
 ) > "%CONFIG_DIR%\\config.json"
-echo [OK] Configuration file created
+
+if %errorLevel% neq 0 (
+    echo [ERROR] Failed to create config.json
+    pause
+    exit /b 1
+)
+echo [OK] Configuration file created with PIN
 
 REM ====================================
-REM 7. Install Service
+REM 8. Install Service
 REM ====================================
 echo [INFO] Installing Windows service...
 
@@ -144,87 +183,86 @@ sc query WCMS-Client >nul 2>&1
 if %errorLevel% equ 0 (
     echo [INFO] Existing service detected. Stopping and removing...
     net stop WCMS-Client >nul 2>&1
-    "%INSTALL_DIR%\\WCMS-Client.exe" remove >nul 2>&1
     timeout /t 2 >nul
+    sc delete WCMS-Client >nul 2>&1
+    echo [INFO] Waiting for service cleanup...
+    timeout /t 5 >nul
 )
 
-REM Install new service
-"%INSTALL_DIR%\\WCMS-Client.exe" install
+REM Install new service with auto-start
+echo [INFO] Running install command...
+start /B "" "%INSTALL_DIR%\\WCMS-Client.exe" --startup auto install >nul 2>&1
+timeout /t 5 >nul
+echo [INFO] Checking service registration...
+
+REM Verify service was installed
+sc query WCMS-Client >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] Service installation failed
+    echo [ERROR] Service installation failed - service not found
+    echo Check logs at: %CONFIG_DIR%\\logs\\
     echo.
     pause
     exit /b 1
 )
-echo [OK] Service installed
+echo [OK] Service installed (auto-start enabled)
 
 REM ====================================
-REM 8. Start Service
+REM 9. Start Service
 REM ====================================
 echo [INFO] Starting service...
 net start WCMS-Client >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [WARN] Service start failed
-    echo To start manually: net start WCMS-Client
+set START_EXIT=%errorLevel%
+
+if %START_EXIT% neq 0 (
+    echo [WARN] Service start failed ^(exit code: %START_EXIT%^)
     echo.
-) else (
-    echo [OK] Service started
+    echo Common causes:
+    echo   - Invalid PIN (check with administrator)
+    echo   - Service crashes on startup
+    echo   - Config file issues
+    echo   - Missing dependencies
+    echo.
+    echo To troubleshoot:
+    echo   1. Check logs: %CONFIG_DIR%\\logs\\
+    echo   2. Verify PIN: %PIN%
+    echo   3. Try manual start: net start WCMS-Client
+    echo   4. Check service status: sc query WCMS-Client
+    echo.
+    pause
+    exit /b 1
 )
 
+echo [OK] Service started successfully
+
 REM ====================================
-REM 9. Verify Installation
+REM 10. Installation Complete
 REM ====================================
 echo.
-echo [INFO] Verifying installation...
-timeout /t 2 >nul
+echo ========================================
+echo  Installation Complete!
+echo ========================================
+echo.
+echo Installation Directory: %INSTALL_DIR%
+echo Configuration Directory: %CONFIG_DIR%
+echo Service Name: WCMS-Client
+echo Server URL: %CONFIG_URL%
+echo Registration PIN: %PIN%
+echo Polling Interval: 2 seconds
+echo.
+echo The service is now running and will:
+echo   - Register with server using PIN
+echo   - Send heartbeat every 5 minutes
+echo   - Poll for commands every 2 seconds
+echo   - Automatically start on system boot
+echo.
+echo To check service status:
+echo   sc query WCMS-Client
+echo.
+echo To view logs:
+echo   type "%CONFIG_DIR%\\logs\\wcms.log"
+echo.
+pause
 
-sc query WCMS-Client | find "RUNNING" >nul
-if %errorLevel% equ 0 (
-    echo.
-    echo ========================================
-    echo  WCMS Client Installation Complete!
-    echo ========================================
-    echo  Version: %VERSION%
-    echo  Server: %SERVER_URL%
-    echo  Install Path: %INSTALL_DIR%
-    echo  Config File: %CONFIG_DIR%\\config.json
-    echo  Service Status: Running
-    echo ========================================
-    echo.
-    echo Management Commands:
-    echo   Check status: sc query WCMS-Client
-    echo   Stop: net stop WCMS-Client
-    echo   Start: net start WCMS-Client
-    echo   Remove: "%INSTALL_DIR%\\WCMS-Client.exe" remove
-    echo ========================================
-    echo.
-) else (
-    echo.
-    echo ========================================
-    echo  WCMS Client Installation Complete (Warning)
-    echo ========================================
-    echo  Version: %VERSION%
-    echo  Server: %SERVER_URL%
-    echo  Install Path: %INSTALL_DIR%
-    echo  Service Status: Stopped
-    echo ========================================
-    echo.
-    echo [WARN] Service is not running.
-    echo To start manually:
-    echo   net start WCMS-Client
-    echo.
-    echo Check logs: %CONFIG_DIR%\\logs\\
-    echo ========================================
-    echo.
-)
-
-REM ====================================
-REM 10. Cleanup
-REM ====================================
-if exist "%TEMP_DIR%" rmdir /S /Q "%TEMP_DIR%"
-
-ENDLOCAL
-exit /b 0
 '''
 
 
@@ -368,12 +406,12 @@ try {{
 Write-Host "[INFO] Windows 서비스 설치 중..." -ForegroundColor $InfoColor
 
 # 기존 서비스 확인 및 중지
-$existingService = Get-Service -Name "WCMS-Client" -ErrorAction SilentlyContinue
+$existingService = Get-Service -Name "WCMSClient" -ErrorAction SilentlyContinue
 if ($existingService) {{
     Write-Host "[INFO] 기존 서비스 감지. 중지 및 제거 중..." -ForegroundColor $InfoColor
     
     if ($existingService.Status -eq "Running") {{
-        Stop-Service -Name "WCMS-Client" -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name "WCMSClient" -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }}
     
@@ -383,7 +421,7 @@ if ($existingService) {{
 
 # 새 서비스 설치
 try {{
-    $installOutput = & "$InstallDir\\WCMS-Client.exe" install 2>&1
+    $installOutput = & "$InstallDir\\WCMS-Client.exe" --startup auto install 2>&1
     if ($LASTEXITCODE -ne 0) {{
         throw "서비스 설치 실패: $installOutput"
     }}
@@ -401,11 +439,11 @@ try {{
 # ====================================
 Write-Host "[INFO] 서비스 시작 중..." -ForegroundColor $InfoColor
 try {{
-    Start-Service -Name "WCMS-Client"
+    Start-Service -Name "WCMSClient"
     Write-Host "[OK] 서비스 시작 완료" -ForegroundColor $SuccessColor
 }} catch {{
     Write-Host "[WARN] 서비스 시작 실패" -ForegroundColor $WarnColor
-    Write-Host "수동으로 시작하려면: Start-Service -Name 'WCMS-Client'" -ForegroundColor $WarnColor
+    Write-Host "수동으로 시작하려면: Start-Service -Name 'WCMSClient'" -ForegroundColor $WarnColor
     Write-Host ""
 }}
 
@@ -416,7 +454,7 @@ Write-Host ""
 Write-Host "[INFO] 설치 확인 중..." -ForegroundColor $InfoColor
 Start-Sleep -Seconds 2
 
-$Service = Get-Service -Name "WCMS-Client" -ErrorAction SilentlyContinue
+$Service = Get-Service -Name "WCMSClient" -ErrorAction SilentlyContinue
 if ($Service -and $Service.Status -eq "Running") {{
     Write-Host ""
     Write-Host "========================================" -ForegroundColor $SuccessColor
@@ -430,9 +468,9 @@ if ($Service -and $Service.Status -eq "Running") {{
     Write-Host "========================================" -ForegroundColor $SuccessColor
     Write-Host ""
     Write-Host "관리 명령:" -ForegroundColor $InfoColor
-    Write-Host "  상태 확인: Get-Service -Name 'WCMS-Client'"
-    Write-Host "  중지: Stop-Service -Name 'WCMS-Client'"
-    Write-Host "  시작: Start-Service -Name 'WCMS-Client'"
+    Write-Host "  상태 확인: Get-Service -Name 'WCMSClient'"
+    Write-Host "  중지: Stop-Service -Name 'WCMSClient'"
+    Write-Host "  시작: Start-Service -Name 'WCMSClient'"
     Write-Host "  제거: & '$InstallDir\\WCMS-Client.exe' remove"
     Write-Host "========================================" -ForegroundColor $InfoColor
     Write-Host ""
@@ -449,7 +487,7 @@ if ($Service -and $Service.Status -eq "Running") {{
     Write-Host ""
     Write-Host "[WARN] 서비스가 실행되지 않았습니다." -ForegroundColor $WarnColor
     Write-Host "다음 명령으로 수동 시작하세요:" -ForegroundColor $WarnColor
-    Write-Host "  Start-Service -Name 'WCMS-Client'"
+    Write-Host "  Start-Service -Name 'WCMSClient'"
     Write-Host ""
     Write-Host "로그 확인: $ConfigDir\\logs\\" -ForegroundColor $InfoColor
     Write-Host "========================================" -ForegroundColor $WarnColor

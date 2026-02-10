@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}등록 토큰 관리 - WCMS{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1><i class="fas fa-key"></i> 등록 토큰 관리</h1>
+    <p class="subtitle">PC 등록용 PIN 코드 생성 및 관리 (v0.8.0)</p>
+</div>
+
+<div class="content">
+    <!-- 토큰 생성 폼 -->
+    <div class="card" style="margin-bottom: 2em;">
+        <h2 style="margin-bottom: 1em;"><i class="fas fa-plus-circle"></i> 새 토큰 생성</h2>
+        <form id="createTokenForm" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; align-items: end;">
+            <div>
+                <label for="usageType" style="display: block; margin-bottom: 0.5em; color: #b0b0b0;">사용 유형</label>
+                <select id="usageType" name="usage_type" style="width: 100%; padding: 0.7em; border-radius: 8px; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0;">
+                    <option value="single">1회용 (Single-use)</option>
+                    <option value="multi" selected>재사용 가능 (Multi-use)</option>
+                </select>
+            </div>
+            <div>
+                <label for="expiresIn" style="display: block; margin-bottom: 0.5em; color: #b0b0b0;">만료 시간 (분)</label>
+                <input type="number" id="expiresIn" name="expires_in" value="10" min="1" max="1440"
+                       style="width: 100%; padding: 0.7em; border-radius: 8px; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0;">
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.8em;">
+                    <i class="fas fa-key"></i> 토큰 생성
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 생성된 토큰 표시 -->
+    <div id="newTokenDisplay" style="display: none; margin-bottom: 2em;">
+        <div class="card" style="background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); border: 2px solid #3b82f6;">
+            <h2 style="margin-bottom: 0.5em; color: #fff;"><i class="fas fa-check-circle"></i> 토큰 생성 완료!</h2>
+            <p style="margin-bottom: 1em; color: #bfdbfe;">아래 PIN을 install.cmd 실행 시 입력하세요:</p>
+            <div style="background: #1e293b; padding: 1.5em; border-radius: 12px; text-align: center; margin-bottom: 1em;">
+                <div style="font-size: 3em; font-weight: 700; letter-spacing: 0.5em; color: #60a5fa; font-family: 'Courier New', monospace;" id="tokenPIN">
+                    ------
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1em; font-size: 0.9em; color: #bfdbfe;">
+                <div><strong>유형:</strong> <span id="tokenType">-</span></div>
+                <div><strong>만료:</strong> <span id="tokenExpires">-</span></div>
+            </div>
+            <button onclick="copyToken()" class="btn" style="margin-top: 1em; width: 100%; background: #2563eb;">
+                <i class="fas fa-copy"></i> PIN 복사
+            </button>
+        </div>
+    </div>
+
+    <!-- 활성 토큰 목록 -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
+            <h2><i class="fas fa-list"></i> 활성 토큰 목록</h2>
+            <button onclick="loadTokens()" class="btn" style="background: #374151; padding: 0.6em 1em;">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+        </div>
+
+        <div id="tokensLoading" style="text-align: center; padding: 2em; color: #6b7280;">
+            <i class="fas fa-spinner fa-spin" style="font-size: 2em;"></i>
+            <p style="margin-top: 1em;">토큰 목록을 불러오는 중...</p>
+        </div>
+
+        <div id="tokensContainer" style="display: none;">
+            <div id="tokensTable"></div>
+        </div>
+
+        <div id="tokensEmpty" style="display: none; text-align: center; padding: 3em; color: #6b7280;">
+            <i class="fas fa-inbox" style="font-size: 3em; margin-bottom: 1em;"></i>
+            <p>활성 토큰이 없습니다.</p>
+            <p style="font-size: 0.9em; margin-top: 0.5em;">위에서 새 토큰을 생성하세요.</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.btn {
+    padding: 0.7em 1.5em;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: all 0.3s ease;
+    color: #fff;
+}
+.btn-primary {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+.btn-primary:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+.btn:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+.token-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.token-table th {
+    background: #2a2a2a;
+    padding: 1em;
+    text-align: left;
+    color: #9ca3af;
+    font-weight: 600;
+    border-bottom: 2px solid #374151;
+}
+.token-table td {
+    padding: 1em;
+    border-bottom: 1px solid #374151;
+}
+.token-table tr:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.3em 0.8em;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+.badge-single {
+    background: #fef3c7;
+    color: #92400e;
+}
+.badge-multi {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.token-pin {
+    font-family: 'Courier New', monospace;
+    font-size: 1.3em;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: #60a5fa;
+}
+</style>
+
+<script>
+let currentToken = null;
+
+// 페이지 로드 시 토큰 목록 불러오기
+document.addEventListener('DOMContentLoaded', function() {
+    loadTokens();
+});
+
+// 토큰 생성 폼 제출
+document.getElementById('createTokenForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const usageType = document.getElementById('usageType').value;
+    const expiresIn = parseInt(document.getElementById('expiresIn').value) * 60; // 분 -> 초
+
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 생성 중...';
+
+    try {
+        const response = await fetch('/api/admin/registration-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                usage_type: usageType,
+                expires_in: expiresIn
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.status === 'success') {
+            // 생성된 토큰 표시
+            currentToken = data.token;
+            document.getElementById('tokenPIN').textContent = data.token;
+            document.getElementById('tokenType').textContent = data.usage_type === 'single' ? '1회용' : '재사용 가능';
+            document.getElementById('tokenExpires').textContent = new Date(data.expires_at).toLocaleString('ko-KR');
+            document.getElementById('newTokenDisplay').style.display = 'block';
+
+            // 토큰 목록 새로고침
+            loadTokens();
+
+            // 폼 초기화
+            this.reset();
+            document.getElementById('usageType').value = 'multi';
+        } else {
+            alert('토큰 생성 실패: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('토큰 생성 중 오류가 발생했습니다.');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-key"></i> 토큰 생성';
+    }
+});
+
+// 토큰 목록 불러오기
+async function loadTokens() {
+    document.getElementById('tokensLoading').style.display = 'block';
+    document.getElementById('tokensContainer').style.display = 'none';
+    document.getElementById('tokensEmpty').style.display = 'none';
+
+    try {
+        const response = await fetch('/api/admin/registration-tokens');
+        const data = await response.json();
+
+        if (response.ok && data.status === 'success') {
+            const tokens = data.tokens;
+
+            if (tokens.length === 0) {
+                document.getElementById('tokensLoading').style.display = 'none';
+                document.getElementById('tokensEmpty').style.display = 'block';
+            } else {
+                displayTokens(tokens);
+                document.getElementById('tokensLoading').style.display = 'none';
+                document.getElementById('tokensContainer').style.display = 'block';
+            }
+        } else {
+            throw new Error(data.message || '토큰 목록 불러오기 실패');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('tokensLoading').innerHTML =
+            '<p style="color: #ef4444;"><i class="fas fa-exclamation-circle"></i> 오류: ' + error.message + '</p>';
+    }
+}
+
+// 토큰 목록 표시
+function displayTokens(tokens) {
+    const html = `
+        <table class="token-table">
+            <thead>
+                <tr>
+                    <th>PIN</th>
+                    <th>유형</th>
+                    <th>사용 횟수</th>
+                    <th>만료 시간</th>
+                    <th>생성자</th>
+                    <th>작업</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tokens.map(token => `
+                    <tr>
+                        <td><span class="token-pin">${token.token}</span></td>
+                        <td>
+                            <span class="badge ${token.usage_type === 'single' ? 'badge-single' : 'badge-multi'}">
+                                ${token.usage_type === 'single' ? '1회용' : '재사용'}
+                            </span>
+                        </td>
+                        <td>${token.used_count}회</td>
+                        <td>${new Date(token.expires_at).toLocaleString('ko-KR')}</td>
+                        <td>${token.created_by}</td>
+                        <td>
+                            <button onclick="deleteToken('${token.token}')" class="btn"
+                                    style="background: #dc2626; padding: 0.5em 1em; font-size: 0.85em;">
+                                <i class="fas fa-trash"></i> 삭제
+                            </button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    document.getElementById('tokensTable').innerHTML = html;
+}
+
+// 토큰 삭제
+async function deleteToken(token) {
+    if (!confirm(`토큰 ${token}을(를) 삭제하시겠습니까?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/admin/registration-token/${token}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.status === 'success') {
+            alert('토큰이 삭제되었습니다.');
+            loadTokens();
+        } else {
+            alert('삭제 실패: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('토큰 삭제 중 오류가 발생했습니다.');
+    }
+}
+
+// PIN 복사
+function copyToken() {
+    if (!currentToken) return;
+
+    navigator.clipboard.writeText(currentToken).then(() => {
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i> 복사됨!';
+        btn.style.background = '#10b981';
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.style.background = '#2563eb';
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

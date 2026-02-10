@@ -32,6 +32,10 @@ dependencies = [
     "psutil>=7.1.3",
     "wmi>=1.5.1;platform_system=='Windows'",
     "pywin32>=306;platform_system=='Windows'",
+
+    # 테스트 의존성 (루트 가상환경에서 테스트 실행)
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
 ]
 
 [project.optional-dependencies]
@@ -67,3 +71,14 @@ packages = ["server", "client"]
 # wcms-server = { path = "server", editable = true }
 # wcms-client = { path = "client", editable = true }
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# archive 폴더 제외
+norecursedirs = ["archive", ".git", "__pycache__", "*.egg-info"]
+addopts = [
+    "-v",
+    "--tb=short",
+]

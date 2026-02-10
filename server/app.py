@@ -33,6 +33,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger('wcms')
 
+# Flask 기본 로거 설정 (개발 시 환경변수 DEBUG=1 설정)
+import os
+if os.getenv('DEBUG') == '1':
+    # 개발 모드: 모든 요청 로그 표시
+    logging.getLogger('werkzeug').setLevel(logging.INFO)
+    logger.info("개발 모드: 모든 요청 로그 활성화")
+else:
+    # 프로덕션 모드: GET 요청 로그 최소화
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
 
 def create_app(config_name='development'):
     """Flask 애플리케이션 팩토리"""
@@ -63,6 +73,7 @@ def create_app(config_name='development'):
     app.register_blueprint(client_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(install_bp)
+
 
     # ==================== 웹 페이지 라우트 (레거시 호환) ====================
 
@@ -211,6 +222,20 @@ def create_app(config_name='development'):
         """명령 실행 테스트 페이지"""
         return render_template('command_test.html', username=session.get('username'))
 
+    # 클라이언트 버전 관리 페이지
+    @app.route('/client/versions')
+    @require_admin
+    def client_versions_page():
+        """클라이언트 버전 관리 페이지"""
+        return render_template('client_versions.html', username=session.get('username'))
+
+    # 등록 토큰 관리 페이지 (v0.8.0)
+    @app.route('/registration-tokens')
+    @require_admin
+    def registration_tokens_page():
+        """등록 토큰 관리 페이지"""
+        return render_template('registration_tokens.html', username=session.get('username'))
+
     # 컨텍스트 프로세서 (모든 템플릿에 실습실 목록 주입)
     @app.context_processor
     def inject_rooms():
@@ -225,6 +250,9 @@ def create_app(config_name='development'):
     # 에러 핸들러
     @app.errorhandler(404)
     def not_found(error):
+        # API 경로 404는 로깅
+        if request.path.startswith('/api/'):
+            logger.warning(f"404 Not Found: {request.method} {request.path} from {request.remote_addr}")
         return render_template('error.html', error='페이지를 찾을 수 없습니다 (404)'), 404
 
     @app.errorhandler(500)
@@ -232,11 +260,6 @@ def create_app(config_name='development'):
         logger.error(f"Internal server error: {error}")
         return render_template('error.html', error='서버 내부 오류가 발생했습니다 (500)'), 500
 
-    @app.before_request
-    def log_request():
-        """요청 로깅"""
-        if not request.path.startswith('/static'):
-            logger.debug(f"{request.method} {request.path}")
 
     logger.info(f"앱 생성: {config_name} 모드")
     return app

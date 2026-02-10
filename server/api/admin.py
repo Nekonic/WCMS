@@ -1,11 +1,14 @@
-"""
+﻿"""
 관리자 API Blueprint
 관리자가 호출하는 API 엔드포인트
 """
 from flask import Blueprint, request, jsonify, session
 import json
+import logging
 from models import PCModel, CommandModel, AdminModel
 from utils import require_admin, get_db, execute_query
+
+logger = logging.getLogger('wcms.admin_api')
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api')
 
@@ -62,7 +65,7 @@ def get_pc_history(pc_id):
     limit = request.args.get('limit', default=100, type=int)
     rows = db.execute('''
         SELECT created_at, current_user, processes
-        FROM pc_status 
+        FROM pc_dynamic_info 
         WHERE pc_id=? AND processes IS NOT NULL
         ORDER BY created_at DESC 
         LIMIT ?
@@ -81,10 +84,12 @@ def send_command(pc_id):
     data = request.json
 
     if not data or 'type' not in data:
+        logger.warning(f"명령 전송 실패: type 필드 누락 (pc_id={pc_id})")
         return jsonify({'status': 'error', 'message': 'type 필드가 필요합니다'}), 400 # app.py message
 
     # PC 존재 여부 확인
     if not PCModel.get_by_id(pc_id):
+        logger.warning(f"명령 전송 실패: PC 미존재 (pc_id={pc_id})")
         return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404 # app.py message
 
     command_id = CommandModel.create(
@@ -96,6 +101,8 @@ def send_command(pc_id):
         max_retries=data.get('max_retries', 3),
         timeout_seconds=data.get('timeout_seconds', 300)
     )
+
+    logger.info(f"명령 생성 성공: cmd_id={command_id}, pc_id={pc_id}, type={data.get('type')}, admin={session.get('username')}")
 
     return jsonify({
         'status': 'success',
@@ -612,7 +619,7 @@ def manage_layout_map(room_name):
 
 @admin_bp.route('/debug/pc-status', methods=['GET'])
 @require_admin
-def debug_pc_status():
+def debug_pc_dynamic_info():
     """PC 상태 디버깅 정보"""
     # 오프라인 상태 업데이트 (PCService 활용)
     from services import PCService
@@ -642,3 +649,394 @@ def debug_pc_status():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 클라이언트 버전 관리 ====================
+
+@admin_bp.route('/client/versions', methods=['GET'])
+@require_admin
+def get_client_versions():
+    """클라이언트 버전 목록 조회"""
+    db = get_db()
+    try:
+        versions = db.execute('''
+            SELECT id, version, download_url, changelog, released_at 
+            FROM client_versions 
+            ORDER BY released_at DESC
+        ''').fetchall()
+
+        return jsonify({
+            'status': 'success',
+            'versions': [dict(v) for v in versions]
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@admin_bp.route('/client/version', methods=['POST'])
+@require_admin
+def create_client_version():
+    """클라이언트 버전 등록 (관리자 전용)"""
+    data = request.json
+
+    if not data or 'version' not in data or 'download_url' not in data:
+        return jsonify({'status': 'error', 'message': 'version과 download_url이 필요합니다'}), 400
+
+    db = get_db()
+
+    try:
+        db.execute('''
+            INSERT INTO client_versions (version, download_url, changelog, released_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            data.get('version'),
+            data.get('download_url'),
+            data.get('changelog', '')
+        ))
+        db.commit()
+
+        logger.info(f"클라이언트 버전 등록: {data.get('version')} by {session.get('username')}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f"버전 {data.get('version')} 등록 완료"
+        }), 200
+    except Exception as e:
+        logger.error(f"버전 등록 실패: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f"등록 실패: {str(e)}"}), 500
+
+
+@admin_bp.route('/client/version/<int:version_id>', methods=['DELETE'])
+@require_admin
+def delete_client_version(version_id):
+    """클라이언트 버전 삭제"""
+    db = get_db()
+
+    try:
+        version = db.execute('SELECT version FROM client_versions WHERE id=?', (version_id,)).fetchone()
+        if not version:
+            return jsonify({'status': 'error', 'message': '버전을 찾을 수 없습니다'}), 404
+
+        db.execute('DELETE FROM client_versions WHERE id=?', (version_id,))
+        db.commit()
+
+        logger.info(f"클라이언트 버전 삭제: {version['version']} by {session.get('username')}")
+
+        return jsonify({
+            'status': 'success',
+            'message': f"버전 {version['version']} 삭제 완료"
+        }), 200
+    except Exception as e:
+        logger.error(f"버전 삭제 실패: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 등록 토큰 관리 API (v0.8.0) ====================
+
+@admin_bp.route('/admin/registration-token', methods=['POST'])
+@require_admin
+def create_registration_token():
+    """등록 토큰 생성 (PIN 인증)"""
+    from models import RegistrationTokenModel
+
+    data = request.json or {}
+    usage_type = data.get('usage_type', 'single')  # 기본값: 1회용
+    expires_in = data.get('expires_in', 600)  # 기본값: 10분
+
+    # 유효성 검증
+    if usage_type not in ['single', 'multi']:
+        return jsonify({
+            'status': 'error',
+            'message': 'usage_type must be "single" or "multi"'
+        }), 400
+
+    if not isinstance(expires_in, int) or expires_in < 60 or expires_in > 86400:
+        return jsonify({
+            'status': 'error',
+            'message': 'expires_in must be between 60 and 86400 seconds'
+        }), 400
+
+    try:
+        created_by = session.get('username', 'admin')
+        token_data = RegistrationTokenModel.create(
+            created_by=created_by,
+            usage_type=usage_type,
+            expires_in=expires_in
+        )
+
+        logger.info(f"등록 토큰 생성: {token_data['token']} by {created_by}, type={usage_type}")
+
+        return jsonify({
+            'status': 'success',
+            'id': token_data['id'],
+            'token': token_data['token'],
+            'usage_type': token_data['usage_type'],
+            'expires_at': token_data['expires_at'],
+            'created_by': token_data['created_by']
+        }), 200
+
+    except Exception as e:
+        logger.error(f"토큰 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f"Token creation failed: {str(e)}"
+        }), 500
+
+
+@admin_bp.route('/admin/registration-tokens', methods=['GET'])
+@require_admin
+def list_registration_tokens():
+    """활성 토큰 목록 조회"""
+    from models import RegistrationTokenModel
+
+    try:
+        # 쿼리 파라미터로 필터링 옵션
+        show_all = request.args.get('all', 'false').lower() == 'true'
+
+        if show_all:
+            tokens = RegistrationTokenModel.get_all_tokens()
+        else:
+            tokens = RegistrationTokenModel.get_active_tokens()
+
+        return jsonify({
+            'status': 'success',
+            'tokens': tokens
+        }), 200
+
+    except Exception as e:
+        logger.error(f"토큰 목록 조회 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@admin_bp.route('/admin/registration-token/<int:token_id>', methods=['DELETE'])
+@require_admin
+def delete_registration_token(token_id):
+    """토큰 삭제"""
+    from models import RegistrationTokenModel
+
+    try:
+        db = get_db()
+
+        # 토큰 존재 확인
+        token = db.execute(
+            'SELECT * FROM pc_registration_tokens WHERE id = ?',
+            (token_id,)
+        ).fetchone()
+
+        if not token:
+            return jsonify({
+                'status': 'error',
+                'message': 'Token not found'
+            }), 404
+
+        # 토큰 삭제
+        db.execute('DELETE FROM pc_registration_tokens WHERE id = ?', (token_id,))
+        db.commit()
+
+        logger.info(f"토큰 삭제: ID {token_id} by {session.get('username')}")
+        return jsonify({
+            'status': 'success',
+            'message': 'Token deleted successfully'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"토큰 삭제 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+# ==================== PC 관리 API (v0.8.0) ====================
+
+@admin_bp.route('/admin/pcs/unverified', methods=['GET'])
+@require_admin
+def list_unverified_pcs():
+    """미검증 PC 목록 조회"""
+    db = get_db()
+
+    try:
+        rows = db.execute('''
+            SELECT id, hostname, machine_id, ip_address, is_verified, created_at
+            FROM pc_info
+            WHERE is_verified = 0
+            ORDER BY created_at DESC
+        ''').fetchall()
+
+        pcs = [dict(row) for row in rows]
+
+        return jsonify({
+            'status': 'success',
+            'pcs': pcs
+        }), 200
+
+    except Exception as e:
+        logger.error(f"미검증 PC 목록 조회 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+# ==================== PC 명령 API ====================
+
+@admin_bp.route('/pc/<int:pc_id>/shutdown', methods=['POST'])
+@require_admin
+def send_shutdown_command(pc_id: int):
+    """PC 종료 명령"""
+    data = request.json or {}
+    delay = data.get('delay', 0)
+    message = data.get('message', '')
+
+    try:
+        command_data = {
+            'delay': delay,
+            'message': message
+        }
+
+        admin_username = session.get('username', 'admin')
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type='shutdown',
+            command_data=command_data,
+            admin_username=admin_username
+        )
+
+        logger.info(f"종료 명령 생성: PC {pc_id}, 지연 {delay}초 by {admin_username}")
+
+        return jsonify({
+            'status': 'success',
+            'command_id': command_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"종료 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@admin_bp.route('/pc/<int:pc_id>/restart', methods=['POST'])
+@require_admin
+def send_restart_command(pc_id: int):
+    """PC 재시작 명령"""
+    data = request.json or {}
+    delay = data.get('delay', 0)
+    message = data.get('message', '')
+
+    try:
+        command_data = {
+            'delay': delay,
+            'message': message
+        }
+
+        admin_username = session.get('username', 'admin')
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type='restart',
+            command_data=command_data,
+            admin_username=admin_username
+        )
+
+        logger.info(f"재시작 명령 생성: PC {pc_id}, 지연 {delay}초 by {admin_username}")
+
+        return jsonify({
+            'status': 'success',
+            'command_id': command_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"재시작 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@admin_bp.route('/pc/<int:pc_id>/message', methods=['POST'])
+@require_admin
+def send_message_command(pc_id: int):
+    """PC에 메시지 전송"""
+    data = request.json or {}
+    message = data.get('message', '')
+    duration = data.get('duration', 10)
+
+    if not message:
+        return jsonify({
+            'status': 'error',
+            'message': 'Message is required'
+        }), 400
+
+    try:
+        command_data = {
+            'message': message,
+            'duration': duration
+        }
+
+        admin_username = session.get('username', 'admin')
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type='message',
+            command_data=command_data,
+            admin_username=admin_username
+        )
+
+        logger.info(f"메시지 명령 생성: PC {pc_id} by {admin_username}")
+
+        return jsonify({
+            'status': 'success',
+            'command_id': command_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"메시지 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@admin_bp.route('/pc/<int:pc_id>/kill-process', methods=['POST'])
+@require_admin
+def send_kill_process_command(pc_id: int):
+    """프로세스 종료 명령"""
+    data = request.json or {}
+    process_name = data.get('process_name', '')
+
+    if not process_name:
+        return jsonify({
+            'status': 'error',
+            'message': 'process_name is required'
+        }), 400
+
+    try:
+        command_data = {
+            'process_name': process_name
+        }
+
+        admin_username = session.get('username', 'admin')
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type='kill_process',
+            command_data=command_data,
+            admin_username=admin_username
+        )
+
+        logger.info(f"프로세스 종료 명령 생성: PC {pc_id}, {process_name} by {admin_username}")
+
+        return jsonify({
+            'status': 'success',
+            'command_id': command_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"프로세스 종료 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+

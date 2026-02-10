@@ -132,9 +132,109 @@ def init_db(force=False):
     except subprocess.CalledProcessError:
         print("[!] 좌석 배치 생성 실패.")
 
-    print("\n 초기화 완료.")
+    # 클라이언트 버전 초기 데이터 삽입
+    print_step("클라이언트 버전 초기 데이터 삽입 중...")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute('''
+            INSERT INTO client_versions (version, download_url, changelog)
+            VALUES (?, ?, ?)
+        ''', (
+            '0.7.0',
+            'https://github.com/Nekonic/WCMS/releases/download/client-v0.7.0/WCMS-Client.exe',
+            '자동 빌드 - v0.7.0 릴리스'
+        ))
+        conn.commit()
+        conn.close()
+        print("[✓] 클라이언트 버전 0.7.0 등록 완료.")
+    except Exception as e:
+        print(f"[!] 클라이언트 버전 삽입 실패: {e}")
+
+    print("\n✅ 초기화 완료.")
     print("    관리자 ID: admin")
     print("    비밀번호 : admin")
+    print("    클라이언트 버전: 0.7.0")
+
+def migrate_db(migration_file=None):
+    """데이터베이스 마이그레이션 실행
+
+    Args:
+        migration_file: 실행할 마이그레이션 파일명 (None이면 모든 마이그레이션 실행)
+    """
+    print_step("데이터베이스 마이그레이션 중...")
+
+    import sqlite3
+
+    db_path = os.getenv('WCMS_DB_PATH', os.path.join("db", "wcms.sqlite3"))
+    migrations_dir = os.path.join("server", "migrations")
+
+    if not os.path.exists(db_path):
+        print(f"오류: 데이터베이스({db_path})가 존재하지 않습니다.")
+        print("먼저 'python manage.py init-db'를 실행하세요.")
+        return
+
+    # 마이그레이션 파일 목록
+    if migration_file:
+        migration_files = [migration_file]
+    else:
+        # 모든 .sql 파일 중 숫자로 시작하는 파일만 (schema.sql 제외)
+        all_files = os.listdir(migrations_dir)
+        migration_files = sorted([f for f in all_files if f.endswith('.sql') and f[0].isdigit()])
+
+    if not migration_files:
+        print("실행할 마이그레이션이 없습니다.")
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+
+        # 마이그레이션 히스토리 테이블 생성 (없으면)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS migration_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                migration_file TEXT UNIQUE NOT NULL,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+
+        # 이미 적용된 마이그레이션 확인
+        applied = set(row['migration_file'] for row in
+                     conn.execute('SELECT migration_file FROM migration_history').fetchall())
+
+        # 마이그레이션 실행
+        for filename in migration_files:
+            if filename in applied:
+                print(f"⏭️  {filename} - 이미 적용됨")
+                continue
+
+            filepath = os.path.join(migrations_dir, filename)
+            if not os.path.exists(filepath):
+                print(f"⚠️  {filename} - 파일 없음")
+                continue
+
+            print(f"📝 {filename} 실행 중...")
+
+            with open(filepath, 'r', encoding='utf-8') as f:
+                migration_sql = f.read()
+
+            try:
+                conn.executescript(migration_sql)
+                conn.execute('INSERT INTO migration_history (migration_file) VALUES (?)', (filename,))
+                conn.commit()
+                print(f"✅ {filename} - 완료")
+            except sqlite3.Error as e:
+                print(f"❌ {filename} - 실패: {e}")
+                conn.rollback()
+                raise
+
+        conn.close()
+        print_step("마이그레이션 완료!")
+
+    except Exception as e:
+        print(f"오류: {e}")
+        sys.exit(1)
 
 def run_server(host="0.0.0.0", port=5050, mode="development", use_gunicorn=False):
     """서버 실행"""
@@ -170,16 +270,7 @@ def run_server(host="0.0.0.0", port=5050, mode="development", use_gunicorn=False
         print("\n서버가 종료되었습니다.")
 
 def run_tests(target="all"):
-    """테스트 실행 (루트 .venv 사용)"""
-
-    # 루트 venv의 Python 경로
-    venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe") if platform.system() == "Windows" else os.path.join(os.getcwd(), ".venv", "bin", "python")
-
-    if not os.path.exists(venv_python):
-        print_step("오류: 루트 가상 환경을 찾을 수 없습니다.")
-        print("다음 명령으로 가상 환경을 생성해주세요:")
-        print("  uv sync --extra dev")
-        sys.exit(1)
+    """테스트 실행 (uv run 사용)"""
 
     if target == "archive":
         print_step("아카이브 서버 테스트 실행 (app.py 검증)...")
@@ -187,7 +278,7 @@ def run_tests(target="all"):
         env["PYTHONPATH"] = os.path.join(os.getcwd(), "archive", "code")
 
         try:
-            subprocess.run([venv_python, "archive/code/test_server.py"], env=env, check=True)
+            subprocess.run(["uv", "run", "python", "archive/code/test_server.py"], env=env, check=True)
         except subprocess.CalledProcessError:
             print("아카이브 서버 테스트 실패")
             sys.exit(1)
@@ -197,7 +288,7 @@ def run_tests(target="all"):
         print_step("서버 테스트 실행...")
 
         try:
-            subprocess.run([venv_python, "-m", "pytest", "tests/server", "-v", "--tb=short"], check=True)
+            subprocess.run(["uv", "run", "python", "-m", "pytest", "tests/server", "-v", "--tb=short"], check=True)
         except subprocess.CalledProcessError:
             print("서버 테스트 실패")
             if target == "server":
@@ -211,7 +302,7 @@ def run_tests(target="all"):
         print_step("클라이언트 테스트 실행...")
 
         try:
-            subprocess.run([venv_python, "-m", "pytest", "tests/client", "-v", "--tb=short"], check=True)
+            subprocess.run(["uv", "run", "python", "-m", "pytest", "tests/client", "-v", "--tb=short"], check=True)
         except subprocess.CalledProcessError:
             print("클라이언트 테스트 실패")
             if target == "client":
@@ -296,6 +387,9 @@ def main():
     elif command == "init-db":
         force = "--force" in sys.argv
         init_db(force=force)
+    elif command == "migrate":
+        migration_file = sys.argv[2] if len(sys.argv) > 2 else None
+        migrate_db(migration_file)
     elif command == "run":
         # 옵션 파싱 (간단하게)
         use_gunicorn = "--prod" in sys.argv
@@ -320,11 +414,12 @@ def main():
         print("    --cleanup      : 테스트 후 컨테이너 정리")
         print("    --skip-boot    : Windows 부팅 대기 스킵")
         print("  init-db          : 데이터베이스 초기화")
+        print("  migrate [file]   : 마이그레이션 실행 (file 생략 시 모든 마이그레이션)")
         print("  install          : 의존성 설치")
         print("  build            : 클라이언트 EXE 빌드 (Windows 전용)")
     else:
         print(f"알 수 없는 명령: {command}")
-        print("사용 가능한 명령: run, test, docker-test, init-db, install, build")
+        print("사용 가능한 명령: run, test, docker-test, init-db, migrate, install, build")
 
 if __name__ == "__main__":
     main()
