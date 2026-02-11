@@ -201,22 +201,34 @@ if %errorLevel% equ 0 (
     timeout /t 3 >nul
 )
 
-REM Install service using sc create (avoids hanging)
-echo [INFO] Installing Windows service using sc create...
-sc create WCMS-Client binPath= "\"%INSTALL_DIR%\\WCMS-Client.exe\"" start= delayed-auto
+REM Install service using PowerShell New-Service (more reliable for path handling)
+echo [INFO] Installing Windows service using PowerShell...
+powershell -Command "New-Service -Name 'WCMS-Client' -BinaryPathName '\"%INSTALL_DIR%\\WCMS-Client.exe\"' -DisplayName 'WCMS Client Service' -Description 'WCMS Remote Management Client' -StartupType Automatic"
 if %errorLevel% neq 0 (
-    echo [ERROR] Service creation failed.
+    echo [ERROR] Failed to create service using PowerShell.
     pause
     exit /b 1
 )
 
-REM Add service description
-sc description WCMS-Client "WCMS Remote Management Client"
-
-REM Configure failure actions
+echo [OK] Service successfully registered!
+echo.
+echo [INFO] Configuring auto-start and failure actions...
+sc config WCMS-Client start= auto
 sc failure WCMS-Client reset= 86400 actions= restart/60000/restart/60000/restart/60000
 
-echo [OK] Service successfully registered!
+REM Verify service was installed
+echo [INFO] Checking service registration...
+sc query WCMS-Client >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Service installation failed - service not found
+    echo.
+    echo The executable ran but service was not registered.
+    echo Check logs at: %CONFIG_DIR%\\logs\\
+    echo.
+    pause
+    exit /b 1
+)
+echo [OK] Service installed and configured for delayed auto-start and failure recovery.
 
 REM Create logs directory
 if not exist "%CONFIG_DIR%\\logs" mkdir "%CONFIG_DIR%\\logs"

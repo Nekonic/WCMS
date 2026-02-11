@@ -4,6 +4,7 @@
 """
 import subprocess
 import logging
+import os
 from typing import Dict, Any
 
 logger = logging.getLogger('wcms')
@@ -41,11 +42,11 @@ class CommandExecutor:
                 command_data.get('command', '')
             ),
             'install': lambda: CommandExecutor.install(
-                command_data.get('app_id', '')  # app_name -> app_id로 변경
+                command_data.get('app_id', '')
             ),
             'download': lambda: CommandExecutor.download(
                 command_data.get('url', ''),
-                command_data.get('destination') # destination 파라미터 추가
+                command_data.get('destination')
             ),
             'create_user': lambda: CommandExecutor.create_user(**command_data),
             'delete_user': lambda: CommandExecutor.delete_user(
@@ -73,14 +74,9 @@ class CommandExecutor:
 
     @staticmethod
     def shutdown(delay: int = 0, message: str = '') -> str:
-        """PC 종료
-
-        Args:
-            delay: 지연 시간 (초)
-            message: 사용자에게 표시할 메시지
-        """
+        """PC 종료"""
         try:
-            delay = max(0, delay)  # 음수 방지
+            delay = max(0, delay)
             cmd = f'shutdown /s /t {delay}'
             if message:
                 cmd += f' /c "{message}"'
@@ -92,14 +88,9 @@ class CommandExecutor:
 
     @staticmethod
     def reboot(delay: int = 0, message: str = '') -> str:
-        """PC 재시작
-
-        Args:
-            delay: 지연 시간 (초)
-            message: 사용자에게 표시할 메시지
-        """
+        """PC 재시작"""
         try:
-            delay = max(0, delay)  # 음수 방지
+            delay = max(0, delay)
             cmd = f'shutdown /r /t {delay}'
             if message:
                 cmd += f' /c "{message}"'
@@ -115,6 +106,9 @@ class CommandExecutor:
         if not command:
             return "오류: 실행할 명령어가 없습니다."
         try:
+            # PowerShell을 통해 실행하여 경로 문제 완화 시도
+            # cmd /c로 실행하되, winget 같은 명령은 powershell로 감싸서 시도해볼 수도 있음
+            # 하지만 일반적인 execute 명령은 cmd가 기본
             result = subprocess.run(
                 command,
                 shell=True,
@@ -133,22 +127,20 @@ class CommandExecutor:
         """프로그램 설치 (winget)"""
         if not app_id:
             return "오류: 설치할 프로그램의 App ID가 필요합니다."
+        
         try:
-            # winget이 설치되어 있는지 확인
-            check_result = subprocess.run(
-                'winget --version',
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-
-            if check_result.returncode != 0:
-                return "오류: winget이 설치되어 있지 않습니다. Windows 11 또는 최신 Windows 10이 필요합니다."
-
-            # winget으로 설치 (자동 동의 옵션 포함)
+            # 1. winget 직접 실행 시도
+            # 2. 실패 시 PowerShell을 통해 실행 시도 (경로 문제 해결)
+            
+            # winget 명령 구성
+            winget_cmd = f'winget install -e --id {app_id} --silent --accept-package-agreements --accept-source-agreements'
+            
+            # PowerShell을 통해 실행 (LocalSystem 계정에서 winget 경로 찾기 위해)
+            # -NoProfile -ExecutionPolicy Bypass 옵션 추가
+            ps_cmd = f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{winget_cmd}"'
+            
             result = subprocess.run(
-                f'winget install -e --id {app_id} --silent --accept-package-agreements --accept-source-agreements',
+                ps_cmd,
                 shell=True,
                 capture_output=True,
                 text=True,
@@ -158,7 +150,10 @@ class CommandExecutor:
             if result.returncode == 0:
                 return f"설치 완료: {app_id}"
             else:
-                return f"설치 실패: {app_id} (반환 코드: {result.returncode})"
+                # PowerShell 실패 시 에러 메시지 반환
+                error_msg = result.stderr.strip() or result.stdout.strip()
+                return f"설치 실패: {app_id} (반환 코드: {result.returncode})\n출력: {error_msg}"
+
         except subprocess.TimeoutExpired:
             return f"설치 타임아웃: {app_id} (5분 초과)"
         except Exception as e:
@@ -171,7 +166,6 @@ class CommandExecutor:
             return "오류: 다운로드할 파일의 URL이 필요합니다."
         try:
             import requests
-            import os
 
             # 저장 경로 설정
             if destination:
@@ -200,31 +194,23 @@ class CommandExecutor:
 
     @staticmethod
     def create_user(username, password, full_name=None, comment=None):
-        """Windows 사용자 계정 생성 (하위 호환성)"""
+        """Windows 사용자 계정 생성"""
         return CommandExecutor.manage_account('create', username, password, full_name, comment)
 
     @staticmethod
     def delete_user(username):
-        """Windows 사용자 계정 삭제 (하위 호환성)"""
+        """Windows 사용자 계정 삭제"""
         return CommandExecutor.manage_account('delete', username)
 
     @staticmethod
     def change_password(username, new_password):
-        """Windows 사용자 비밀번호 변경 (하위 호환성)"""
+        """Windows 사용자 비밀번호 변경"""
         return CommandExecutor.manage_account('change_password', username, new_password)
 
     @staticmethod
     def manage_account(action: str, username: str, password: str = None,
                       full_name: str = None, comment: str = None) -> str:
-        """Windows 계정 관리 통합 함수
-
-        Args:
-            action: 작업 타입 ('create', 'delete', 'change_password')
-            username: 사용자 이름
-            password: 비밀번호 (create, change_password에서 필요)
-            full_name: 전체 이름 (create에서 선택사항)
-            comment: 설명 (create에서 선택사항)
-        """
+        """Windows 계정 관리 통합 함수"""
         try:
             if action == 'create':
                 if not password:
@@ -234,7 +220,6 @@ class CommandExecutor:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
                 if result.returncode == 0:
-                    # 전체 이름 설정 (선택사항)
                     if full_name:
                         subprocess.run(
                             f'wmic useraccount where name="{username}" set fullname="{full_name}"',
@@ -274,14 +259,8 @@ class CommandExecutor:
 
     @staticmethod
     def show_message(message: str, duration: int = 10) -> str:
-        """사용자에게 메시지 표시
-
-        Args:
-            message: 표시할 메시지
-            duration: 표시 시간 (초) - 실제로는 무시됨 (msg는 사용자가 직접 닫아야 함)
-        """
+        """사용자에게 메시지 표시"""
         try:
-            # msg 명령은 사용자가 OK를 클릭할 때까지 표시됨
             cmd = f'msg * "{message}"'
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
 
@@ -294,16 +273,11 @@ class CommandExecutor:
 
     @staticmethod
     def kill_process(process_name: str) -> str:
-        """프로세스 강제 종료
-
-        Args:
-            process_name: 종료할 프로세스 이름 (예: chrome.exe, notepad.exe)
-        """
+        """프로세스 강제 종료"""
         try:
             if not process_name:
                 return "프로세스 이름이 지정되지 않음"
 
-            # .exe 확장자 추가 (없는 경우)
             if not process_name.lower().endswith('.exe'):
                 process_name += '.exe'
 

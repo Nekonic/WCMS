@@ -95,6 +95,9 @@
   "SearchFilterHost.exe",
   "dasHost.exe",
   "timeout.exe",
-  "OpenConsole.exe"
+  "OpenConsole.exe",
+  "ShellHost.exe",
+  "WCMS-Client.exe",
+  "mmc.exe"
 ]
 
