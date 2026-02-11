@@ -1,9 +1,9 @@
 # WCMS API 문서
 
-> **버전**: 0.8.0  
+> **버전**: 0.8.6  
 > **기본 URL**: `http://your-server:5050`  
-> **업데이트**: 2026-02-10  
-> **주요 변경**: PIN 인증 시스템, 네트워크 성능 개선
+> **업데이트**: 2026-02-11  
+> **주요 변경**: Chocolatey 지원, 서비스 설치 개선
 
 ---
 
@@ -25,10 +25,10 @@
 - **문자 인코딩**: UTF-8
 - **타임아웃**: 30초 (요청), 5초 (명령 폴링)
 
-### v0.8.0 주요 변경사항
-1. **PIN 인증**: 클라이언트 등록 시 6자리 PIN 필수
-2. **짧은 폴링**: Long-polling 제거, 즉시 응답 방식으로 변경
-3. **성능 향상**: 동시 연결 처리 능력 20대 → 100대
+### v0.8.6 주요 변경사항
+1. **Chocolatey 지원**: 프로그램 설치 명령이 `winget`에서 `chocolatey`로 변경되었습니다.
+2. **서비스 설치 개선**: `install.cmd`의 서비스 등록 방식이 개선되어 안정성이 향상되었습니다.
+3. **UI 개선**: 계정 관리 및 전원 관리 모달이 클릭 기반 UI로 변경되었습니다.
 
 ---
 
@@ -83,9 +83,9 @@ GET /api/client/version
 ```json
 {
   "status": "success",
-  "version": "0.8.0",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
-  "changelog": "PIN 인증 시스템 도입"
+  "version": "0.8.6",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.6/WCMS-Client.exe",
+  "changelog": "Chocolatey 지원 및 서비스 설치 개선"
 }
 ```
 
@@ -347,7 +347,7 @@ Content-Type: application/json
 - `message`: 메시지 표시
 - `kill_process`: 프로세스 종료
 - `execute`: CMD 실행
-- `install`: 프로그램 설치
+- `install`: 프로그램 설치 (Chocolatey)
 - `download`: 파일 다운로드
 - `create_user`: 사용자 생성
 - `delete_user`: 사용자 삭제
@@ -677,49 +677,24 @@ Content-Type: application/json
 
 ## 변경 이력
 
-### v0.8.0 (2026-02-10)
+### v0.8.6 (2026-02-11)
 
 **주요 변경:**
 
-1. **PIN 인증 시스템 도입**
-   - 클라이언트 등록 시 6자리 PIN 필수
-   - 1회용/재사용 가능 토큰 지원
-   - 토큰 만료 시간 설정 (기본 10분)
+1. **Chocolatey 지원**
+   - `winget` 대신 `chocolatey`를 사용하여 프로그램 설치
+   - 서비스 환경(`LocalSystem`)에서도 안정적인 설치 지원
+   - Chocolatey 미설치 시 자동 설치 기능 추가
 
-2. **네트워크 성능 최적화**
-   - Long-polling 제거 → 짧은 폴링 (2초 주기)
-   - 명령 조회 + 경량 하트비트 통합 (HTTP 요청 50% 절감)
-   - 델타 전송 방식 (프로세스 목록 제외, 대역폭 60% 절감)
-   - IP 주소 자동 업데이트 (DHCP, VPN 대응)
-   - 동시 연결 처리: 20대 → 100대
+2. **서비스 설치 개선**
+   - `install.cmd`의 서비스 등록 로직을 `sc create`로 변경하여 안정성 확보
+   - 서비스 시작 시 인자 없이 실행되도록 수정하여 `StartServiceCtrlDispatcher` 호출 보장
+   - `delayed-auto` 시작 유형 적용으로 부팅 시 안정성 향상
 
-3. **새 엔드포인트:**
-   - `POST /api/admin/registration-token` - 토큰 생성
-   - `GET /api/admin/registration-tokens` - 토큰 목록
-   - `DELETE /api/admin/registration-token/{token}` - 토큰 삭제
-   - `GET /api/admin/pcs/unverified` - 미검증 PC 목록
-   - `DELETE /api/admin/pc/{pc_id}` - PC 삭제
-   - `POST /api/client/command` - 명령 조회 + 하트비트 통합 (GET도 지원)
-
-4. **API 변경:**
-   - `/api/client/heartbeat`: `full_update` 플래그 추가, 경량/전체 하트비트 구분
-   - `/api/client/command`: POST 방식 추가, 하트비트 통합 지원
-   - IP 주소 자동 업데이트 (`ip_changed` 응답 필드)
-
-**네트워크 최적화 상세:**
-
-| 항목 | v0.7.1 | v0.8.0 | 개선율 |
-|------|--------|--------|--------|
-| 하트비트 주기 | 5분 (전체만) | 5분 (전체) + 2초 (경량) | - |
-| 명령 조회 주기 | 5초 (Long-polling) | 2초 (즉시 응답) | - |
-| HTTP 요청 수 | 1,812회/시간 | 1,800회/시간 | 0.7% 절감 |
-| 전송 데이터량 | 60MB/시간/100대 | 24MB/시간/100대 | **60% 절감** |
-| 동시 연결 수 | ~20대 (blocking) | ~100대 (non-blocking) | **5배 증가** |
-
-**하위 호환성:**
-- v0.7.1 클라이언트: PIN 없이 등록 시 403 오류
-- `GET /api/client/command` 계속 지원
-- 하트비트 `heartbeat` 필드 선택 사항
+3. **UI 개선**
+   - 계정 관리 및 전원 관리 모달을 클릭 기반 UI로 변경
+   - 프로세스 종료 시 목록에서 선택 가능하도록 개선
+   - RAM 사용량 도넛 차트 추가
 
 ---
 

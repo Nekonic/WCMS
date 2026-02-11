@@ -26,6 +26,30 @@ python manage.py run
 
 ---
 
+## 💻 클라이언트 설치 (v0.8.0+)
+
+### 1. 등록 PIN 생성
+1. 서버 관리자 페이지(http://localhost:5050) 접속
+2. 로그인 (`admin` / `admin`)
+3. **🔑 등록 토큰** 메뉴 클릭
+4. 토큰 생성 후 6자리 PIN 복사
+
+### 2. 자동 설치 (관리자 권한)
+
+**Windows CMD:**
+```cmd
+curl -fsSL http://your-server:5050/install/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+**PowerShell:**
+```powershell
+iwr -Uri "http://your-server:5050/install/install.ps1" -OutFile install.ps1; .\install.ps1; del install.ps1
+```
+
+설치 중 PIN을 입력하면 자동으로 등록되고 서비스가 시작됩니다.
+
+---
+
 ## 🛠 관리 명령어
 
 | 명령어 | 설명 |
@@ -55,13 +79,13 @@ lsof -i :5050
 kill -9 <PID>
 ```
 
-### 3. Docker 테스트 시 ISO 파일 필요
-- `iso/win11.iso` 파일이 없으면 Docker Windows 컨테이너가 시작되지 않음
-- 다운로드: https://www.microsoft.com/software-download/windows11
-
-### 4. 클라이언트 빌드는 Windows에서만 가능
+### 3. 클라이언트 빌드는 Windows에서만 가능
 - `python manage.py build`는 Windows 환경에서만 실행 가능
 - pywin32, WMI 의존성 필요
+
+### 4. 서비스 시작 실패 (Exit code 2)
+- v0.8.5 이상을 사용하세요.
+- `install.cmd`가 `sc create`를 사용하여 서비스를 올바르게 등록합니다.
 
 ---
 
@@ -110,4 +134,3 @@ uv run python app.py
 ### DB 위치
 - 로컬: `db/wcms.sqlite3`
 - Docker: `/app/db/wcms.sqlite3`
-

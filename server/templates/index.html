@@ -160,7 +160,7 @@
         ">
             <i class="fas fa-skull-crossbones"></i> 프로세스 종료
         </button>
-        <button onclick="showBulkWingetModal()" style="
+        <button onclick="showBulkChocoModal()" style="
             background: #3b82f6;
             color: white;
             padding: 0.7em 1.2em;
@@ -827,8 +827,8 @@ function confirmKillProcess() {
     executeBulkCommand('kill_process', { process_name: processName });
 }
 
-function showBulkWingetModal() {
-    const appId = prompt('설치할 프로그램의 winget App ID를 입력하세요:\n\n예시:\n- Notepad++.Notepad++\n- 7zip.7zip\n- VideoLAN.VLC\n- Google.Chrome');
+function showBulkChocoModal() {
+    const appId = prompt('설치할 프로그램의 Chocolatey 패키지 ID를 입력하세요:\n\n예시:\n- googlechrome\n- notepadplusplus\n- 7zip\n- vlc');
     if (!appId) return;
 
     executeBulkCommand('install', { app_id: appId });

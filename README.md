@@ -4,8 +4,8 @@ WCMS는 실습실 PC를 원격으로 관리하고 모니터링하기 위한 시�
 
 ## 📊 프로젝트 상태
 
-- **버전**: 0.8.0
-- **최근 업데이트**: 2026-02-10
+- **버전**: 0.8.6
+- **최근 업데이트**: 2026-02-11
 - **주요 기능**: 
   - [x] PIN 기반 인증 시스템
   - [x] RESTful API 재설계
@@ -13,6 +13,8 @@ WCMS는 실습실 PC를 원격으로 관리하고 모니터링하기 위한 시�
   - [x] 통합 테스트 (65개 통과)
   - [x] 웹 UI 등록 토큰 관리
   - [x] 자동 IP 변경 감지
+  - [x] **Chocolatey 기반 프로그램 설치**
+  - [x] **안정적인 Windows 서비스 설치**
 
 ## 🚀 빠른 시작
 
@@ -34,7 +36,7 @@ python manage.py run
 - **서버 주소**: http://localhost:5050
 - **기본 계정**: `admin` / `admin`
 
-### 클라이언트 설치 (v0.8.0 - PIN 인증 필수)
+### 클라이언트 설치 (v0.8.0+ - PIN 인증 필수)
 
 #### 1. 관리자 웹에서 등록 PIN 생성
 
@@ -64,29 +66,21 @@ iwr -Uri "http://your-server:5050/install/install.ps1" -OutFile install.ps1; .\i
 
 **설치 과정:**
 - GitHub Releases에서 최신 클라이언트 다운로드
-- `C:\ProgramData\WCMS` 디렉토리에 설치
-- PIN을 포함한 `config.json` 자동 생성
-- Windows 서비스로 등록 및 시작
+- `C:\Program Files\WCMS` 디렉토리에 설치
+- PIN을 포함한 `config.json` 자동 생성 (`C:\ProgramData\WCMS`)
+- Windows 서비스(`WCMS-Client`)로 등록 및 자동 시작 (지연된 시작)
 
 **⚠️ 사전 준비:** 설치 스크립트가 작동하려면 DB에 클라이언트 버전 정보가 필요합니다:
 
 **로컬 서버:**
 ```bash
 # Windows
-sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.0', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe', 'v0.8.0 - PIN Authentication');"
-
-# Linux/Mac
-sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.0', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe', 'v0.8.0 - PIN Authentication');"
+sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.6', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.6/WCMS-Client.exe', 'v0.8.6 - Chocolatey Support');"
 ```
 
 **Docker 서버:**
 ```bash
-docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.0', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe', 'v0.8.0 - PIN Authentication');"
-```
-
-**확인:**
-```bash
-curl http://localhost:5050/api/client/version
+docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.6', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.6/WCMS-Client.exe', 'v0.8.6 - Chocolatey Support');"
 ```
 
 ---
@@ -104,7 +98,7 @@ curl http://localhost:5050/api/client/version
 
 ### 상세 문서
 - **[아키텍처 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)**: 시스템 구조 및 설계
-- **[API 명세서 (docs/API.md)](docs/API.md)**: REST API 상세 설명 (v0.8.0)
+- **[API 명세서 (docs/API.md)](docs/API.md)**: REST API 상세 설명 (v0.8.6)
 - **[변경 이력 (docs/CHANGELOG.md)](docs/CHANGELOG.md)**: 버전별 변경사항
 - **[문서 목록 (docs/INDEX.md)](docs/INDEX.md)**: 전체 문서 인덱스
 
@@ -117,17 +111,17 @@ curl http://localhost:5050/api/client/version
 - **Backend**: Python 3.8+, Flask
 - **Database**: SQLite (WAL mode)
 - **Frontend**: HTML, CSS, JavaScript
-- **Client**: Python (psutil, requests)
+- **Client**: Python (psutil, requests, pywin32)
 - **Package Manager**: uv
 
-## 🔒 보안 (v0.8.0)
+## 🔒 보안 (v0.8.0+)
 
 - **PIN 인증**: 6자리 숫자 PIN으로 클라이언트 등록 인증
 - **토큰 관리**: 1회용/재사용 가능 토큰, 만료 시간 설정
 - **웹 UI**: 관리자만 토큰 생성/삭제 가능
 - **검증 상태**: 미검증 PC 자동 차단
 
-## ⚡ 성능 (v0.8.0)
+## ⚡ 성능 (v0.8.0+)
 
 - **네트워크**: 대역폭 -60%, HTTP 오버헤드 -50%
 - **폴링**: 2초 간격 (기존 5초)
@@ -150,32 +144,18 @@ python manage.py test client
 python manage.py docker-test
 ```
 
-**테스트 커버리지 (v0.8.0):**
-- 통합 테스트: 14개 (클라이언트-서버 전체 흐름)
-- 단위 테스트: 51개 (모델, API, 인증)
-- 총 65개 테스트 통과, 1개 스킵
-
-## 🚀 v0.8.0 주요 변경사항
-
-### Breaking Changes
-- **PIN 인증 필수**: 클라이언트 등록 시 6자리 PIN 필요
-- **API 엔드포인트 변경**:
-  - `POST /api/client/commands` (명령 조회)
-  - `POST /api/client/commands/{id}/result` (결과 전송)
-- **응답 형식 통일**: `{status, data, error}`
-- **클라이언트 v0.8.0 필수**: 이전 버전 호환 불가
+## 🚀 v0.8.6 주요 변경사항
 
 ### 새로운 기능
-- 웹 UI 등록 토큰 관리 페이지
-- 자동 IP 변경 감지
-- 명령에 delay, message 파라미터 지원
-- 프로세스 종료, 메시지 표시 명령
+- **Chocolatey 지원**: `winget` 대신 `chocolatey`를 사용하여 프로그램 설치 (서비스 환경 호환성 개선)
+- **서비스 설치 개선**: `sc create`를 사용하여 안정적인 서비스 등록 및 시작
+- **UI 개선**: 계정 관리, 전원 관리, 프로세스 종료 모달 개선
+- **RAM 차트**: PC 상세 정보에 RAM 사용량 도넛 차트 추가
 
-### 성능 개선
-- 네트워크 대역폭 60% 절감
-- 디스크 사용량 70% 감소
-- 폴링 주기 5초 → 2초
-- Long-polling 제거 (동시 연결 제한 해결)
+### 버그 수정
+- 서비스 재시작 시 자동 시작 안 되는 문제 해결 (`delayed-auto`)
+- 파일 다운로드 시 경로 지정 기능 추가
+- JSON 이중 인코딩 문제 해결
 
 자세한 내용은 [CHANGELOG.md](docs/CHANGELOG.md)를 참고하세요.
 

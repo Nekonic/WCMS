@@ -5,6 +5,7 @@
 import subprocess
 import logging
 import os
+import glob
 from typing import Dict, Any
 
 logger = logging.getLogger('wcms')
@@ -107,8 +108,6 @@ class CommandExecutor:
             return "오류: 실행할 명령어가 없습니다."
         try:
             # PowerShell을 통해 실행하여 경로 문제 완화 시도
-            # cmd /c로 실행하되, winget 같은 명령은 powershell로 감싸서 시도해볼 수도 있음
-            # 하지만 일반적인 execute 명령은 cmd가 기본
             result = subprocess.run(
                 command,
                 shell=True,
@@ -123,39 +122,81 @@ class CommandExecutor:
             return f"실행 실패: {str(e)}"
 
     @staticmethod
-    def install(app_id: str) -> str:
-        """프로그램 설치 (winget)"""
-        if not app_id:
-            return "오류: 설치할 프로그램의 App ID가 필요합니다."
-        
+    def _ensure_chocolatey_installed() -> bool:
+        """Chocolatey 설치 확인 및 설치"""
+        # choco 명령 확인
         try:
-            # 1. winget 직접 실행 시도
-            # 2. 실패 시 PowerShell을 통해 실행 시도 (경로 문제 해결)
-            
-            # winget 명령 구성
-            winget_cmd = f'winget install -e --id {app_id} --silent --accept-package-agreements --accept-source-agreements'
-            
-            # PowerShell을 통해 실행 (LocalSystem 계정에서 winget 경로 찾기 위해)
-            # -NoProfile -ExecutionPolicy Bypass 옵션 추가
-            ps_cmd = f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{winget_cmd}"'
-            
+            result = subprocess.run('choco --version', shell=True, capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+        except:
+            pass
+
+        # 설치 시도
+        logger.info("Chocolatey가 설치되어 있지 않습니다. 설치를 시도합니다...")
+        try:
+            install_cmd = "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
             result = subprocess.run(
-                ps_cmd,
+                f'powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "{install_cmd}"',
                 shell=True,
                 capture_output=True,
                 text=True,
                 timeout=300
             )
+            
+            if result.returncode == 0:
+                logger.info("Chocolatey 설치 성공")
+                return True
+            else:
+                logger.error(f"Chocolatey 설치 실패: {result.stderr}")
+                return False
+        except Exception as e:
+            logger.error(f"Chocolatey 설치 중 오류: {e}")
+            return False
+
+    @staticmethod
+    def install(app_id: str) -> str:
+        """프로그램 설치 (Chocolatey)"""
+        if not app_id:
+            return "오류: 설치할 프로그램의 패키지 ID가 필요합니다."
+        
+        # Chocolatey 확인 및 설치
+        if not CommandExecutor._ensure_chocolatey_installed():
+            return "오류: Chocolatey를 설치할 수 없어 프로그램을 설치할 수 없습니다."
+
+        try:
+            # choco install 명령 구성
+            # -y: 모든 프롬프트에 예라고 대답
+            # --force: 강제 설치
+            choco_cmd = f'choco install {app_id} -y --force'
+            
+            # PowerShell을 통해 실행 (환경 변수 갱신 문제 해결 위해)
+            # Chocolatey 설치 직후에는 PATH가 갱신되지 않았을 수 있으므로 절대 경로 시도 또는 refreshenv 필요하지만
+            # 서비스 환경에서는 refreshenv가 동작하지 않을 수 있음.
+            # choco.exe는 보통 C:\ProgramData\chocolatey\bin\choco.exe에 있음
+            
+            choco_path = r"C:\ProgramData\chocolatey\bin\choco.exe"
+            if os.path.exists(choco_path):
+                cmd = f'"{choco_path}" install {app_id} -y --force'
+            else:
+                cmd = choco_cmd # PATH에 있다고 가정
+
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=600 # 설치는 시간이 걸릴 수 있음
+            )
 
             if result.returncode == 0:
                 return f"설치 완료: {app_id}"
             else:
-                # PowerShell 실패 시 에러 메시지 반환
                 error_msg = result.stderr.strip() or result.stdout.strip()
                 return f"설치 실패: {app_id} (반환 코드: {result.returncode})\n출력: {error_msg}"
 
         except subprocess.TimeoutExpired:
-            return f"설치 타임아웃: {app_id} (5분 초과)"
+            return f"설치 타임아웃: {app_id} (10분 초과)"
         except Exception as e:
             return f"설치 실패: {str(e)}"
 
