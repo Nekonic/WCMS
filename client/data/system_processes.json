@@ -90,7 +90,11 @@
   "vmware-authd.exe",
   "vmware-usbarbitrator64.exe",
   "VSSVC.exe",
-  "msedge.exe",
-  "msedgewebview2.exe"
+  "msedgewebview2.exe",
+  "CrossDeviceResume.exe",
+  "SearchFilterHost.exe",
+  "dasHost.exe",
+  "timeout.exe",
+  "OpenConsole.exe"
 ]
 

@@ -32,13 +32,13 @@ def get_install_cmd_script(server_url: str) -> str:
 
     return f'''@echo off
 chcp 65001 >nul
-REM WCMS Client Auto-Install Script (v0.8.2)
+REM WCMS Client Auto-Install Script v0.8.4
 REM GitHub: https://github.com/{GITHUB_REPO}
 
 SETLOCAL EnableDelayedExpansion
 
 echo ========================================
-echo  WCMS Client Auto-Install (v0.8.2)
+echo  WCMS Client Auto-Install v0.8.4
 echo ========================================
 echo.
 
@@ -179,73 +179,47 @@ REM 8. Install Service
 REM ====================================
 echo [INFO] Installing Windows service...
 
-REM Check and stop existing service
+REM Check and stop existing service (WCMS-Client)
 sc query WCMS-Client >nul 2>&1
 if %errorLevel% equ 0 (
-    echo [INFO] Existing service detected. Stopping and removing...
+    echo [INFO] Existing service WCMS-Client detected. Stopping and removing...
     net stop WCMS-Client >nul 2>&1
     timeout /t 2 >nul
     sc delete WCMS-Client >nul 2>&1
     echo [INFO] Waiting for service cleanup...
-    timeout /t 5 >nul
+    timeout /t 3 >nul
 )
 
-REM Install service (pywin32 service)
-echo [INFO] Installing Windows service...
-echo [DEBUG] Executing: "%INSTALL_DIR%\\WCMS-Client.exe" install
-echo [INFO] Maximum wait time: 10 seconds
-echo.
+REM Check and stop legacy service (WCMSClient)
+sc query WCMSClient >nul 2>&1
+if %errorLevel% equ 0 (
+    echo [INFO] Legacy service WCMSClient detected. Stopping and removing...
+    net stop WCMSClient >nul 2>&1
+    timeout /t 2 >nul
+    sc delete WCMSClient >nul 2>&1
+    echo [INFO] Waiting for service cleanup...
+    timeout /t 3 >nul
+)
+
+REM Install service using sc create (avoids hanging)
+echo [INFO] Installing Windows service using sc create...
+sc create WCMS-Client binPath= "\"%INSTALL_DIR%\\WCMS-Client.exe\"" start= delayed-auto
+if %errorLevel% neq 0 (
+    echo [ERROR] Service creation failed.
+    pause
+    exit /b 1
+)
+
+REM Add service description
+sc description WCMS-Client "WCMS Remote Management Client"
+
+REM Configure failure actions
+sc failure WCMS-Client reset= 86400 actions= restart/60000/restart/60000/restart/60000
+
+echo [OK] Service successfully registered!
 
 REM Create logs directory
 if not exist "%CONFIG_DIR%\\logs" mkdir "%CONFIG_DIR%\\logs"
-
-REM Use PowerShell to run with timeout and kill if hung
-powershell -Command "& {{ $job = Start-Job -ScriptBlock {{ & '%INSTALL_DIR%\\WCMS-Client.exe' install 2>&1 }}; $completed = Wait-Job $job -Timeout 10; if ($completed) {{ Receive-Job $job; Remove-Job $job }} else {{ Write-Host '[WARN] Installation timed out after 10 seconds, stopping process...'; Stop-Job $job; Remove-Job $job; Get-Process 'WCMS-Client' -ErrorAction SilentlyContinue | Stop-Process -Force }}}}"
-
-echo.
-echo [INFO] Installation command completed or timed out
-echo [INFO] Waiting for service registration...
-timeout /t 2 >nul
-
-REM Check if service was actually registered
-echo [INFO] Checking service registration...
-sc query WCMS-Client >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [ERROR] Service not registered
-    echo.
-    echo The installation command above should show the actual error.
-    echo If you see "ModuleNotFoundError" or "ImportError", the EXE
-    echo was not built correctly with pywin32 dependencies.
-    echo.
-    echo Please check:
-    echo   1. Install log: %CONFIG_DIR%\\logs\\install.log
-    echo   2. Rebuild with: python manage.py build
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [OK] Service successfully registered!
-echo.
-echo [INFO] Configuring auto-start...
-sc config WCMS-Client start= auto
-if %errorLevel% neq 0 (
-    echo [WARN] Failed to configure auto-start
-)
-
-REM Verify service was installed
-echo [INFO] Checking service registration...
-sc query WCMS-Client >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [ERROR] Service installation failed - service not found
-    echo.
-    echo The executable ran but service was not registered.
-    echo Check logs at: %CONFIG_DIR%\\logs\\
-    echo.
-    pause
-    exit /b 1
-)
-echo [OK] Service installed and registered (auto-start enabled)
 
 REM ====================================
 REM 9. Start Service
@@ -306,19 +280,6 @@ if exist "%CONFIG_DIR%\\logs\\client.log" (
     powershell -Command "Get-Content '%CONFIG_DIR%\\logs\\client.log' -Encoding UTF8 -Tail 30 -ErrorAction SilentlyContinue"
 )
 echo ==============================
-echo.
-
-echo The service is now running and will:
-echo   - Register with server using PIN
-echo   - Send heartbeat every 5 minutes
-echo   - Poll for commands every 2 seconds
-echo   - Automatically start on system boot
-echo.
-echo To check service status:
-echo   sc query WCMS-Client
-echo.
-echo To view logs:
-echo   type "%CONFIG_DIR%\\logs\\client.log"
 echo.
 pause
 
@@ -499,20 +460,17 @@ if ($existingService) {{
         Start-Sleep -Seconds 2
     }}
     
-    & "$InstallDir\\WCMS-Client.exe" remove | Out-Null
+    sc.exe delete WCMS-Client | Out-Null
     Start-Sleep -Seconds 2
 }}
 
 # 새 서비스 설치
 try {{
-    $installOutput = & "$InstallDir\\WCMS-Client.exe" install 2>&1
-    if ($LASTEXITCODE -ne 0) {{
-        throw "서비스 설치 실패: $installOutput"
-    }}
-    Start-Sleep -Seconds 2
-    
-    # Auto-start 설정
-    sc.exe config WCMS-Client start= auto | Out-Null
+    # Use sc.exe directly for reliable service creation without hanging
+    $binPath = "`"$InstallDir\\WCMS-Client.exe`""
+    sc.exe create WCMS-Client binPath= $binPath start= delayed-auto | Out-Null
+    sc.exe description WCMS-Client "WCMS Remote Management Client" | Out-Null
+    sc.exe failure WCMS-Client reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
     
     Write-Host "[OK] 서비스 설치 완료" -ForegroundColor $SuccessColor
 }} catch {{

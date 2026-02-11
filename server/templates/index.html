@@ -845,23 +845,128 @@ function showBulkFileDownloadModal() {
 }
 
 function showBulkAccountModal() {
-    const action = prompt('계정 관리 작업을 선택하세요:\n\n1. create_user (계정 생성)\n2. delete_user (계정 삭제)\n3. change_password (비밀번호 변경)');
-    if (!action || !['create_user', 'delete_user', 'change_password'].includes(action)) {
-        alert('올바른 작업을 입력하세요 (create_user, delete_user, change_password)');
+    const modalHTML = `
+        <div id="accountModal" style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2em;
+        ">
+            <div style="
+                background: #2a2a2a;
+                border-radius: 12px;
+                padding: 2em;
+                max-width: 500px;
+                width: 100%;
+                color: white;
+            ">
+                <h3 style="margin-top: 0; margin-bottom: 1em;">계정 관리</h3>
+
+                <div style="margin-bottom: 1.5em;">
+                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">작업 선택</label>
+                    <select id="accountAction" onchange="updateAccountModalFields()" style="
+                        width: 100%;
+                        padding: 0.8em;
+                        border-radius: 6px;
+                        border: 1px solid #444;
+                        background: #333;
+                        color: white;
+                        font-size: 1em;
+                    ">
+                        <option value="create_user">계정 생성</option>
+                        <option value="delete_user">계정 삭제</option>
+                        <option value="change_password">비밀번호 변경</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 1em;">
+                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">사용자 이름</label>
+                    <input type="text" id="accountUsername" style="
+                        width: 100%;
+                        padding: 0.8em;
+                        border-radius: 6px;
+                        border: 1px solid #444;
+                        background: #333;
+                        color: white;
+                        font-size: 1em;
+                    ">
+                </div>
+
+                <div id="accountPasswordField" style="margin-bottom: 1.5em;">
+                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">비밀번호</label>
+                    <input type="password" id="accountPassword" style="
+                        width: 100%;
+                        padding: 0.8em;
+                        border-radius: 6px;
+                        border: 1px solid #444;
+                        background: #333;
+                        color: white;
+                        font-size: 1em;
+                    ">
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 1em;">
+                    <button onclick="document.getElementById('accountModal').remove()" style="
+                        background: transparent;
+                        color: #aaa;
+                        border: 1px solid #444;
+                        padding: 0.6em 1.2em;
+                        border-radius: 6px;
+                        cursor: pointer;
+                    ">취소</button>
+                    <button onclick="confirmAccountCommand()" style="
+                        background: #f59e0b;
+                        color: white;
+                        border: none;
+                        padding: 0.6em 1.2em;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-weight: 600;
+                    ">실행</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    updateAccountModalFields();
+}
+
+function updateAccountModalFields() {
+    const action = document.getElementById('accountAction').value;
+    const passwordField = document.getElementById('accountPasswordField');
+
+    if (action === 'delete_user') {
+        passwordField.style.display = 'none';
+    } else {
+        passwordField.style.display = 'block';
+    }
+}
+
+function confirmAccountCommand() {
+    const action = document.getElementById('accountAction').value;
+    const username = document.getElementById('accountUsername').value.trim();
+    const password = document.getElementById('accountPassword').value;
+
+    if (!username) {
+        alert('사용자 이름을 입력하세요.');
         return;
     }
 
-    const username = prompt('사용자 이름:');
-    if (!username) return;
-
-    let password = null;
-    if (action === 'create_user' || action === 'change_password') {
-        password = prompt('비밀번호:');
-        if (!password) return;
+    if (action !== 'delete_user' && !password) {
+        alert('비밀번호를 입력하세요.');
+        return;
     }
 
     const commandData = { username };
-    if (password) {
+    if (action !== 'delete_user') {
         if (action === 'change_password') {
             commandData.new_password = password;
         } else {
@@ -869,19 +974,94 @@ function showBulkAccountModal() {
         }
     }
 
+    document.getElementById('accountModal').remove();
     executeBulkCommand(action, commandData);
 }
 
 function showBulkPowerModal() {
-    const action = prompt('전원 관리 작업을 선택하세요:\n\n1. shutdown (종료)\n2. restart (재시작)');
-    if (!action || !['shutdown', 'restart'].includes(action)) {
-        alert('올바른 작업을 입력하세요 (shutdown, restart)');
+    const modalHTML = `
+        <div id="powerModal" style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2em;
+        ">
+            <div style="
+                background: #2a2a2a;
+                border-radius: 12px;
+                padding: 2em;
+                max-width: 400px;
+                width: 100%;
+                color: white;
+                text-align: center;
+            ">
+                <h3 style="margin-top: 0; margin-bottom: 1.5em;">전원 관리</h3>
+
+                <div style="display: flex; flex-direction: column; gap: 1em; margin-bottom: 1.5em;">
+                    <button onclick="confirmPowerCommand('shutdown')" style="
+                        background: #dc2626;
+                        color: white;
+                        border: none;
+                        padding: 1em;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        font-size: 1.1em;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 0.5em;
+                    ">
+                        <i class="fas fa-power-off"></i> 시스템 종료
+                    </button>
+
+                    <button onclick="confirmPowerCommand('restart')" style="
+                        background: #f59e0b;
+                        color: white;
+                        border: none;
+                        padding: 1em;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        font-size: 1.1em;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 0.5em;
+                    ">
+                        <i class="fas fa-redo"></i> 시스템 재시작
+                    </button>
+                </div>
+
+                <button onclick="document.getElementById('powerModal').remove()" style="
+                    background: transparent;
+                    color: #aaa;
+                    border: 1px solid #444;
+                    padding: 0.6em 1.2em;
+                    border-radius: 6px;
+                    cursor: pointer;
+                ">취소</button>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+function confirmPowerCommand(action) {
+    const actionName = action === 'shutdown' ? '종료' : '재시작';
+    if (!confirm(`선택된 ${selectedPCs.size}대의 PC를 ${actionName} 하시겠습니까?`)) {
         return;
     }
 
-    const confirmed = confirm(`선택된 ${selectedPCs.size}대의 PC를 ${action} 하시겠습니까?`);
-    if (!confirmed) return;
-
+    document.getElementById('powerModal').remove();
     executeBulkCommand(action, {});
 }
 
@@ -893,8 +1073,11 @@ async function executeBulkCommand(commandType, commandData) {
 
     const pcIds = Array.from(selectedPCs);
 
-    if (!confirm(`선택된 ${pcIds.length}대의 PC에 명령을 전송하시겠습니까?`)) {
-        return;
+    // 전원 관리 명령은 이미 모달에서 확인했으므로 중복 확인 방지
+    if (commandType !== 'shutdown' && commandType !== 'restart') {
+        if (!confirm(`선택된 ${pcIds.length}대의 PC에 명령을 전송하시겠습니까?`)) {
+            return;
+        }
     }
 
     try {

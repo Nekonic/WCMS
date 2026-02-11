@@ -128,19 +128,28 @@ if sys.platform == 'win32':
                 servicemanager.LogErrorMsg(error_msg)
 
     if __name__ == '__main__':
-        logger = setup_install_logging()
-        if len(sys.argv) > 1:
-            # 명시적 관리 명령 전달 (install/start/stop/remove/status ...)
-            win32serviceutil.HandleCommandLine(WCMSClientService)
+        if len(sys.argv) == 1:
+            # 인자가 없으면 서비스로 실행된 것으로 간주하고 서비스 시작 시도
+            try:
+                servicemanager.Initialize()
+                servicemanager.PrepareToHostSingle(WCMSClientService)
+                servicemanager.StartServiceCtrlDispatcher()
+            except Exception:
+                # 서비스 디스패처 연결 실패 -> 사용자가 더블클릭한 경우
+                logger = setup_install_logging()
+                logger.error('사용법: WCMS-Client.exe [install|start|stop|remove]')
+                print('\n사용법: WCMS-Client.exe [install|start|stop|remove|restart]')
+                print('  install - 서비스 설치')
+                print('  start   - 서비스 시작')
+                print('  stop    - 서비스 중지')
+                print('  remove  - 서비스 제거')
+                # 콘솔 창이 바로 닫히지 않게 잠시 대기 (선택 사항)
+                import time
+                time.sleep(3)
+                sys.exit(1)
         else:
-            # 인자 없이 실행되면: 사용법 출력 후 종료 (중복 실행 방지)
-            logger.error('사용법: WCMS-Client.exe [install|start|stop|remove]')
-            print('\n사용법: WCMS-Client.exe [install|start|stop|remove|restart]')
-            print('  install - 서비스 설치')
-            print('  start   - 서비스 시작')
-            print('  stop    - 서비스 중지')
-            print('  remove  - 서비스 제거')
-            sys.exit(1)
+            # 인자가 있으면 (install, start 등) 해당 명령 처리
+            win32serviceutil.HandleCommandLine(WCMSClientService)
 else:
     if __name__ == '__main__':
         print('WCMS Client Service는 Windows에서만 지원됩니다.')

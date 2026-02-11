@@ -268,6 +268,12 @@ function openModal(pcId) {
 
             const body = document.getElementById('modalBody');
 
+            // RAM 정보
+            const ramTotal = data.ram_total || 0;
+            const ramUsed = data.ram_used || 0;
+            const ramFree = ramTotal - ramUsed;
+            const ramPercent = ramTotal > 0 ? (ramUsed / ramTotal * 100) : 0;
+
             // 디스크 정보 파싱 및 포맷팅 (disk_info_parsed 사용)
             let diskDisplay = 'N/A';
             let diskChartHtml = '';
@@ -357,18 +363,69 @@ function openModal(pcId) {
                 }
             }
 
+            // RAM 차트 HTML
+            const ramChartHtml = `
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px; margin-bottom: 15px;">
+                    <div style="text-align: center; min-width: 150px;">
+                        <div style="font-weight: bold; margin-bottom: 5px; color: #4a9eff;">RAM</div>
+                        <canvas id="modalRamChart" width="120" height="120"></canvas>
+                        <div style="font-size: 0.85em; color: #999; margin-top: 5px;">
+                            ${ramUsed.toFixed(1)}/${ramTotal.toFixed(1)} GB (${ramPercent.toFixed(0)}%)
+                        </div>
+                    </div>
+                </div>
+            `;
+
             body.innerHTML = `
                 <div class="detail-row"><span class="detail-label">실습실:</span><span class="detail-value">${data.room_name || '미배치'}</span></div>
                 <div class="detail-row"><span class="detail-label">좌석:</span><span class="detail-value">${data.seat_number || 'N/A'}</span></div>
                 <div class="detail-row"><span class="detail-label">상태:</span><span class="detail-value">${data.is_online ? '온라인' : '오프라인'}</span></div>
                 <div class="detail-row"><span class="detail-label">CPU:</span><span class="detail-value">${data.cpu_model || 'N/A'}</span></div>
                 <div class="detail-row"><span class="detail-label">RAM:</span><span class="detail-value">${data.ram_total || 0} GB</span></div>
+                ${ramChartHtml}
                 <div class="detail-row"><span class="detail-label">디스크:</span><span class="detail-value">${diskDisplay}</span></div>
                 ${diskChartHtml}
                 <div class="detail-row"><span class="detail-label">OS:</span><span class="detail-value">${data.os_edition || 'N/A'}</span></div>
                 <div class="detail-row"><span class="detail-label">IP:</span><span class="detail-value">${data.ip_address || 'N/A'}</span></div>
                 <div class="detail-row"><span class="detail-label">MAC:</span><span class="detail-value">${data.mac_address || 'N/A'}</span></div>
             `;
+
+            // RAM 차트 렌더링
+            setTimeout(() => {
+                const ctx = document.getElementById('modalRamChart');
+                if (ctx && typeof Chart !== 'undefined') {
+                    new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['사용', '여유'],
+                            datasets: [{
+                                data: [ramUsed, ramFree],
+                                backgroundColor: [
+                                    ramPercent > 90 ? '#ef4444' : ramPercent > 75 ? '#f59e0b' : '#10b981',
+                                    '#374151'
+                                ],
+                                borderColor: ['#1a1a1a', '#1a1a1a'],
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (context) => {
+                                            const label = context.label || '';
+                                            const value = context.parsed || 0;
+                                            return `${label}: ${value.toFixed(1)} GB`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }, 100);
 
             const footer = document.getElementById('modalFooter');
             const isAdmin = {% if session.get('username') %}true{% else %}false{% endif %};
