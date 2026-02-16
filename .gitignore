@@ -9,9 +9,7 @@ __pycache__/
 *.egg
 MANIFEST
 
-# Plan files (temporary, not for version control)
-plan*.md
-docs/plan*.md
+
 
 # Virtual environments
 venv/

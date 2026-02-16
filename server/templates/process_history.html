@@ -74,6 +74,25 @@
 {% block scripts %}
 {{ super() }}
 <script>
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+
+    // SQLite 날짜 형식 (YYYY-MM-DD HH:MM:SS)을 ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)로 변환
+    // UTC로 가정하고 Z를 붙임
+    const isoString = dateString.replace(' ', 'T') + 'Z';
+
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) {
+            // 파싱 실패 시 원본 반환 또는 다른 시도
+            return dateString;
+        }
+        return date.toLocaleString();
+    } catch (e) {
+        return dateString;
+    }
+}
+
 document.addEventListener("DOMContentLoaded", function() {
     const pcId = {{ pc.id }};
     fetch(`/api/pc/${pcId}/history`)
@@ -112,9 +131,12 @@ document.addEventListener("DOMContentLoaded", function() {
                     }
                 }
 
+                // updated_at 필드 사용 (API가 updated_at을 반환함)
+                const timeStr = record.updated_at || record.created_at;
+
                 const row = `
                     <tr>
-                        <td>${new Date(record.created_at + ' UTC').toLocaleString()}</td>
+                        <td>${formatDate(timeStr)}</td>
                         <td>${record.current_user || 'N/A'}</td>
                         <td>${processesHtml}</td>
                     </tr>

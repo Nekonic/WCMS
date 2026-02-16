@@ -128,6 +128,20 @@ docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO cli
 - **디스크**: 사용량 -70% (최신 상태만 저장)
 - **동시 연결**: Long-polling 제거로 100대 지원
 
+## ❓ 트러블슈팅
+
+### 1. 서비스 시작 실패 (Exit code 2)
+- **원인**: 서비스 실행 파일 경로 문제 또는 권한 문제.
+- **해결**: v0.8.6 이상 버전을 사용하세요. `install.cmd`가 `sc create`를 사용하여 경로 문제를 해결했습니다.
+
+### 2. 프로그램 설치 실패 (Chocolatey)
+- **원인**: Chocolatey가 설치되지 않았거나 네트워크 문제.
+- **해결**: 클라이언트 로그(`C:\ProgramData\WCMS\logs\client.log`)를 확인하세요. Chocolatey 자동 설치가 실패했다면 수동으로 설치해야 할 수 있습니다.
+
+### 3. PIN 인증 실패 (403 Forbidden)
+- **원인**: PIN이 만료되었거나 이미 사용됨.
+- **해결**: 관리자 페이지에서 새 토큰을 생성하여 다시 시도하세요.
+
 ## 🧪 테스트
 
 ```bash

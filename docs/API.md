@@ -348,7 +348,9 @@ Content-Type: application/json
 - `kill_process`: 프로세스 종료
 - `execute`: CMD 실행
 - `install`: 프로그램 설치 (Chocolatey)
+  - 파라미터: `app_id` (예: `googlechrome`)
 - `download`: 파일 다운로드
+  - 파라미터: `url`, `destination` (선택)
 - `create_user`: 사용자 생성
 - `delete_user`: 사용자 삭제
 - `change_password`: 비밀번호 변경
@@ -608,6 +610,31 @@ Authorization: Session Required
 ```
 
 **주의:** 연관 데이터 모두 삭제 (Cascade)
+
+---
+
+### 프로세스 관리
+
+#### 1. 수집된 프로세스 목록 조회
+
+**엔드포인트:**
+```http
+GET /api/admin/processes
+Authorization: Session Required
+```
+
+**응답:**
+```json
+{
+  "status": "success",
+  "total": 50,
+  "processes": [
+    "chrome.exe",
+    "notepad.exe",
+    "python.exe"
+  ]
+}
+```
 
 ---
 
