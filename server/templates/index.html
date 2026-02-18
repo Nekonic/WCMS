@@ -912,6 +912,25 @@ function showBulkAccountModal() {
                     ">
                 </div>
 
+                <div id="accountLanguageField" style="margin-bottom: 1em;">
+                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">언어 설정</label>
+                    <select id="accountLanguage" style="
+                        width: 100%;
+                        padding: 0.8em;
+                        border-radius: 6px;
+                        border: 1px solid #444;
+                        background: #333;
+                        color: white;
+                        font-size: 1em;
+                    ">
+                        <option value="">기본값 (변경 안함)</option>
+                        <option value="ko-KR">한국어 (ko-KR)</option>
+                        <option value="en-US">영어 (en-US)</option>
+                        <option value="zh-CN">중국어 (zh-CN)</option>
+                        <option value="mn-MN">몽골어 (mn-MN)</option>
+                    </select>
+                </div>
+
                 <div style="display: flex; justify-content: flex-end; gap: 1em;">
                     <button onclick="document.getElementById('accountModal').remove()" style="
                         background: transparent;
@@ -942,11 +961,18 @@ function showBulkAccountModal() {
 function updateAccountModalFields() {
     const action = document.getElementById('accountAction').value;
     const passwordField = document.getElementById('accountPasswordField');
+    const languageField = document.getElementById('accountLanguageField');
 
     if (action === 'delete_user') {
         passwordField.style.display = 'none';
-    } else {
+        languageField.style.display = 'none';
+    } else if (action === 'change_password') {
         passwordField.style.display = 'block';
+        languageField.style.display = 'none';
+    } else {
+        // create_user
+        passwordField.style.display = 'block';
+        languageField.style.display = 'block';
     }
 }
 
@@ -954,6 +980,7 @@ function confirmAccountCommand() {
     const action = document.getElementById('accountAction').value;
     const username = document.getElementById('accountUsername').value.trim();
     const password = document.getElementById('accountPassword').value;
+    const language = document.getElementById('accountLanguage').value;
 
     if (!username) {
         alert('사용자 이름을 입력하세요.');
@@ -971,6 +998,7 @@ function confirmAccountCommand() {
             commandData.new_password = password;
         } else {
             commandData.password = password;
+            commandData.language = language;
         }
     }
 

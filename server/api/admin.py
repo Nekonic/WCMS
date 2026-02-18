@@ -170,7 +170,8 @@ def create_account(pc_id):
             'username': data['username'],
             'password': data['password'],
             'full_name': data.get('full_name'),
-            'comment': data.get('comment')
+            'comment': data.get('comment'),
+            'language': data.get('language')
         },
         admin_username=session.get('username')
     )
@@ -1035,6 +1036,88 @@ def send_kill_process_command(pc_id: int):
 
     except Exception as e:
         logger.error(f"프로세스 종료 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@admin_bp.route('/pc/<int:pc_id>/install', methods=['POST'])
+@require_admin
+def send_install_command(pc_id: int):
+    """프로그램 설치 명령"""
+    data = request.json or {}
+    app_id = data.get('app_id', '')
+
+    if not app_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'app_id is required'
+        }), 400
+
+    try:
+        command_data = {
+            'app_id': app_id
+        }
+
+        admin_username = session.get('username', 'admin')
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type='install',
+            command_data=command_data,
+            admin_username=admin_username
+        )
+
+        logger.info(f"프로그램 설치 명령 생성: PC {pc_id}, {app_id} by {admin_username}")
+
+        return jsonify({
+            'status': 'success',
+            'command_id': command_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"프로그램 설치 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@admin_bp.route('/pc/<int:pc_id>/uninstall', methods=['POST'])
+@require_admin
+def send_uninstall_command(pc_id: int):
+    """프로그램 삭제 명령"""
+    data = request.json or {}
+    app_id = data.get('app_id', '')
+
+    if not app_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'app_id is required'
+        }), 400
+
+    try:
+        command_data = {
+            'app_id': app_id
+        }
+
+        admin_username = session.get('username', 'admin')
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type='uninstall',
+            command_data=command_data,
+            admin_username=admin_username
+        )
+
+        logger.info(f"프로그램 삭제 명령 생성: PC {pc_id}, {app_id} by {admin_username}")
+
+        return jsonify({
+            'status': 'success',
+            'command_id': command_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"프로그램 삭제 명령 생성 실패: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)

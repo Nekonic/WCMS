@@ -15,6 +15,7 @@ from config import (
 from collector import collect_static_info, collect_dynamic_info
 from executor import CommandExecutor
 from utils import safe_request, retry_on_network_error
+from updater import perform_update
 
 # 부팅 시간 기록 (전원 관리 명령 유예 시간 계산용)
 BOOT_TIME = datetime.now()
@@ -55,9 +56,12 @@ def check_for_updates():
 
             if latest_version != __version__:
                 logger.warning(f"새 버전이 있습니다! 현재: {__version__}, 최신: {latest_version}")
-                logger.info(f"다운로드: {data.get('download_url', 'GitHub Release 확인')}")
-                if data.get('changelog'):
-                    logger.info(f"변경사항: {data.get('changelog')}")
+                download_url = data.get('download_url')
+                if download_url:
+                    logger.info(f"업데이트 시작: {download_url}")
+                    perform_update(download_url, latest_version)
+                else:
+                    logger.info("다운로드 URL이 없어 업데이트를 건너뜁니다.")
             else:
                 logger.info(f"최신 버전 사용 중: {__version__}")
     except Exception as e:

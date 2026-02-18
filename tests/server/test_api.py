@@ -99,6 +99,51 @@ class TestAdminAPI:
         response = client.post(f'/api/pc/{pc_id}/shutdown', json={})
         assert response.status_code == 200
 
+    def test_admin_uninstall_command(self, client, test_pin):
+        """프로그램 삭제 명령 테스트"""
+        # 먼저 PC 등록
+        reg_response = client.post('/api/client/register', json={
+            'machine_id': 'TEST-UNINSTALL-001',
+            'pin': test_pin,
+            'hostname': 'test-uninstall',
+            'mac_address': '12:34:56:78:90:AC'
+        })
+        pc_id = reg_response.get_json()['pc_id']
+
+        # 프로그램 삭제 명령 전송
+        response = client.post(f'/api/pc/{pc_id}/uninstall', json={
+            'app_id': 'googlechrome'
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert 'command_id' in data
+
+    def test_admin_create_account_with_options(self, client, test_pin):
+        """계정 생성 명령 테스트 (옵션 포함)"""
+        # 먼저 PC 등록
+        reg_response = client.post('/api/client/register', json={
+            'machine_id': 'TEST-ACCOUNT-001',
+            'pin': test_pin,
+            'hostname': 'test-account',
+            'mac_address': '12:34:56:78:90:AD'
+        })
+        pc_id = reg_response.get_json()['pc_id']
+
+        # 계정 생성 명령 전송
+        response = client.post(f'/api/pc/{pc_id}/account/create', json={
+            'username': 'testuser',
+            'password': 'password123',
+            'full_name': 'Test User',
+            'comment': 'Created by Test',
+            'language': 'ko-KR',
+            'keyboard': '101/104'
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert 'command_id' in data
+
 
 class TestHealthCheck:
     """헬스 체크 테스트"""

@@ -115,40 +115,7 @@ python manage.py test [target] (target: all, server, client, archive)
 다음 세션을 시작할 때 아래 내용을 복사해서 AI에게 전달하세요:
 
 ```markdown
-Listen to me carefully. You are now the lead maintainer of the WCMS project. I don't want any sloppy code or half-baked solutions. We just released v0.8.6, and it's stable. Don't break it.
 
-**Current Status:**
-- **v0.8.6 Released**: We finally fixed the damn service installation issues using `sc create` directly. Chocolatey is now the standard for package management. `winget` is dead to us.
-- **Documentation**: Everything in `docs/` is up to date. Read them. Especially `docs/CHANGELOG.md` and `docs/ARCHITECTURE.md`.
-
-**Your Mission (v0.8.7):**
-We need to implement the following features. Do it right the first time.
-
-1.  **Client Auto-Update**:
-    - The client should detect a new version from the server and update itself.
-    - Don't just download the EXE and hope for the best. You need to stop the service, replace the binary, and restart the service. Automate this process robustly.
-    - Reference: `docs/plan.md`
-
-2.  **Program Uninstallation**:
-    - Support `choco uninstall`.
-    - Support uninstalling regular EXE/MSI apps via PowerShell registry lookup. Don't give me "it might work". Make it work.
-
-3.  **Process Blacklist**:
-    - The server defines a list of banned processes.
-    - The client kills them on sight. Efficiently. Don't hog the CPU polling every millisecond.
-
-**Workflow:**
-1.  **Read First**: Read `docs/plan.md` before you write a single line of code.
-2.  **Think**: Don't just copy-paste code. Understand the architecture.
-3.  **Test**: Write tests. If you break existing tests, you fix them. No excuses.
-4.  **Git**: 
-    - Write meaningful commit messages. "Fix bug" is not a commit message. Explain *what* you changed and *why*.
-    - Keep commits atomic. Don't mix ten different changes into one commit.
-5.  **Communication**:
-    - Don't ask stupid questions that are already answered in the docs.
-    - If you have a better idea, show me the code or a solid plan. Don't just wave your hands.
-
-Now, get to work.
 ```
 
 ---

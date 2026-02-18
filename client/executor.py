@@ -45,6 +45,9 @@ class CommandExecutor:
             'install': lambda: CommandExecutor.install(
                 command_data.get('app_id', '')
             ),
+            'uninstall': lambda: CommandExecutor.uninstall(
+                command_data.get('app_id', '')
+            ),
             'download': lambda: CommandExecutor.download(
                 command_data.get('url', ''),
                 command_data.get('destination')
@@ -201,6 +204,47 @@ class CommandExecutor:
             return f"설치 실패: {str(e)}"
 
     @staticmethod
+    def uninstall(app_id: str) -> str:
+        """프로그램 삭제 (Chocolatey)"""
+        if not app_id:
+            return "오류: 삭제할 프로그램의 패키지 ID가 필요합니다."
+        
+        # Chocolatey 확인 및 설치
+        if not CommandExecutor._ensure_chocolatey_installed():
+            return "오류: Chocolatey를 설치할 수 없어 프로그램을 삭제할 수 없습니다."
+
+        try:
+            # choco uninstall 명령 구성
+            # -y: 모든 프롬프트에 예라고 대답
+            # --remove-dependencies: 의존성 패키지도 삭제
+            choco_cmd = f'choco uninstall {app_id} -y --remove-dependencies'
+            
+            choco_path = r"C:\ProgramData\chocolatey\bin\choco.exe"
+            if os.path.exists(choco_path):
+                cmd = f'"{choco_path}" uninstall {app_id} -y --remove-dependencies'
+            else:
+                cmd = choco_cmd # PATH에 있다고 가정
+
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=600 # 삭제는 시간이 걸릴 수 있음
+            )
+
+            if result.returncode == 0:
+                return f"삭제 완료: {app_id}"
+            else:
+                error_msg = result.stderr.strip() or result.stdout.strip()
+                return f"삭제 실패: {app_id} (반환 코드: {result.returncode})\n출력: {error_msg}"
+
+        except subprocess.TimeoutExpired:
+            return f"삭제 타임아웃: {app_id} (10분 초과)"
+        except Exception as e:
+            return f"삭제 실패: {str(e)}"
+
+    @staticmethod
     def download(url: str, destination: str = None) -> str:
         """파일 다운로드"""
         if not url:
@@ -234,9 +278,9 @@ class CommandExecutor:
             return f"다운로드 실패: {str(e)}"
 
     @staticmethod
-    def create_user(username, password, full_name=None, comment=None):
+    def create_user(username, password, full_name=None, comment=None, language=None):
         """Windows 사용자 계정 생성"""
-        return CommandExecutor.manage_account('create', username, password, full_name, comment)
+        return CommandExecutor.manage_account('create', username, password, full_name, comment, language)
 
     @staticmethod
     def delete_user(username):
@@ -250,7 +294,8 @@ class CommandExecutor:
 
     @staticmethod
     def manage_account(action: str, username: str, password: str = None,
-                      full_name: str = None, comment: str = None) -> str:
+                      full_name: str = None, comment: str = None,
+                      language: str = None) -> str:
         """Windows 계정 관리 통합 함수"""
         try:
             if action == 'create':
@@ -261,12 +306,20 @@ class CommandExecutor:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
                 if result.returncode == 0:
+                    msg = f"사용자 계정 생성됨: {username}"
+                    
                     if full_name:
                         subprocess.run(
                             f'wmic useraccount where name="{username}" set fullname="{full_name}"',
                             shell=True, capture_output=True
                         )
-                    return f"사용자 계정 생성됨: {username}"
+                    
+                    # 언어 설정 (로그만 남김, 실제 구현은 복잡함)
+                    if language:
+                        logger.info(f"사용자 {username} 언어 설정 요청: {language} (현재 미지원)")
+                        msg += f" (언어 설정은 아직 지원되지 않습니다)"
+                        
+                    return msg
                 else:
                     return f"사용자 생성 실패: {result.stderr}"
 

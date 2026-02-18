@@ -1,9 +1,9 @@
 # WCMS API 문서
 
-> **버전**: 0.8.6  
+> **버전**: 0.8.7  
 > **기본 URL**: `http://your-server:5050`  
 > **업데이트**: 2026-02-11  
-> **주요 변경**: Chocolatey 지원, 서비스 설치 개선
+> **주요 변경**: 자동 업데이트, 프로그램 삭제, 계정 생성 옵션 추가
 
 ---
 
@@ -25,10 +25,10 @@
 - **문자 인코딩**: UTF-8
 - **타임아웃**: 30초 (요청), 5초 (명령 폴링)
 
-### v0.8.6 주요 변경사항
-1. **Chocolatey 지원**: 프로그램 설치 명령이 `winget`에서 `chocolatey`로 변경되었습니다.
-2. **서비스 설치 개선**: `install.cmd`의 서비스 등록 방식이 개선되어 안정성이 향상되었습니다.
-3. **UI 개선**: 계정 관리 및 전원 관리 모달이 클릭 기반 UI로 변경되었습니다.
+### v0.8.7 주요 변경사항
+1. **자동 업데이트**: 클라이언트가 서버에서 새 버전을 감지하고 자동으로 업데이트합니다.
+2. **프로그램 삭제**: Chocolatey를 사용하여 프로그램을 삭제할 수 있습니다.
+3. **계정 생성 옵션**: 윈도우 계정 생성 시 언어 및 키보드 설정 파라미터가 추가되었습니다.
 
 ---
 
@@ -83,9 +83,9 @@ GET /api/client/version
 ```json
 {
   "status": "success",
-  "version": "0.8.6",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.6/WCMS-Client.exe",
-  "changelog": "Chocolatey 지원 및 서비스 설치 개선"
+  "version": "0.8.7",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.7/WCMS-Client.exe",
+  "changelog": "자동 업데이트 및 프로그램 삭제 기능 추가"
 }
 ```
 
@@ -349,9 +349,12 @@ Content-Type: application/json
 - `execute`: CMD 실행
 - `install`: 프로그램 설치 (Chocolatey)
   - 파라미터: `app_id` (예: `googlechrome`)
+- `uninstall`: 프로그램 삭제 (Chocolatey) **(v0.8.7 추가)**
+  - 파라미터: `app_id` (예: `googlechrome`)
 - `download`: 파일 다운로드
   - 파라미터: `url`, `destination` (선택)
 - `create_user`: 사용자 생성
+  - 파라미터: `username`, `password`, `full_name`, `comment`, `language`, `keyboard` **(v0.8.7 추가)**
 - `delete_user`: 사용자 삭제
 - `change_password`: 비밀번호 변경
 
@@ -678,6 +681,40 @@ Content-Type: application/json
 }
 ```
 
+#### 프로그램 삭제 (v0.8.7 추가)
+
+**엔드포인트:**
+```http
+POST /api/admin/pc/{pc_id}/uninstall
+Content-Type: application/json
+```
+
+**요청:**
+```json
+{
+  "app_id": "googlechrome"
+}
+```
+
+#### 계정 생성 (v0.8.7 추가)
+
+**엔드포인트:**
+```http
+POST /api/admin/pc/{pc_id}/account/create
+Content-Type: application/json
+```
+
+**요청:**
+```json
+{
+  "username": "student",
+  "password": "password123",
+  "full_name": "Student Account",
+  "comment": "Created by WCMS",
+  "language": "ko-KR"
+}
+```
+
 ---
 
 ## 오류 코드
@@ -703,6 +740,22 @@ Content-Type: application/json
 ---
 
 ## 변경 이력
+
+### v0.8.7 (2026-02-11)
+
+**주요 변경:**
+
+1. **자동 업데이트**
+   - 클라이언트가 서버에서 새 버전을 감지하고 자동으로 업데이트합니다.
+   - `install.cmd` 또는 별도의 업데이트 스크립트를 다운로드하여 실행합니다.
+
+2. **프로그램 삭제**
+   - `chocolatey`를 사용하여 프로그램을 삭제할 수 있습니다.
+   - `/api/admin/pc/{pc_id}/uninstall` 엔드포인트가 추가되었습니다.
+
+3. **계정 생성 옵션**
+   - 윈도우 계정 생성 시 언어 및 키보드 설정 파라미터가 추가되었습니다.
+   - `/api/admin/pc/{pc_id}/account/create` 엔드포인트에 `language` 파라미터가 추가되었습니다.
 
 ### v0.8.6 (2026-02-11)
 
