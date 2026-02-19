@@ -189,15 +189,6 @@ def create_app(config_name='development'):
 
         return render_template('room_manager.html', rooms=room_list, username=session.get('username'))
 
-    # 레거시 경로: /account/manager
-    @app.route('/account/manager')
-    @require_admin
-    def admin_manager():
-        """관리자 계정 관리"""
-        from models import AdminModel
-        admins = AdminModel.get_all()
-        return render_template('account_manager.html', admins=admins, username=session.get('username'))
-
     # 레거시 경로: /system/status
     @app.route('/system/status')
     @require_admin

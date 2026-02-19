@@ -47,6 +47,32 @@ jobs:
         echo "version=$version" >> $env:GITHUB_OUTPUT
         Write-Host "추출된 버전: $version"
 
+    - name: Extract Changelog
+      id: changelog
+      shell: pwsh
+      run: |
+        $version = "${{ steps.version.outputs.version }}"
+        $changelogPath = "docs/CHANGELOG.md"
+        $releaseBody = "No changelog available."
+        
+        if (Test-Path $changelogPath) {
+          $content = Get-Content $changelogPath -Raw
+          # 정규식: ## [버전] ... (다음 헤더 전까지)
+          # (?ms) : 멀티라인, .이 개행 포함
+          if ($content -match "(?ms)## \[$version\].*?(?=^## \[|^---)") {
+            $releaseBody = $matches[0].Trim()
+          } else {
+            Write-Host "Changelog for version $version not found in $changelogPath"
+          }
+        } else {
+          Write-Host "Changelog file not found: $changelogPath"
+        }
+        
+        # GitHub Actions 멀티라인 출력 처리
+        "RELEASE_BODY<<EOF" >> $env:GITHUB_OUTPUT
+        $releaseBody >> $env:GITHUB_OUTPUT
+        "EOF" >> $env:GITHUB_OUTPUT
+
     - name: Update version in main.py and config.py
       shell: pwsh
       run: |
@@ -82,7 +108,11 @@ jobs:
         body: |
           # WCMS Client v${{ steps.version.outputs.version }}
 
-          ## 설치 방법 (v0.8.0 - PIN 인증 필수)
+          ${{ steps.changelog.outputs.RELEASE_BODY }}
+
+          ---
+
+          ## 설치 방법
           
           ### 자동 설치 (권장)
           관리자 권한 CMD에서 실행:
@@ -94,41 +124,16 @@ jobs:
           1. `WCMS-Client.exe`를 다운로드합니다.
           2. `C:\Program Files\WCMS`에 복사합니다.
           3. 관리자 권한 CMD에서 실행:
-             ```
+             ```cmd
              cd "C:\Program Files\WCMS"
              WCMS-Client.exe install
-             sc config WCMS-Client start= auto
-             net start WCMS-Client
              ```
-          4. `C:\ProgramData\WCMS\config.json` 생성:
-             ```json
-             {
-               "SERVER_URL": "http://your-server:5050/",
-               "REGISTRATION_PIN": "123456",
-               "HEARTBEAT_INTERVAL": 300,
-               "COMMAND_POLL_INTERVAL": 2,
-               "LOG_LEVEL": "INFO"
-             }
-             ```
+          4. `C:\ProgramData\WCMS\config.json` 생성 (PIN 필수)
 
           ## 요구사항
           - Windows 10/11
           - 관리자 권한
           - **서버에서 생성한 6자리 PIN** (관리자에게 문의)
-          
-          ## v${{ steps.version.outputs.version }} 주요 기능
-          - PIN 기반 등록 인증
-          - RESTful API 지원 (새 서버 필수)
-          - 2초 명령 폴링 (기존 5초)
-          - 경량 하트비트 통합 (네트워크 60% 절감)
-          - Shutdown/Restart에 delay/message 지원
-          - 메시지 표시, 프로세스 종료 명령
-          - IP 변경 자동 감지
-          
-          ## Breaking Changes
-          - 서버 v0.8.0 이상 필수
-          - PIN 없이는 등록 불가
-          - 이전 버전 서버와 호환 안 됨
           
           ## 서비스 관리
           - 상태 확인: `sc query WCMS-Client`
@@ -159,10 +164,18 @@ jobs:
         # 정확한 GitHub 리포지토리 주소 사용
         $DOWNLOAD_URL = "https://github.com/Nekonic/WCMS/releases/download/client-v$VERSION/WCMS-Client.exe"
         
+        # 변경 로그 내용 가져오기 (너무 길면 자르기)
+        $CHANGELOG = @"
+        ${{ steps.changelog.outputs.RELEASE_BODY }}
+        "@
+        if ($CHANGELOG.Length -gt 500) {
+            $CHANGELOG = $CHANGELOG.Substring(0, 497) + "..."
+        }
+        
         $body = @{
           version = $VERSION
           download_url = $DOWNLOAD_URL
-          changelog = "v$VERSION - PIN Authentication and RESTful API"
+          changelog = $CHANGELOG
         } | ConvertTo-Json
         
         try {

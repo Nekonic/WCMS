@@ -1,7 +1,7 @@
 # WCMS 시스템 아키텍처
 
-> **최종 업데이트**: 2026-02-11  
-> **버전**: 2.1  
+> **최종 업데이트**: 2026-02-18  
+> **버전**: 2.2  
 > **프로젝트**: Woosuk Computer Management System
 
 ---
@@ -27,7 +27,8 @@ WCMS는 **Client-Server 아키텍처**를 기반으로 한 실습실 PC 원격 �
 - **짧은 폴링(Short-polling) 통신**: 클라이언트가 2초마다 명령 확인 (v0.8.0+)
 - **SQLite 데이터베이스**: 경량 데이터베이스로 빠른 배포 (WAL 모드)
 - **Windows 서비스**: 백그라운드 상주 프로그램 (자동 시작 및 복구)
-- **Chocolatey 통합**: 안정적인 프로그램 설치 지원 (v0.8.5+)
+- **Chocolatey 통합**: 안정적인 프로그램 설치/삭제 지원 (v0.8.6+)
+- **자동 업데이트**: 클라이언트 자동 버전 체크 및 업데이트 (v0.8.7+)
 
 ### 기술 스택
 
@@ -101,6 +102,11 @@ WCMS는 **Client-Server 아키텍처**를 기반으로 한 실습실 PC 원격 �
 │ │Execut││                     │ │Execut││      │ │Execut││
 │ │or    ││                     │ │or    ││      │ │or    ││
 │ └──────┘ │                     │ └──────┘ │      │ └──────┘ │
+│    │     │                     │    │     │      │    │     │
+│ ┌──▼───┐ │                     │ ┌──▼───┐ │      │ ┌──▼───┐ │
+│ │Update│ │                     │ │Update│ │      │ │Update│ │
+│ │r     │ │                     │ │r     │ │      │ │r     │ │
+│ └──────┘ │                     │ └──────┘ │      │ └──────┘ │
 │          │                     │          │      │          │
 │ Windows  │                     │ Windows  │      │ Windows  │
 │ Service  │                     │ Service  │      │ Service  │
@@ -157,6 +163,20 @@ Client                    Server
   │                         │
 ```
 
+#### 4. 자동 업데이트 (시작 시)
+```
+Client                    Server
+  │                         │
+  │───version (GET)────────>│
+  │                         │──> DB: SELECT client_versions
+  │<──{version, url}────────│
+  │                         │
+  │ (버전 다르면)             │
+  │───Download EXE─────────>│ (GitHub Releases)
+  │                         │
+  │───Update Script────────>│ (서비스 재시작)
+```
+
 ---
 
 ## 컴포넌트 구조
@@ -191,7 +211,8 @@ client/
 ├── main.py                     # 메인 엔트리포인트 (폴링 루프)
 ├── config.py                   # 설정 관리 (버전, URL)
 ├── collector.py                # 시스템 정보 수집 (WMI, psutil)
-├── executor.py                 # 명령 실행 (Chocolatey, CMD)
+├── executor.py                 # 명령 실행 (Chocolatey, CMD, RunOnce)
+├── updater.py                  # 자동 업데이트 모듈 (v0.8.7+)
 ├── service.py                  # Windows 서비스 래퍼
 └── utils.py                    # 유틸리티 (네트워크 재시도)
 ```
@@ -275,6 +296,7 @@ client/
 - **Chocolatey**: 시스템 레벨 패키지 관리자 사용으로 권한 문제 해결
 - **지연된 자동 시작**: 부팅 시 시스템 안정화 후 시작 (`delayed-auto`)
 - **자동 복구**: 서비스 실패 시 자동 재시작 설정 (`sc failure`)
+- **언어 설정**: `RunOnce` 레지스트리를 사용하여 사용자 최초 로그인 시 적용 (v0.8.8+)
 
 ---
 
@@ -299,6 +321,6 @@ client/
 
 ---
 
-**문서 버전**: 2.1  
-**최종 업데이트**: 2026-02-11
+**문서 버전**: 2.2  
+**최종 업데이트**: 2026-02-18
 **작성자**: WCMS Team

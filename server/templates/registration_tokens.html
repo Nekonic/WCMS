@@ -262,7 +262,7 @@ function displayTokens(tokens) {
                         <td>${new Date(token.expires_at).toLocaleString('ko-KR')}</td>
                         <td>${token.created_by}</td>
                         <td>
-                            <button onclick="deleteToken('${token.token}')" class="btn"
+                            <button onclick="deleteToken(${token.id})" class="btn"
                                     style="background: #dc2626; padding: 0.5em 1em; font-size: 0.85em;">
                                 <i class="fas fa-trash"></i> 삭제
                             </button>
@@ -276,13 +276,13 @@ function displayTokens(tokens) {
 }
 
 // 토큰 삭제
-async function deleteToken(token) {
-    if (!confirm(`토큰 ${token}을(를) 삭제하시겠습니까?`)) {
+async function deleteToken(tokenId) {
+    if (!confirm(`토큰을 삭제하시겠습니까?`)) {
         return;
     }
 
     try {
-        const response = await fetch(`/api/admin/registration-token/${token}`, {
+        const response = await fetch(`/api/admin/registration-token/${tokenId}`, {
             method: 'DELETE'
         });
 

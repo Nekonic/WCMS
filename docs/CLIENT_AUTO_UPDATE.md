@@ -2,7 +2,7 @@
 
 ## 개요
 
-클라이언트는 시작 시 서버에서 최신 버전을 확인하고, 새 버전이 있을 경우 사용자에게 알립니다.
+클라이언트는 시작 시 서버에서 최신 버전을 확인하고, 새 버전이 있을 경우 자동으로 다운로드하여 업데이트를 수행합니다.
 
 ---
 
@@ -20,8 +20,18 @@ GET /api/client/version 요청 (server)
 버전 비교
     ├─ 현재 = 최신: "최신 버전 사용 중" 로그
     └─ 현재 < 최신: "새 버전 있음" + download_url 로그
-    ↓
-사용자 수동 다운로드 및 설치
+        ↓
+        perform_update() 호출 (updater.py)
+        ↓
+        1. 새 EXE 다운로드 (임시 폴더)
+        2. 업데이트 스크립트(.cmd) 생성
+        3. 스크립트 실행 및 현재 프로세스 종료
+        ↓
+        [업데이트 스크립트]
+        1. 서비스 중지 (net stop WCMS-Client)
+        2. 파일 교체 (copy /Y)
+        3. 서비스 시작 (net start WCMS-Client)
+        4. 임시 파일 정리
 ```
 
 ### 서버 흐름
@@ -38,7 +48,7 @@ POST /api/client/version 호출 (GitHub Actions)
     ↓
 client_versions 테이블에 저장
     ↓
-클라이언트: 다음 체크 시 새 버전 감지
+클라이언트: 다음 체크 시 새 버전 감지 및 자동 업데이트
 ```
 
 ---
@@ -58,21 +68,65 @@ def check_for_updates():
 
             if latest_version != __version__:
                 logger.warning(f"새 버전이 있습니다! 현재: {__version__}, 최신: {latest_version}")
-                logger.info(f"다운로드: {data.get('download_url', 'GitHub Release 확인')}")
-                if data.get('changelog'):
-                    logger.info(f"변경사항: {data.get('changelog')}")
+                download_url = data.get('download_url')
+                if download_url:
+                    logger.info(f"업데이트 시작: {download_url}")
+                    perform_update(download_url, latest_version)
+                else:
+                    logger.info("다운로드 URL이 없어 업데이트를 건너뜁니다.")
             else:
                 logger.info(f"최신 버전 사용 중: {__version__}")
     except Exception as e:
         logger.debug(f"버전 체크 실패 (무시): {e}")
 ```
 
-**특징:**
-- 서버 응답 실패 시에도 클라이언트는 계속 작동
-- 로그에만 기록되고 사용자에게 강제하지 않음
-- 네트워크 재시도 로직 포함 (max_retries=2)
+### 2. 업데이터 모듈 (client/updater.py)
 
-### 2. 서버 (server/api/client.py)
+```python
+def perform_update(download_url: str, version: str):
+    """
+    업데이트 프로세스 실행
+    1. 새 버전 다운로드
+    2. 배치 스크립트 생성
+    3. 스크립트 실행 및 종료
+    """
+    # ... (생략) ...
+    
+    # 배치 스크립트 내용
+    script_content = f"""@echo off
+echo Waiting for service to stop...
+timeout /t 5 /nobreak >nul
+
+echo Stopping service {service_name}...
+net stop {service_name}
+
+echo Waiting for process to release lock...
+timeout /t 3 /nobreak >nul
+
+echo Replacing executable...
+copy /Y "{new_exe_path}" "{target_exe_path}"
+if %errorlevel% neq 0 (
+    echo Failed to copy file. Retrying in 5 seconds...
+    timeout /t 5 /nobreak >nul
+    copy /Y "{new_exe_path}" "{target_exe_path}"
+)
+
+echo Starting service {service_name}...
+net start {service_name}
+
+echo Cleaning up...
+del "{new_exe_path}"
+del "%~f0"
+"""
+```
+
+**특징:**
+- 서비스 중지/시작 자동화
+- 파일 잠금 해제 대기 (timeout)
+- 실패 시 재시도 로직 포함
+- 임시 파일 자동 정리
+
+### 3. 서버 (server/api/client.py)
 
 #### GET /api/client/version (클라이언트 조회용)
 
@@ -88,72 +142,21 @@ def get_version():
 ```json
 {
   "status": "success",
-  "version": "0.8.0",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
-  "changelog": "자동 빌드 - v0.8.0 릴리스",
-  "released_at": "2025-12-30T12:00:00"
+  "version": "0.8.7",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.7/WCMS-Client.exe",
+  "changelog": "자동 업데이트 기능 추가",
+  "released_at": "2026-02-18T12:00:00"
 }
 ```
 
 #### POST /api/client/version (관리자 전용)
 
-**이전 (보안 취약):**
-```python
-# Authorization 헤더로 인증 (환경변수 토큰)
-auth_token = request.headers.get('Authorization')
-expected_token = f"Bearer {os.environ.get('UPDATE_TOKEN')}"
-```
-
-**현재 (보안 강화):**
 ```python
 @admin_bp.route('/client/version', methods=['POST'])
 @require_admin  # 관리자 세션 필수
 def create_client_version():
     """클라이언트 버전 등록 (관리자 전용)"""
-    # 로그인 세션으로 관리자 권한 확인
-    # session.get('username') 로깅
-```
-
-**장점:**
-- DB 초기화 시 외부에서 함부로 버전 등록 불가
-- 관리자 웹 페이지에서만 관리
-- 접근 로그 기록 (누가 언제 등록했는지)
-
-**요청 형식:**
-```json
-{
-  "version": "0.8.0",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
-  "changelog": "자동 빌드 - v0.8.0 릴리스"
-}
-```
-
-### 3. GitHub Actions (.github/workflows/build_client.yml)
-
-#### 버전 추출
-```yaml
-- name: Extract version from tag
-  run: |
-    $version = "0.8.0"  # client-v0.8.0 태그에서 추출
-```
-
-#### 버전 업데이트
-```yaml
-- name: Update version in main.py
-  run: |
-    __version__ = "0.8.0"  # main.py의 버전 문자열 자동 업데이트
-```
-
-#### 서버 알림
-```yaml
-- name: Notify server about new version
-  run: |
-    POST /api/client/version
-    {
-      "version": "0.8.0",
-      "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
-      "changelog": "자동 빌드 - v0.8.0 릴리스"
-    }
+    # ...
 ```
 
 ---
@@ -167,58 +170,20 @@ def create_client_version():
 2. 관리자 로그인
 3. 좌측 메뉴 → "📦 클라이언트 버전" 클릭
 4. 버전 정보 입력
-   - 버전: 0.8.0
-   - 다운로드 URL: https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe
+   - 버전: 0.8.7
+   - 다운로드 URL: https://github.com/Nekonic/WCMS/releases/download/client-v0.8.7/WCMS-Client.exe
    - 변경사항: (선택) 업데이트 내용
 5. "등록" 버튼 클릭
-```
-
-**장점:**
-- 웹 UI에서 간편하게 관리
-- 인증 자동 처리 (로그인 세션 사용)
-- 등록된 버전 목록 확인 및 삭제 가능
-- 최신 버전 배지 표시
-
-### API로 버전 등록 (자동화용)
-
-관리자 권한 필요 (`@require_admin` 데코레이터)
-
-```bash
-# POST /api/client/version
-curl -X POST http://localhost:5050/api/client/version \
-  -H "Content-Type: application/json" \
-  -H "Cookie: session=<세션쿠키>" \
-  -d '{
-    "version": "0.8.0",
-    "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
-    "changelog": "자동 빌드 - v0.8.0 릴리스"
-  }'
-```
-
-**주의:** 이전 버전처럼 Authorization 헤더 인증은 제거되었습니다. 관리자 로그인 세션이 필요합니다.
-
-### 새 버전 릴리스 (GitHub Actions)
-
-```bash
-# 1. 클라이언트 코드 수정 (필요시)
-# 2. Git 태그 생성
-git tag client-v0.8.0
-git push origin client-v0.8.0
-
-# 3. GitHub Actions 자동 실행
-# - EXE 빌드
-# - Release 생성
-# - 서버에 버전 정보 저장
 ```
 
 ### 사용자 업데이트
 
 ```
-1. 클라이언트 실행
-2. 로그에서 "새 버전이 있습니다" 메시지 확인
-3. 다운로드 링크에서 EXE 다운로드
-4. 우클릭 → "관리자 권한으로 실행"
-5. 자동으로 서비스 업데이트 및 재시작
+1. 클라이언트 서비스가 실행 중일 때
+2. 서버에 새 버전이 등록되면
+3. 클라이언트가 재시작되거나 주기적으로 체크할 때 (현재는 시작 시 체크)
+4. 자동으로 다운로드 및 업데이트 수행
+5. 서비스가 잠시 중지되었다가 새 버전으로 다시 시작됨
 ```
 
 ---
@@ -237,114 +202,27 @@ CREATE TABLE client_versions (
 );
 ```
 
-**주의:** 각 버전은 한 번씩만 저장됨 (UNIQUE 제약)
-
----
-
-## 설정
-
-### GitHub Secrets (필수)
-
-`.github/workflows/build_client.yml`에서 사용:
-
-```
-SERVER_URL         서버 API 주소 (예: http://localhost:5050)
-UPDATE_TOKEN       인증 토큰 (선택사항)
-```
-
-**설정 방법:**
-1. GitHub 레포지토리 → Settings
-2. Secrets and variables → Actions
-3. New repository secret 추가
-
-### 환경 변수 (클라이언트)
-
-`client/config.py`:
-```python
-SERVER_URL = os.getenv('WCMS_SERVER_URL', 'http://localhost:5050')
-```
-
----
-
-## 테스트
-
-### 로컬 테스트
-
-```bash
-# 1. 서버 시작
-cd server
-uv run python app.py
-
-# 2. 버전 정보 수동 추가 (SQLite)
-sqlite3 db.sqlite3
-INSERT INTO client_versions (version, download_url, changelog)
-VALUES ('0.8.0', 'https://example.com/WCMS-Client.exe', 'Test version');
-
-# 3. 클라이언트 실행
-cd client
-__version__ = "0.6.0"
-uv run python main.py
-
-# 4. 로그에서 "새 버전이 있습니다" 메시지 확인
-```
-
-### API 테스트
-
-```bash
-# 버전 조회
-curl http://localhost:5050/api/client/version
-
-# 버전 업데이트
-curl -X POST http://localhost:5050/api/client/version \
-  -H "Content-Type: application/json" \
-  -d '{
-    "version": "0.8.0",
-    "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.0/WCMS-Client.exe",
-    "changelog": "Test update"
-  }'
-```
-
 ---
 
 ## 문제 해결
 
-### 로그에서 버전 체크 실패
+### 업데이트 무한 루프
 
-**원인:** 서버가 응답하지 않음
+**원인:** 버전 비교 로직 오류 또는 다운로드 파일 손상
 **해결:**
-1. 서버가 실행 중인지 확인
-2. SERVER_URL 확인 (config.py)
-3. 네트워크 연결 확인
+1. 서버의 최신 버전 정보 확인
+2. 클라이언트 로그 확인 (`C:\ProgramData\WCMS\logs\client.log`)
+3. 수동으로 서비스 중지 후 최신 버전 덮어쓰기
 
-### 새 버전이 감지되지 않음
+### 서비스 시작 실패
 
-**원인:** 데이터베이스에 버전 정보 없음
+**원인:** 권한 문제 또는 파일 경로 오류
 **해결:**
-1. POST /api/client/version 요청 확인
-2. client_versions 테이블 확인
-3. GitHub Actions 로그 확인
-
-### GitHub Actions 빌드 실패
-
-**원인:** 의존성 설치 실패
-**해결:**
-1. 워크플로우 로그 확인
-2. `uv sync --all-extras` 성공 확인
-3. Python 3.9 설치 확인
+1. `sc query WCMS-Client`로 상태 확인
+2. 이벤트 뷰어 로그 확인
+3. `install.cmd`를 관리자 권한으로 다시 실행하여 서비스 재등록
 
 ---
 
-## 향후 계획
-
-- [ ] 자동 다운로드 및 설치 기능
-- [ ] 업데이트 스케줄링
-- [ ] 롤백 기능
-- [ ] 베타 채널 지원
-- [ ] 업데이트 알림 UI 추가
-
----
-
-**마지막 업데이트**: 2025-12-30  
+**마지막 업데이트**: 2026-02-18  
 **상태**: 정상 작동 ✅
-
-

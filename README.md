@@ -4,8 +4,8 @@ WCMS는 실습실 PC를 원격으로 관리하고 모니터링하기 위한 시�
 
 ## 📊 프로젝트 상태
 
-- **버전**: 0.8.6
-- **최근 업데이트**: 2026-02-11
+- **버전**: 0.8.8
+- **최근 업데이트**: 2026-02-18
 - **주요 기능**: 
   - [x] PIN 기반 인증 시스템
   - [x] RESTful API 재설계
@@ -13,8 +13,9 @@ WCMS는 실습실 PC를 원격으로 관리하고 모니터링하기 위한 시�
   - [x] 통합 테스트 (65개 통과)
   - [x] 웹 UI 등록 토큰 관리
   - [x] 자동 IP 변경 감지
-  - [x] **Chocolatey 기반 프로그램 설치**
-  - [x] **안정적인 Windows 서비스 설치**
+  - [x] **Chocolatey 기반 프로그램 설치/삭제**
+  - [x] **클라이언트 자동 업데이트**
+  - [x] **계정 생성 시 언어 설정 (RunOnce)**
 
 ## 🚀 빠른 시작
 
@@ -75,12 +76,12 @@ iwr -Uri "http://your-server:5050/install/install.ps1" -OutFile install.ps1; .\i
 **로컬 서버:**
 ```bash
 # Windows
-sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.6', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.6/WCMS-Client.exe', 'v0.8.6 - Chocolatey Support');"
+sqlite3 db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.8', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.8/WCMS-Client.exe', 'v0.8.8 - Auto Update & Language Setting');"
 ```
 
 **Docker 서버:**
 ```bash
-docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.6', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.6/WCMS-Client.exe', 'v0.8.6 - Chocolatey Support');"
+docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO client_versions (version, download_url, changelog) VALUES ('0.8.8', 'https://github.com/Nekonic/WCMS/releases/download/client-v0.8.8/WCMS-Client.exe', 'v0.8.8 - Auto Update & Language Setting');"
 ```
 
 ---
@@ -98,9 +99,10 @@ docker exec wcms-server sqlite3 /app/db/wcms.sqlite3 "INSERT OR REPLACE INTO cli
 
 ### 상세 문서
 - **[아키텍처 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)**: 시스템 구조 및 설계
-- **[API 명세서 (docs/API.md)](docs/API.md)**: REST API 상세 설명 (v0.8.6)
+- **[API 명세서 (docs/API.md)](docs/API.md)**: REST API 상세 설명 (v0.8.8)
 - **[변경 이력 (docs/CHANGELOG.md)](docs/CHANGELOG.md)**: 버전별 변경사항
 - **[문서 목록 (docs/INDEX.md)](docs/INDEX.md)**: 전체 문서 인덱스
+- **[자동 업데이트 (docs/CLIENT_AUTO_UPDATE.md)](docs/CLIENT_AUTO_UPDATE.md)**: 클라이언트 자동 업데이트 상세
 
 ### 기여자용
 - **[Copilot 규칙 (.github/copilot-instructions.md)](.github/copilot-instructions.md)**: AI 어시스턴트 및 코딩 규칙
@@ -158,18 +160,16 @@ python manage.py test client
 python manage.py docker-test
 ```
 
-## 🚀 v0.8.6 주요 변경사항
+## 🚀 v0.8.8 주요 변경사항
 
 ### 새로운 기능
-- **Chocolatey 지원**: `winget` 대신 `chocolatey`를 사용하여 프로그램 설치 (서비스 환경 호환성 개선)
-- **서비스 설치 개선**: `sc create`를 사용하여 안정적인 서비스 등록 및 시작
-- **UI 개선**: 계정 관리, 전원 관리, 프로세스 종료 모달 개선
-- **RAM 차트**: PC 상세 정보에 RAM 사용량 도넛 차트 추가
+- **클라이언트 자동 업데이트**: 서버에서 새 버전 감지 시 자동 업데이트 수행
+- **프로그램 삭제**: Chocolatey를 이용한 프로그램 삭제 기능 추가
+- **계정 생성 언어 설정**: `RunOnce` 레지스트리를 활용하여 사용자 최초 로그인 시 언어 설정 적용
 
-### 버그 수정
-- 서비스 재시작 시 자동 시작 안 되는 문제 해결 (`delayed-auto`)
-- 파일 다운로드 시 경로 지정 기능 추가
-- JSON 이중 인코딩 문제 해결
+### 개선사항
+- **UI 개선**: 계정 관리 모달에서 언어 선택 옵션 추가, 불필요한 키보드 설정 제거
+- **버그 수정**: 토큰 삭제 시 ID 대신 문자열을 사용하여 삭제되지 않던 문제 해결
 
 자세한 내용은 [CHANGELOG.md](docs/CHANGELOG.md)를 참고하세요.
 

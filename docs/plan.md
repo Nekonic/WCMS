@@ -12,19 +12,17 @@
   - `client/main.py`: `check_for_updates` 함수 개선
   - 새 버전 감지 시 `install.cmd` 또는 별도의 업데이트 스크립트 다운로드 및 실행
   - 서비스 중지 -> 파일 교체 -> 서비스 시작 프로세스 자동화
-- [ ] **업데이트 정책 설정**
-  - 강제 업데이트 vs 선택적 업데이트
-  - 업데이트 시간대 설정 (수업 시간 피하기)
 
 ### 2. 프로그램 삭제
 - [x] **프로그램 삭제 명령 추가**
   - `server/api/admin.py`: `/pc/<int:pc_id>/uninstall` 엔드포인트 추가
   - `client/executor.py`: `uninstall` 명령 처리 로직 추가 (Chocolatey 활용)
 
-### 3. 윈도우 계정생성에서 언어 및 키보드 설정 지원
-- [x] **계정 생성 시 언어/키보드 설정 파라미터 추가**
+### 3. 윈도우 계정생성에서 언어 설정 지원
+- [x] **계정 생성 시 언어 설정 파라미터 추가**
   - `server/api/admin.py`: `create_account` API에 `language` 파라미터 추가
-  - `client/executor.py`: `create_user` 함수에 파라미터 전달 (현재는 로그만 남김, 추후 구현 필요)
+  - `client/executor.py`: `create_user` 함수에 파라미터 전달 및 `RunOnce` 레지스트리 등록 로직 구현
+  - `server/templates/index.html`: 일괄 계정 생성 모달에 언어 선택 옵션 추가
 
 ---
 

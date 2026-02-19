@@ -314,10 +314,33 @@ class CommandExecutor:
                             shell=True, capture_output=True
                         )
                     
-                    # 언어 설정 (로그만 남김, 실제 구현은 복잡함)
+                    # 언어 설정 (RunOnce 레지스트리 활용)
                     if language:
-                        logger.info(f"사용자 {username} 언어 설정 요청: {language} (현재 미지원)")
-                        msg += f" (언어 설정은 아직 지원되지 않습니다)"
+                        try:
+                            # RunOnce 키에 등록할 명령어 생성
+                            # cmd /c if /i "%USERNAME%"=="{username}" powershell -WindowStyle Hidden -Command "Set-WinUserLanguageList -LanguageList {language} -Force"
+                            
+                            # 이스케이프 처리가 중요함
+                            ps_cmd = f"Set-WinUserLanguageList -LanguageList {language} -Force"
+                            reg_cmd = f'cmd /c if /i "%USERNAME%"=="{username}" powershell -WindowStyle Hidden -Command "{ps_cmd}"'
+                            
+                            # reg add 명령 실행
+                            reg_key = r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
+                            reg_value = f"SetLang_{username}"
+                            
+                            # subprocess.run으로 reg add 실행
+                            # /v: 값 이름, /t: 타입(REG_SZ), /d: 데이터, /f: 강제 덮어쓰기
+                            subprocess.run(
+                                ['reg', 'add', reg_key, '/v', reg_value, '/t', 'REG_SZ', '/d', reg_cmd, '/f'],
+                                check=True, capture_output=True
+                            )
+                            
+                            msg += f" (언어 설정 예약됨: {language})"
+                            logger.info(f"RunOnce 등록 성공: {reg_value} -> {language}")
+                            
+                        except Exception as e:
+                            logger.error(f"RunOnce 등록 실패: {e}")
+                            msg += " (언어 설정 예약 실패)"
                         
                     return msg
                 else:
