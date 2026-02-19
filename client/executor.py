@@ -278,6 +278,42 @@ class CommandExecutor:
             return f"다운로드 실패: {str(e)}"
 
     @staticmethod
+    def _install_language_pack(language_code: str) -> bool:
+        """언어 팩 설치 (PowerShell)"""
+        try:
+            # 1. 이미 설치되어 있는지 확인
+            check_cmd = f"Get-InstalledLanguage -Language {language_code}"
+            result = subprocess.run(
+                f'powershell -NoProfile -Command "{check_cmd}"',
+                shell=True, capture_output=True, text=True
+            )
+            
+            if result.returncode == 0 and language_code in result.stdout:
+                logger.info(f"언어 팩 이미 설치됨: {language_code}")
+                return True
+                
+            # 2. 설치 시도 (Install-Language)
+            # -CopyToSettings: 시스템 설정 복사 (선택 사항, 여기선 생략)
+            logger.info(f"언어 팩 설치 시작: {language_code}")
+            install_cmd = f"Install-Language -Language {language_code}"
+            
+            result = subprocess.run(
+                f'powershell -NoProfile -Command "{install_cmd}"',
+                shell=True, capture_output=True, text=True, timeout=600 # 설치 시간 고려
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"언어 팩 설치 성공: {language_code}")
+                return True
+            else:
+                logger.error(f"언어 팩 설치 실패: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"언어 팩 설치 중 오류: {e}")
+            return False
+
+    @staticmethod
     def create_user(username, password, full_name=None, comment=None, language=None):
         """Windows 사용자 계정 생성"""
         return CommandExecutor.manage_account('create', username, password, full_name, comment, language)
@@ -302,6 +338,11 @@ class CommandExecutor:
                 if not password:
                     return "오류: 비밀번호가 필요합니다"
 
+                # 1. 언어 팩 설치 (계정 생성 전)
+                if language:
+                    CommandExecutor._install_language_pack(language)
+
+                # 2. 계정 생성
                 cmd = f'net user {username} {password} /add'
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
@@ -314,22 +355,38 @@ class CommandExecutor:
                             shell=True, capture_output=True
                         )
                     
-                    # 언어 설정 (RunOnce 레지스트리 활용)
+                    # 3. 언어 설정 (RunOnce 레지스트리 활용)
                     if language:
                         try:
                             # RunOnce 키에 등록할 명령어 생성
-                            # cmd /c if /i "%USERNAME%"=="{username}" powershell -WindowStyle Hidden -Command "Set-WinUserLanguageList -LanguageList {language} -Force"
+                            # 로그 기록 추가: >> C:\Temp\lang_log.txt
+                            log_path = r"C:\ProgramData\WCMS\logs\lang_setup.log"
                             
-                            # 이스케이프 처리가 중요함
-                            ps_cmd = f"Set-WinUserLanguageList -LanguageList {language} -Force"
+                            # PowerShell 명령어 구성
+                            # 1. 로그 기록
+                            # 2. 언어 목록 설정
+                            # 3. GeoID 설정 (선택 사항, 복잡해서 일단 제외)
+                            ps_script = f"""
+                            $log = '{log_path}';
+                            Add-Content -Path $log -Value ('[' + (Get-Date) + '] Starting language setup for {username} to {language}');
+                            try {{
+                                Set-WinUserLanguageList -LanguageList {language} -Force -ErrorAction Stop;
+                                Add-Content -Path $log -Value 'Success: Set-WinUserLanguageList';
+                            }} catch {{
+                                Add-Content -Path $log -Value ('Error: ' + $_.Exception.Message);
+                            }}
+                            """
+                            
+                            # 한 줄로 변환 (공백 제거)
+                            ps_cmd = ps_script.replace('\n', ' ').replace('    ', '')
+                            
+                            # cmd에서 실행할 전체 명령
                             reg_cmd = f'cmd /c if /i "%USERNAME%"=="{username}" powershell -WindowStyle Hidden -Command "{ps_cmd}"'
                             
                             # reg add 명령 실행
                             reg_key = r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
                             reg_value = f"SetLang_{username}"
                             
-                            # subprocess.run으로 reg add 실행
-                            # /v: 값 이름, /t: 타입(REG_SZ), /d: 데이터, /f: 강제 덮어쓰기
                             subprocess.run(
                                 ['reg', 'add', reg_key, '/v', reg_value, '/t', 'REG_SZ', '/d', reg_cmd, '/f'],
                                 check=True, capture_output=True

@@ -7,6 +7,19 @@
 
 ---
 
+## [0.8.9] - 2026-02-18
+
+> **상태**: Released (Hotfix)  
+> **테마**: 언어 설정 기능 안정화
+
+### Fixed - 버그 수정
+- [x] **언어 설정 로직 개선**
+  - 언어 팩 미설치 시 자동 설치 기능 추가 (`Install-Language`)
+  - `RunOnce` 실행 시 로그 기록 추가 (`C:\ProgramData\WCMS\logs\lang_setup.log`)
+  - PowerShell 스크립트 실행 안정성 개선
+
+---
+
 ## [0.8.8] - 2026-02-18
 
 > **상태**: Released  
