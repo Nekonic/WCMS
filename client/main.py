@@ -222,6 +222,38 @@ def should_skip_command(cmd_type: str, cmd_params: dict) -> bool:
     return False
 
 
+def execute_command_async(cmd_id: int, cmd_type: str, cmd_data: dict):
+    """명령을 비동기(별도 스레드)로 실행"""
+    def _run():
+        try:
+            # 전원 관리 명령이면서 유예 시간 내라면 건너뛰기
+            if should_skip_command(cmd_type, cmd_data):
+                result = f"명령 건너뜀: 부팅 후 {POWER_COMMAND_GRACE_PERIOD}초 이내의 전원 관리 명령"
+                logger.info(result)
+                send_command_result(cmd_id, 'skipped', result)
+                return
+
+            # 전원 관리 명령이면 추가 경고 출력
+            if is_power_command(cmd_type, cmd_data):
+                elapsed = (datetime.now() - BOOT_TIME).total_seconds()
+                logger.warning(f"전원 관리 명령 실행 (부팅 후 {int(elapsed)}초 경과)")
+
+            # 명령 실행
+            result = CommandExecutor.execute_command(cmd_type, cmd_data)
+            logger.info(f"명령 결과: {result}")
+
+            # 결과를 서버로 보고
+            send_command_result(cmd_id, 'completed', result)
+        except Exception as e:
+            logger.error(f"명령 실행 중 오류 발생: {e}")
+            send_command_result(cmd_id, 'error', str(e))
+
+    # 데몬 스레드로 실행하여 메인 프로세스 종료 시 함께 종료되도록 함
+    # (단, 중요한 작업은 데몬이 아니어야 할 수도 있으나, 여기서는 빠른 응답성을 위해 데몬 사용)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+
 def poll_command(stop_event: threading.Event):
     """명령 폴링 + 경량 하트비트 통합 (v0.8.0 네트워크 최적화)
 
@@ -292,23 +324,8 @@ def poll_command(stop_event: threading.Event):
 
                     logger.info(f"명령 수신: {cmd_type} | ID: {cmd_id}")
 
-                    # 전원 관리 명령이면서 유예 시간 내라면 건너뛰기
-                    if should_skip_command(cmd_type, cmd_data):
-                        result = f"명령 건너뜀: 부팅 후 {POWER_COMMAND_GRACE_PERIOD}초 이내의 전원 관리 명령"
-                        logger.info(result)
-                        send_command_result(cmd_id, 'skipped', result)
-                    else:
-                        # 전원 관리 명령이면 추가 경고 출력
-                        if is_power_command(cmd_type, cmd_data):
-                            elapsed = (datetime.now() - BOOT_TIME).total_seconds()
-                            logger.warning(f"전원 관리 명령 실행 (부팅 후 {int(elapsed)}초 경과)")
-
-                        # 명령 실행
-                        result = CommandExecutor.execute_command(cmd_type, cmd_data)
-                        logger.info(f"명령 결과: {result}")
-
-                        # 결과를 서버로 보고
-                        send_command_result(cmd_id, 'completed', result)
+                    # 비동기 실행 (스레드 분리)
+                    execute_command_async(cmd_id, cmd_type, cmd_data)
                 else:
                     logger.debug(f"명령 없음 (경량 하트비트 전송됨)")
             else:

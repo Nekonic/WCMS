@@ -299,7 +299,7 @@ class CommandExecutor:
             
             result = subprocess.run(
                 f'powershell -NoProfile -Command "{install_cmd}"',
-                shell=True, capture_output=True, text=True, timeout=600 # 설치 시간 고려
+                shell=True, capture_output=True, text=True, timeout=1800 # 설치 시간 고려 (30분)
             )
             
             if result.returncode == 0:
