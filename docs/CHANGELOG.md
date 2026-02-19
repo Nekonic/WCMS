@@ -7,14 +7,24 @@
 
 ---
 
+## [0.8.11] - 2026-02-19
+
+> **상태**: Released (Hotfix)  
+> **테마**: Windows 표시 언어 설정 개선
+
+### Fixed - 버그 수정
+- [x] **Windows 표시 언어(UI) 미변경 문제 해결**
+  - `Set-WinUserLanguageList` 외에 `Set-WinUILanguageOverride` 및 `Set-Culture` 명령어 추가
+  - 입력 언어뿐만 아니라 Windows UI 언어와 지역 설정까지 변경되도록 개선
+
+---
+
 ## [0.8.10] - 2026-02-19
 
 > **상태**: Released (Hotfix)  
 > **테마**: 언어 팩 설치 안정성 개선
 
 ### Fixed - 버그 수정
-- [x] **명령 실행 비동기 처리**
-  - `client/main.py`: 명령 실행을 별도 스레드로 분리하여 Heartbeat 차단 방지
 - [x] **언어 팩 설치 타임아웃 연장**
   - `Install-Language` 실행 타임아웃을 10분에서 30분으로 연장 (네트워크 환경 고려)
 
@@ -30,6 +40,8 @@
   - 언어 팩 미설치 시 자동 설치 기능 추가 (`Install-Language`)
   - `RunOnce` 실행 시 로그 기록 추가 (`C:\ProgramData\WCMS\logs\lang_setup.log`)
   - PowerShell 스크립트 실행 안정성 개선
+- [x] **명령 실행 비동기 처리**
+  - `client/main.py`: 명령 실행을 별도 스레드로 분리하여 Heartbeat 차단 방지
 
 ---
 

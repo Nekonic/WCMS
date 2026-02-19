@@ -364,14 +364,26 @@ class CommandExecutor:
                             
                             # PowerShell 명령어 구성
                             # 1. 로그 기록
-                            # 2. 언어 목록 설정
-                            # 3. GeoID 설정 (선택 사항, 복잡해서 일단 제외)
+                            # 2. 언어 목록 설정 (입력기)
+                            # 3. 표시 언어(UI) 강제 설정 (Set-WinUILanguageOverride)
+                            # 4. 지역/문화권 설정 (Set-Culture)
                             ps_script = f"""
                             $log = '{log_path}';
-                            Add-Content -Path $log -Value ('[' + (Get-Date) + '] Starting language setup for {username} to {language}');
+                            $lang = '{language}';
+                            Add-Content -Path $log -Value ('[' + (Get-Date) + '] Starting language setup for {username} to ' + $lang);
                             try {{
-                                Set-WinUserLanguageList -LanguageList {language} -Force -ErrorAction Stop;
+                                # 1. 언어 목록 및 입력기 설정
+                                Set-WinUserLanguageList -LanguageList $lang -Force -ErrorAction Stop;
                                 Add-Content -Path $log -Value 'Success: Set-WinUserLanguageList';
+                                
+                                # 2. Windows 표시 언어(UI) 설정
+                                Set-WinUILanguageOverride -Language $lang -ErrorAction Stop;
+                                Add-Content -Path $log -Value 'Success: Set-WinUILanguageOverride';
+                                
+                                # 3. 지역/문화권 설정 (날짜, 시간 형식 등)
+                                Set-Culture -CultureInfo $lang -ErrorAction Stop;
+                                Add-Content -Path $log -Value 'Success: Set-Culture';
+
                             }} catch {{
                                 Add-Content -Path $log -Value ('Error: ' + $_.Exception.Message);
                             }}
