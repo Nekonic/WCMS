@@ -76,7 +76,7 @@ jobs:
 
     - name: Upload ZAP report as artifact
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: zap-scan-report-${{ github.run_number }}
         path: |
