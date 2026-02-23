@@ -13,9 +13,15 @@ class Config:
     BASE_DIR = Path(__file__).parent
 
     # Flask 설정
-    SECRET_KEY = os.getenv('WCMS_SECRET_KEY', 'woosuk25')  # 프로덕션에서는 반드시 변경
+    SECRET_KEY = os.getenv('WCMS_SECRET_KEY')  # 환경변수 필수 (프로덕션)
     DEBUG = False
     TESTING = False
+
+    # 보안 설정
+    SESSION_COOKIE_SECURE = True  # HTTPS에서만 쿠키 전송
+    SESSION_COOKIE_HTTPONLY = True  # JavaScript 접근 차단
+    SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF 보호
+    PERMANENT_SESSION_LIFETIME = 3600  # 세션 만료 시간 (1시간)
 
     # 데이터베이스 설정
     DB_PATH = os.getenv('WCMS_DB_PATH', str(BASE_DIR / 'db.sqlite3'))
@@ -49,7 +55,8 @@ class Config:
 class DevelopmentConfig(Config):
     """개발 환경 설정"""
     DEBUG = True
-    SECRET_KEY = 'dev-secret-key'
+    SECRET_KEY = os.getenv('WCMS_SECRET_KEY', 'dev-secret-key-change-in-production')
+    SESSION_COOKIE_SECURE = False  # 개발 환경에서는 HTTP 허용
 
 
 class ProductionConfig(Config):

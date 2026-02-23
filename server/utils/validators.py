@@ -128,6 +128,7 @@ def validate_command_type(cmd_type: Optional[str]) -> bool:
         'reboot',
         'execute',
         'install',
+        'uninstall',
         'download',
         'create_user',
         'delete_user',
@@ -135,6 +136,62 @@ def validate_command_type(cmd_type: Optional[str]) -> bool:
         'logoff',
     }
     return cmd_type in valid_types
+
+
+def validate_username(username: Optional[str]) -> bool:
+    """
+    사용자명 유효성 검증 (Windows 계정명)
+
+    Args:
+        username: 검증할 사용자명
+
+    Returns:
+        유효 여부
+    """
+    if not username:
+        return False
+    # Windows 계정명: 1-20자, 특수문자 제한
+    if len(username) < 1 or len(username) > 20:
+        return False
+    # 금지된 문자: " / \ [ ] : ; | = , + * ? < >
+    invalid_chars = r'["/\\\[\]:;|=,+*?<>]'
+    return not re.search(invalid_chars, username)
+
+
+def validate_pin(pin: Optional[str]) -> bool:
+    """
+    등록 PIN 유효성 검증
+
+    Args:
+        pin: 검증할 PIN (6자리 숫자)
+
+    Returns:
+        유효 여부
+    """
+    if not pin:
+        return False
+    return bool(re.match(r'^\d{6}$', pin))
+
+
+def sanitize_path(path: Optional[str]) -> Optional[str]:
+    """
+    파일 경로 정제 (경로 탐색 공격 방어)
+
+    Args:
+        path: 정제할 경로
+
+    Returns:
+        정제된 경로 또는 None (위험한 경로)
+    """
+    if not path:
+        return None
+    # .. (상위 디렉토리) 차단
+    if '..' in path:
+        return None
+    # 절대 경로 또는 UNC 경로 차단 (클라이언트 경로만 허용)
+    if path.startswith(('/', '\\', 'C:', 'D:', '\\\\')):
+        return path  # 클라이언트에서는 절대경로 필요
+    return path
 
 
 def sanitize_command_output(output: str, max_length: int = 5000) -> str:

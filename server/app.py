@@ -16,6 +16,9 @@ from pathlib import Path
 from flask import Flask, render_template, redirect, url_for, session, request
 from flask_cors import CORS
 from flask_session import Session
+from flask_talisman import Talisman
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import cachelib
 
 # 프로젝트 루트 경로
@@ -67,6 +70,35 @@ def create_app(config_name='development'):
     app.config['SESSION_CACHELIB'] = cachelib.FileSystemCache(threshold=500, cache_dir=session_dir)
 
     Session(app)
+
+    # 보안 헤더 설정 (Flask-Talisman) - 개발 환경에서는 선택적 활성화
+    if config_name == 'production':
+        # 프로덕션: HTTPS 강제, 보안 헤더 전체 적용
+        csp = {
+            'default-src': "'self'",
+            'script-src': ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+            'style-src': ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+            'img-src': ["'self'", "data:"],
+        }
+        Talisman(app,
+                 force_https=True,
+                 strict_transport_security=True,
+                 content_security_policy=csp,
+                 content_security_policy_nonce_in=['script-src'])
+    elif config_name == 'development':
+        # 개발 환경: HTTPS 강제 없이 보안 헤더만 적용
+        Talisman(app,
+                 force_https=False,
+                 strict_transport_security=False,
+                 content_security_policy=False)
+
+    # Rate Limiting 설정
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri="memory://"
+    )
 
     # DB 초기화/정리
     init_db_manager(app.config['DB_PATH'], app.config['DB_TIMEOUT'])
@@ -126,6 +158,7 @@ def create_app(config_name='development'):
         return render_template('index.html', pcs=pcs_with_status, room=room_name, username=admin_user, admin=admin_user)
 
     @app.route('/login', methods=['GET', 'POST'])
+    @limiter.limit("5 per minute")  # Brute-force 방어
     def login():
         """관리자 로그인"""
         if request.method == 'POST':
@@ -139,10 +172,11 @@ def create_app(config_name='development'):
                 session['username'] = admin['username']
                 session['admin_id'] = admin['id']
                 session['admin'] = True  # 레거시 호환성 (require_admin 데코레이터용)
+                session.permanent = True  # 세션 만료 시간 적용
                 logger.info(f"로그인 성공: {username}")
                 return redirect(url_for('index'))
             else:
-                logger.warning(f"로그인 실패: {username}")
+                logger.warning(f"로그인 실패: {username} from {request.remote_addr}")
                 return render_template('login.html', error='아이디 또는 비밀번호가 잘못되었습니다.')
 
         return render_template('login.html')
@@ -261,6 +295,20 @@ def create_app(config_name='development'):
         return render_template('error.html', error='서버 내부 오류가 발생했습니다 (500)'), 500
 
 
+    # robots.txt 엔드포인트
+    @app.route('/robots.txt')
+    def robots_txt():
+        """검색 엔진 크롤링 차단"""
+        return """User-agent: *
+Disallow: /
+""", 200, {'Content-Type': 'text/plain'}
+
+    # 소개 페이지
+    @app.route('/about')
+    def about():
+        """WCMS 소개 페이지"""
+        return render_template('about.html', username=session.get('username'))
+
     logger.info(f"앱 생성: {config_name} 모드")
     return app
 
@@ -273,11 +321,24 @@ if __name__ == '__main__':
     debug = mode == 'development'
 
     logger.info(f"WCMS 서버 시작 (모드: {mode})")
-    logger.info("http://0.0.0.0:5050 에서 접속 가능합니다.")
+
+    # HTTPS 지원 (선택적)
+    ssl_context = None
+    if os.getenv('WCMS_SSL_CERT') and os.getenv('WCMS_SSL_KEY'):
+        ssl_context = (
+            os.getenv('WCMS_SSL_CERT'),  # 인증서 파일 경로
+            os.getenv('WCMS_SSL_KEY')    # 개인키 파일 경로
+        )
+        logger.info("HTTPS 모드로 시작합니다.")
+        logger.info("https://0.0.0.0:5050 에서 접속 가능합니다.")
+    else:
+        logger.info("HTTP 모드로 시작합니다. (프로덕션에서는 HTTPS 권장)")
+        logger.info("http://0.0.0.0:5050 에서 접속 가능합니다.")
 
     app.run(
         host='0.0.0.0',
         port=5050,
         debug=debug,
-        use_reloader=debug
+        use_reloader=debug,
+        ssl_context=ssl_context
     )
