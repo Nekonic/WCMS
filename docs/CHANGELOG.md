@@ -7,15 +7,52 @@
 
 ---
 
+## [0.9.0] - 2026-02-24
+
+> **상태**: Released
+> **테마**: 서버 보안 강화
+
+### Security - 보안
+- [x] **HTTPS 지원**
+  - 환경변수로 SSL 인증서 경로 설정 (`WCMS_SSL_CERT`, `WCMS_SSL_KEY`)
+  - Flask 서버에 SSL 컨텍스트 적용 (`docs/SECURITY.md` 가이드 포함)
+- [x] **웹 보안 헤더 적용** (`Flask-Talisman`)
+  - HSTS, CSP, X-Frame-Options, X-Content-Type-Options 자동 적용
+- [x] **Rate Limiting 강화** (`Flask-Limiter`)
+  - 로그인 엔드포인트: 5회/분 제한 (Brute-force 방어)
+  - 전역 제한: 50회/시간, 200회/일
+- [x] **robots.txt 추가** — 검색 엔진 크롤링 차단 (`Disallow: /`)
+- [x] **SECRET_KEY 환경변수화** (`WCMS_SECRET_KEY`) — 하드코딩 제거
+- [x] **세션 쿠키 보안 강화** — Secure, HttpOnly, SameSite=Lax, 만료 1시간
+- [x] **입력 검증 강화** (`validators.py` 확장)
+  - `validate_username()`, `validate_pin()`, `sanitize_path()` 추가
+
+### Added - 새로운 기능
+- [x] **소개 페이지** (`/about`) — 사이드바에서 접근 가능
+- [x] **보안 문서** (`docs/SECURITY.md`) — HTTPS 설정, 환경변수, 보안 체크리스트, 취약점 신고 절차
+- [x] **취약점 점검 자동화** (GitHub Actions)
+  - SAST: CodeQL Python 정적 분석 (push/PR/주간 스케줄)
+  - DAST: OWASP ZAP baseline 스캔 (Flask 서버 로컬 실행)
+  - 의존성 스캔: pip-audit, Dependabot (pip + GitHub Actions)
+
+### Known Issues - 알려진 문제
+- [ ] **Windows 표시 언어 설정이 일부 환경에서 미적용**
+  - 계정 생성 시 언어 설정이 일부 환경에서 정상 적용되지 않는 문제
+  - v0.8.9 ~ v0.8.11에서 지속 개선 시도 중이나 완전 해결 미완료
+  - 다음 버전에서 추가 조사 예정
+
+---
+
 ## [0.8.11] - 2026-02-19
 
-> **상태**: Released (Hotfix)  
+> **상태**: Released (Hotfix)
 > **테마**: Windows 표시 언어 설정 개선
 
 ### Fixed - 버그 수정
-- [x] **Windows 표시 언어(UI) 미변경 문제 해결**
+- [x] **Windows 표시 언어(UI) 미변경 문제 개선 시도**
   - `Set-WinUserLanguageList` 외에 `Set-WinUILanguageOverride` 및 `Set-Culture` 명령어 추가
   - 입력 언어뿐만 아니라 Windows UI 언어와 지역 설정까지 변경되도록 개선
+  - ⚠️ 일부 환경에서 여전히 미적용되는 경우 있음 (v0.9.0 Known Issues 참고)
 
 ---
 
@@ -252,8 +289,7 @@
 
 ### Fixed - 버그 수정
 - [x] 동시 연결 처리 문제 해결 (Long-polling 제거)
-- [x] IP 변경 시 자동 업데이트
-- [x] Rate limiting 구현 (2초 간격)
+- [x] Rate limiting 구현 (클라이언트 폴링 2초 간격)
 - [x] DB 트랜잭션 안정성 개선
 
 ### Testing - 테스트
@@ -271,19 +307,19 @@
 
 ## [0.7.1] - 2026-02-07
 
-### 수정
-- **[중요] install.cmd config.json SERVER_URL 슬래시 누락 수정** - [x]
-- **클라이언트 명령 실행 서버 측 개선** - [x]
-- **클라이언트 서비스 안정성 개선** - [x]
-- **디스크 사용량 차트 버그 수정** [x]
-- **프로세스 표시 버그 수정** [x]
-- **명령 실행 속도 개선** [x]
-- **IP 주소 표시 버그 수정** [x]
+### Fixed - 버그 수정
+- [x] **[중요] install.cmd config.json SERVER_URL 슬래시 누락 수정**
+- [x] **클라이언트 명령 실행 서버 측 개선**
+- [x] **클라이언트 서비스 안정성 개선**
+- [x] **디스크 사용량 차트 버그 수정**
+- [x] **프로세스 표시 버그 수정**
+- [x] **명령 실행 속도 개선**
+- [x] **IP 주소 표시 버그 수정**
 
-### 추가
-- **테스트 추가** [x]
-- **디스크 도넛 차트 추가** [x]
-- **Windows Docker 클라이언트 트러블슈팅 문서** [x]
+### Added - 새로운 기능
+- [x] **테스트 추가**
+- [x] **디스크 도넛 차트 추가**
+- [x] **Windows Docker 클라이언트 트러블슈팅 문서**
 
 ---
 
