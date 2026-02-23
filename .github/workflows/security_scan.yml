@@ -1,0 +1,73 @@
+name: Dependency Security Scan
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**/pyproject.toml'
+      - '**/uv.lock'
+      - '.github/workflows/security_scan.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**/pyproject.toml'
+      - '**/uv.lock'
+  schedule:
+    # 매주 월요일 오전 4시 (UTC) 정기 스캔
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  pip-audit:
+    name: pip-audit Dependency Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install server dependencies
+      working-directory: ./server
+      run: uv sync
+
+    - name: Run pip-audit on server dependencies
+      working-directory: ./server
+      run: |
+        echo "=== 서버 의존성 취약점 스캔 ==="
+        uvx pip-audit --format=json --output=../pip-audit-server.json || true
+        uvx pip-audit --format=cyclonedx-json --output=../pip-audit-server-sbom.json || true
+        uvx pip-audit
+
+    - name: Install client dependencies
+      working-directory: ./client
+      run: uv sync || true  # 일부 Windows 전용 패키지는 Linux에서 설치 불가
+
+    - name: Run pip-audit on client dependencies
+      working-directory: ./client
+      continue-on-error: true
+      run: |
+        echo "=== 클라이언트 의존성 취약점 스캔 ==="
+        uvx pip-audit --format=json --output=../pip-audit-client.json || true
+        uvx pip-audit || true  # Windows 전용 패키지 오류 무시
+
+    - name: Upload pip-audit reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pip-audit-reports-${{ github.run_number }}
+        path: |
+          pip-audit-server.json
+          pip-audit-client.json
+          pip-audit-server-sbom.json
+        retention-days: 90

@@ -1,0 +1,85 @@
+name: OWASP ZAP DAST Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # 매주 화요일 오전 3시 (UTC) 정기 스캔
+    - cron: '0 3 * * 2'
+  workflow_dispatch:
+
+jobs:
+  zap-scan:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      issues: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install server dependencies
+      working-directory: ./server
+      run: uv sync
+
+    - name: Start WCMS server in background
+      working-directory: ./server
+      env:
+        FLASK_ENV: development
+        WCMS_SECRET_KEY: ci-test-secret-key-not-for-production
+        WCMS_DB_PATH: /tmp/wcms_ci_test.db
+      run: |
+        uv run python app.py &
+        echo "서버 PID: $!"
+
+    - name: Wait for server to be ready
+      run: |
+        echo "서버 시작 대기 중..."
+        for i in $(seq 1 30); do
+          if curl -s -o /dev/null -w "%{http_code}" http://localhost:5050/login | grep -qE "^(200|302)"; then
+            echo "서버 준비 완료 (시도 $i)"
+            break
+          fi
+          echo "대기 중... ($i/30)"
+          sleep 2
+        done
+
+    - name: Verify server is running
+      run: |
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5050/login)
+        echo "서버 응답 상태 코드: $STATUS"
+        if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ]; then
+          echo "서버가 응답하지 않음 (상태 코드: $STATUS)"
+          exit 1
+        fi
+
+    - name: Run OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.14.0
+      with:
+        target: 'http://localhost:5050'
+        rules_file_name: '.github/zap-rules.tsv'
+        cmd_options: '-I'
+        artifact_name: 'zap-scan-report'
+
+    - name: Upload ZAP report as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: zap-scan-report-${{ github.run_number }}
+        path: |
+          report_html.html
+          report_json.json
+        retention-days: 30
