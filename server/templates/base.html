@@ -226,6 +226,7 @@
             </div>
         </div>
         <div>
+            <a href="{{ url_for('about') }}" {% if request.endpoint == 'about' %}class="active"{% endif %}>ℹ️ 소개</a>
             <div class="divider"></div>
             {% if session.get('username') %}
                 <a href="{{ url_for('logout') }}">🔓 로그아웃</a>
