@@ -115,6 +115,11 @@ def create_app(config_name='development'):
     app.register_blueprint(admin_bp)
     app.register_blueprint(install_bp)
 
+    # 클라이언트 API는 Rate Limit 제외
+    # - 2초 폴링 = 시간당 1,800회로 전역 제한(50회/시간)에 걸림
+    # - 토큰 인증으로 이미 보호되므로 IP 기반 제한 불필요
+    limiter.exempt(client_bp)
+
 
     # ==================== 웹 페이지 라우트 (레거시 호환) ====================
 

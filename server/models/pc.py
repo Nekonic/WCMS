@@ -13,6 +13,15 @@ class PCModel:
     """PC 정보 관리 모델"""
 
     @staticmethod
+    def _to_json(value: Any, empty: str = '{}') -> str:
+        """dict/list를 JSON 문자열로 변환. 이미 문자열이면 그대로, None이면 empty 반환."""
+        if isinstance(value, (dict, list)):
+            return json.dumps(value)
+        if isinstance(value, str):
+            return value
+        return empty
+
+    @staticmethod
     def get_by_id(pc_id: int) -> Optional[Dict[str, Any]]:
         """PC ID로 PC 정보 조회"""
         db = get_db()
@@ -84,13 +93,7 @@ class PCModel:
         pc_id = cursor.lastrowid
 
         # pc_specs 삽입
-        # disk_info가 이미 JSON 문자열이면 그대로, dict면 변환
-        if isinstance(disk_info, str):
-            disk_info_str = disk_info
-        elif isinstance(disk_info, dict):
-            disk_info_str = json.dumps(disk_info)
-        else:
-            disk_info_str = '{}'
+        disk_info_str = PCModel._to_json(disk_info)
 
         db.execute('''
             INSERT INTO pc_specs (pc_id, cpu_model, cpu_cores, cpu_threads, ram_total, disk_info, os_edition, os_version)
@@ -137,13 +140,7 @@ class PCModel:
             ''', (hostname, ip_address, mac_address, pc_id))
 
             # pc_specs 업데이트
-            # disk_info가 이미 JSON 문자열이면 그대로, dict면 변환
-            if isinstance(disk_info, str):
-                disk_info_str = disk_info
-            elif isinstance(disk_info, dict):
-                disk_info_str = json.dumps(disk_info)
-            else:
-                disk_info_str = '{}'
+            disk_info_str = PCModel._to_json(disk_info)
 
             # pc_specs가 존재하는지 확인
             specs_exist = db.execute('SELECT 1 FROM pc_specs WHERE pc_id=?', (pc_id,)).fetchone()
@@ -205,21 +202,8 @@ class PCModel:
             ''', (pc_id,))
 
             # pc_dynamic_info 업데이트 (UNIQUE pc_id 제약으로 최신 상태만 유지)
-            # disk_usage가 이미 JSON 문자열이면 그대로, dict면 변환
-            if isinstance(disk_usage, str):
-                disk_usage_str = disk_usage
-            elif isinstance(disk_usage, dict):
-                disk_usage_str = json.dumps(disk_usage)
-            else:
-                disk_usage_str = '{}'
-
-            # processes가 이미 JSON 문자열이면 그대로, list면 변환
-            if isinstance(processes, str):
-                processes_str = processes
-            elif isinstance(processes, list):
-                processes_str = json.dumps(processes)
-            else:
-                processes_str = '[]'
+            disk_usage_str = PCModel._to_json(disk_usage)
+            processes_str = PCModel._to_json(processes, '[]')
 
             db.execute('''
                 INSERT OR REPLACE INTO pc_dynamic_info 
@@ -381,18 +365,8 @@ class PCModel:
         try:
             db = get_db()
 
-            # JSON 데이터 처리 (이미 JSON 문자열이면 그대로, dict/list면 변환)
-            disk_usage = dynamic_data.get('disk_usage')
-            if isinstance(disk_usage, dict):
-                disk_usage = json.dumps(disk_usage)
-            elif not isinstance(disk_usage, str):
-                disk_usage = '{}'
-
-            processes = dynamic_data.get('processes')
-            if isinstance(processes, list):
-                processes = json.dumps(processes)
-            elif not isinstance(processes, str):
-                processes = '[]'
+            disk_usage = PCModel._to_json(dynamic_data.get('disk_usage'))
+            processes = PCModel._to_json(dynamic_data.get('processes'), '[]')
 
             # INSERT OR REPLACE (UNIQUE pc_id 제약 활용)
             db.execute('''

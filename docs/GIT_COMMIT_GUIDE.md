@@ -126,23 +126,47 @@ refactor(server): remove unused account manager route
 
 ---
 
-## Release & GitHub Actions
+## Version Commits
 
-To trigger a release build via GitHub Actions, create and push a tag starting with `client-v`.
+### Policy
+`plan.md`의 버전 항목을 **모두 완료한 후** 버전 커밋을 생성한다.
+개별 작업 중에는 논리적 단위로 커밋하되, 버전 완료 시 최종 summary 커밋을 추가한다.
+
+### Format
+
+버전 릴리스 완료 시:
+```
+release: v0.9.1
+
+- 인라인 CSS 제거 및 components.css 도입
+- 보안 취약점 수정 (Z-01, C-01)
+- 문서 정리 (plan.md, ARCHITECTURE.md)
+```
+
+긴급 패치(프로덕션 버그 수정) 시:
+```
+hotfix: v0.9.1
+
+- fix critical issue: 서버 시작 실패 수정
+```
+
+### GitHub Actions Release
+
+클라이언트 EXE 빌드 및 GitHub Release 생성:
 
 ```bash
-# 1. Create a tag
+# 1. 태그 생성
 git tag client-v0.8.8
 
-# 2. Push the tag
+# 2. 태그 푸시 (build_client.yml 트리거)
 git push origin client-v0.8.8
 ```
 
-This will:
-1. Trigger the `build_client.yml` workflow.
-2. Build the Windows executable (`WCMS-Client.exe`).
-3. Create a GitHub Release.
-4. Notify the server about the new version (if configured).
+Workflow:
+1. `build_client.yml` 트리거
+2. Windows EXE 빌드 (`WCMS-Client.exe`)
+3. GitHub Release 생성
+4. 서버에 새 버전 알림 (설정 시)
 
 ---
 
@@ -164,7 +188,8 @@ Ensure these files are **NOT** committed:
 
 ## Pre-Commit Checklist
 
-- [ ] Did you check `git status`?
-- [ ] Did you run tests (`python manage.py test`)?
-- [ ] Does the commit message follow the format?
-- [ ] Are there any unnecessary files included?
+- [ ] `git status` 확인
+- [ ] 테스트 실행 (`uv run python manage.py test`)
+- [ ] 커밋 메시지 형식 준수
+- [ ] 불필요한 파일 미포함 (`.env`, `*.db`, `flask_session/`)
+- [ ] 버전 커밋 시: `plan.md` 해당 버전 항목 전부 완료 확인

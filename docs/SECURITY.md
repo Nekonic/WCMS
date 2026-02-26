@@ -159,8 +159,8 @@ Referrer-Policy: strict-origin-when-cross-origin
 | 엔드포인트 | 제한 | 설명 |
 |-----------|------|------|
 | `/login` | 5회/분 | Brute-force 공격 방어 |
-| `/api/client/register` | 10회/시간 | 대량 등록 차단 |
-| 기타 API | 50회/시간 | 일반 트래픽 제한 |
+| `/api/admin/*`, 웹 UI | 50회/시간, 200회/일 | 관리자 트래픽 제한 |
+| `/api/client/*` | 제한 없음 | 2초 폴링 설계 + 토큰 인증으로 보호 |
 
 ### 3. 세션 보안
 

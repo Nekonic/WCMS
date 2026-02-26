@@ -13,6 +13,33 @@ logger = logging.getLogger('wcms.admin_api')
 admin_bp = Blueprint('admin', __name__, url_prefix='/api')
 
 
+def _get_pc_or_404(pc_id: int):
+    """PC 조회. 없으면 (None, 404 응답) 반환."""
+    pc = PCModel.get_by_id(pc_id)
+    if not pc:
+        return None, (jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404)
+    return pc, None
+
+
+def _queue_command(pc_id: int, cmd_type: str, cmd_data=None):
+    """PC 존재 확인 후 명령 큐 등록. JSON 응답 반환."""
+    _, err = _get_pc_or_404(pc_id)
+    if err:
+        return err
+    try:
+        command_id = CommandModel.create(
+            pc_id=pc_id,
+            command_type=cmd_type,
+            command_data=cmd_data,
+            admin_username=session.get('username', 'admin')
+        )
+        logger.info(f"{cmd_type} 명령 생성: PC {pc_id} by {session.get('username')}")
+        return jsonify({'status': 'success', 'command_id': command_id}), 200
+    except Exception as e:
+        logger.error(f"{cmd_type} 명령 생성 실패: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @admin_bp.route('/pcs', methods=['GET'])
 def list_pcs():
     """모든 PC 목록 조회 (app.py 호환: 인증 불필요, 리스트 반환)"""
@@ -111,44 +138,11 @@ def send_command(pc_id):
     }), 200
 
 
-@admin_bp.route('/pc/<int:pc_id>/shutdown', methods=['POST'])
-@require_admin
-def pc_shutdown(pc_id):
-    """PC 종료 명령 전송"""
-    if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
-
-    command_id = CommandModel.create(
-        pc_id=pc_id,
-        command_type='shutdown',
-        admin_username=session.get('username')
-    )
-
-    return jsonify({
-        'status': 'success',
-        'message': '종료 명령 전송 완료', # app.py message
-        'command_id': command_id
-    }), 200
-
-
 @admin_bp.route('/pc/<int:pc_id>/reboot', methods=['POST'])
 @require_admin
 def pc_reboot(pc_id):
     """PC 재시작 명령 전송"""
-    if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
-
-    command_id = CommandModel.create(
-        pc_id=pc_id,
-        command_type='reboot',
-        admin_username=session.get('username')
-    )
-
-    return jsonify({
-        'status': 'success',
-        'message': '재시작 명령 전송 완료', # app.py message
-        'command_id': command_id
-    }), 200
+    return _queue_command(pc_id, 'reboot')
 
 
 @admin_bp.route('/pc/<int:pc_id>/account/create', methods=['POST'])
@@ -156,31 +150,13 @@ def pc_reboot(pc_id):
 def create_account(pc_id):
     """Windows 계정 생성 명령 전송"""
     data = request.json
-
     if not data or not all(k in data for k in ['username', 'password']):
-        return jsonify({'status': 'error', 'message': 'username과 password 필드가 필요합니다'}), 400 # app.py message
-
-    if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
-
-    command_id = CommandModel.create(
-        pc_id=pc_id,
-        command_type='create_user',
-        command_data={
-            'username': data['username'],
-            'password': data['password'],
-            'full_name': data.get('full_name'),
-            'comment': data.get('comment'),
-            'language': data.get('language')
-        },
-        admin_username=session.get('username')
-    )
-
-    return jsonify({
-        'status': 'success',
-        'message': '계정 생성 명령 전송 완료', # app.py message
-        'command_id': command_id
-    }), 200
+        return jsonify({'status': 'error', 'message': 'username과 password 필드가 필요합니다'}), 400
+    return _queue_command(pc_id, 'create_user', {
+        'username': data['username'], 'password': data['password'],
+        'full_name': data.get('full_name'), 'comment': data.get('comment'),
+        'language': data.get('language')
+    })
 
 
 @admin_bp.route('/pc/<int:pc_id>/account/delete', methods=['POST'])
@@ -188,25 +164,9 @@ def create_account(pc_id):
 def delete_account(pc_id):
     """Windows 계정 삭제 명령 전송"""
     data = request.json
-
     if not data or 'username' not in data:
-        return jsonify({'status': 'error', 'message': 'username 필드가 필요합니다'}), 400 # app.py message
-
-    if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
-
-    command_id = CommandModel.create(
-        pc_id=pc_id,
-        command_type='delete_user',
-        command_data={'username': data['username']},
-        admin_username=session.get('username')
-    )
-
-    return jsonify({
-        'status': 'success',
-        'message': '계정 삭제 명령 전송 완료', # app.py message
-        'command_id': command_id
-    }), 200
+        return jsonify({'status': 'error', 'message': 'username 필드가 필요합니다'}), 400
+    return _queue_command(pc_id, 'delete_user', {'username': data['username']})
 
 
 @admin_bp.route('/pc/<int:pc_id>/account/password', methods=['POST'])
@@ -214,28 +174,11 @@ def delete_account(pc_id):
 def change_password(pc_id):
     """Windows 계정 비밀번호 변경 명령 전송"""
     data = request.json
-
     if not data or not all(k in data for k in ['username', 'new_password']):
-        return jsonify({'status': 'error', 'message': 'username과 new_password 필드가 필요합니다'}), 400 # app.py message
-
-    if not PCModel.get_by_id(pc_id):
-        return jsonify({'status': 'error', 'message': 'PC를 찾을 수 없습니다'}), 404
-
-    command_id = CommandModel.create(
-        pc_id=pc_id,
-        command_type='change_password',
-        command_data={
-            'username': data['username'],
-            'new_password': data['new_password']
-        },
-        admin_username=session.get('username')
-    )
-
-    return jsonify({
-        'status': 'success',
-        'message': '비밀번호 변경 명령 전송 완료', # app.py message
-        'command_id': command_id
-    }), 200
+        return jsonify({'status': 'error', 'message': 'username과 new_password 필드가 필요합니다'}), 400
+    return _queue_command(pc_id, 'change_password', {
+        'username': data['username'], 'new_password': data['new_password']
+    })
 
 
 # ==================== 추가된 API (복구) ====================
@@ -889,36 +832,7 @@ def list_unverified_pcs():
 def send_shutdown_command(pc_id: int):
     """PC 종료 명령"""
     data = request.json or {}
-    delay = data.get('delay', 0)
-    message = data.get('message', '')
-
-    try:
-        command_data = {
-            'delay': delay,
-            'message': message
-        }
-
-        admin_username = session.get('username', 'admin')
-        command_id = CommandModel.create(
-            pc_id=pc_id,
-            command_type='shutdown',
-            command_data=command_data,
-            admin_username=admin_username
-        )
-
-        logger.info(f"종료 명령 생성: PC {pc_id}, 지연 {delay}초 by {admin_username}")
-
-        return jsonify({
-            'status': 'success',
-            'command_id': command_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"종료 명령 생성 실패: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    return _queue_command(pc_id, 'shutdown', {'delay': data.get('delay', 0), 'message': data.get('message', '')})
 
 
 @admin_bp.route('/pc/<int:pc_id>/restart', methods=['POST'])
@@ -926,36 +840,7 @@ def send_shutdown_command(pc_id: int):
 def send_restart_command(pc_id: int):
     """PC 재시작 명령"""
     data = request.json or {}
-    delay = data.get('delay', 0)
-    message = data.get('message', '')
-
-    try:
-        command_data = {
-            'delay': delay,
-            'message': message
-        }
-
-        admin_username = session.get('username', 'admin')
-        command_id = CommandModel.create(
-            pc_id=pc_id,
-            command_type='restart',
-            command_data=command_data,
-            admin_username=admin_username
-        )
-
-        logger.info(f"재시작 명령 생성: PC {pc_id}, 지연 {delay}초 by {admin_username}")
-
-        return jsonify({
-            'status': 'success',
-            'command_id': command_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"재시작 명령 생성 실패: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    return _queue_command(pc_id, 'restart', {'delay': data.get('delay', 0), 'message': data.get('message', '')})
 
 
 @admin_bp.route('/pc/<int:pc_id>/message', methods=['POST'])
@@ -963,42 +848,9 @@ def send_restart_command(pc_id: int):
 def send_message_command(pc_id: int):
     """PC에 메시지 전송"""
     data = request.json or {}
-    message = data.get('message', '')
-    duration = data.get('duration', 10)
-
-    if not message:
-        return jsonify({
-            'status': 'error',
-            'message': 'Message is required'
-        }), 400
-
-    try:
-        command_data = {
-            'message': message,
-            'duration': duration
-        }
-
-        admin_username = session.get('username', 'admin')
-        command_id = CommandModel.create(
-            pc_id=pc_id,
-            command_type='message',
-            command_data=command_data,
-            admin_username=admin_username
-        )
-
-        logger.info(f"메시지 명령 생성: PC {pc_id} by {admin_username}")
-
-        return jsonify({
-            'status': 'success',
-            'command_id': command_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"메시지 명령 생성 실패: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    if not data.get('message'):
+        return jsonify({'status': 'error', 'message': 'Message is required'}), 400
+    return _queue_command(pc_id, 'message', {'message': data['message'], 'duration': data.get('duration', 10)})
 
 
 @admin_bp.route('/pc/<int:pc_id>/kill-process', methods=['POST'])
@@ -1006,40 +858,9 @@ def send_message_command(pc_id: int):
 def send_kill_process_command(pc_id: int):
     """프로세스 종료 명령"""
     data = request.json or {}
-    process_name = data.get('process_name', '')
-
-    if not process_name:
-        return jsonify({
-            'status': 'error',
-            'message': 'process_name is required'
-        }), 400
-
-    try:
-        command_data = {
-            'process_name': process_name
-        }
-
-        admin_username = session.get('username', 'admin')
-        command_id = CommandModel.create(
-            pc_id=pc_id,
-            command_type='kill_process',
-            command_data=command_data,
-            admin_username=admin_username
-        )
-
-        logger.info(f"프로세스 종료 명령 생성: PC {pc_id}, {process_name} by {admin_username}")
-
-        return jsonify({
-            'status': 'success',
-            'command_id': command_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"프로세스 종료 명령 생성 실패: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    if not data.get('process_name'):
+        return jsonify({'status': 'error', 'message': 'process_name is required'}), 400
+    return _queue_command(pc_id, 'kill_process', {'process_name': data['process_name']})
 
 
 @admin_bp.route('/pc/<int:pc_id>/install', methods=['POST'])
@@ -1047,40 +868,9 @@ def send_kill_process_command(pc_id: int):
 def send_install_command(pc_id: int):
     """프로그램 설치 명령"""
     data = request.json or {}
-    app_id = data.get('app_id', '')
-
-    if not app_id:
-        return jsonify({
-            'status': 'error',
-            'message': 'app_id is required'
-        }), 400
-
-    try:
-        command_data = {
-            'app_id': app_id
-        }
-
-        admin_username = session.get('username', 'admin')
-        command_id = CommandModel.create(
-            pc_id=pc_id,
-            command_type='install',
-            command_data=command_data,
-            admin_username=admin_username
-        )
-
-        logger.info(f"프로그램 설치 명령 생성: PC {pc_id}, {app_id} by {admin_username}")
-
-        return jsonify({
-            'status': 'success',
-            'command_id': command_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"프로그램 설치 명령 생성 실패: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    if not data.get('app_id'):
+        return jsonify({'status': 'error', 'message': 'app_id is required'}), 400
+    return _queue_command(pc_id, 'install', {'app_id': data['app_id']})
 
 
 @admin_bp.route('/pc/<int:pc_id>/uninstall', methods=['POST'])
@@ -1088,40 +878,9 @@ def send_install_command(pc_id: int):
 def send_uninstall_command(pc_id: int):
     """프로그램 삭제 명령"""
     data = request.json or {}
-    app_id = data.get('app_id', '')
-
-    if not app_id:
-        return jsonify({
-            'status': 'error',
-            'message': 'app_id is required'
-        }), 400
-
-    try:
-        command_data = {
-            'app_id': app_id
-        }
-
-        admin_username = session.get('username', 'admin')
-        command_id = CommandModel.create(
-            pc_id=pc_id,
-            command_type='uninstall',
-            command_data=command_data,
-            admin_username=admin_username
-        )
-
-        logger.info(f"프로그램 삭제 명령 생성: PC {pc_id}, {app_id} by {admin_username}")
-
-        return jsonify({
-            'status': 'success',
-            'command_id': command_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"프로그램 삭제 명령 생성 실패: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    if not data.get('app_id'):
+        return jsonify({'status': 'error', 'message': 'app_id is required'}), 400
+    return _queue_command(pc_id, 'uninstall', {'app_id': data['app_id']})
 
 
 @admin_bp.route('/admin/processes', methods=['GET'])

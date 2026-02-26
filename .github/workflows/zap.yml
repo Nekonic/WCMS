@@ -42,7 +42,8 @@ jobs:
         WCMS_SECRET_KEY: ci-test-secret-key-not-for-production
         WCMS_DB_PATH: /tmp/wcms_ci_test.db
       run: |
-        uv run python app.py &
+        uv run python app.py > /tmp/wcms_server.log 2>&1 &
+        echo "SERVER_PID=$!" >> $GITHUB_ENV
         echo "서버 PID: $!"
 
     - name: Wait for server to be ready
@@ -51,28 +52,27 @@ jobs:
         for i in $(seq 1 30); do
           if curl -s -o /dev/null -w "%{http_code}" http://localhost:5050/login | grep -qE "^(200|302)"; then
             echo "서버 준비 완료 (시도 $i)"
-            break
+            exit 0
           fi
           echo "대기 중... ($i/30)"
           sleep 2
         done
-
-    - name: Verify server is running
-      run: |
-        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5050/login)
-        echo "서버 응답 상태 코드: $STATUS"
-        if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ]; then
-          echo "서버가 응답하지 않음 (상태 코드: $STATUS)"
-          exit 1
-        fi
+        echo "=== 서버 시작 실패 - 서버 로그 ==="
+        cat /tmp/wcms_server.log || true
+        exit 1
 
     - name: Run OWASP ZAP Baseline Scan
+      continue-on-error: true  # 취약점 발견 시 실패해도 워크플로우는 성공 (보고 목적)
       uses: zaproxy/action-baseline@v0.14.0
       with:
         target: 'http://localhost:5050'
         rules_file_name: '.github/zap-rules.tsv'
         cmd_options: '-I'
         artifact_name: 'zap-scan-report'
+
+    - name: Show server logs on failure
+      if: failure()
+      run: cat /tmp/wcms_server.log || echo "서버 로그 없음"
 
     - name: Upload ZAP report as artifact
       if: always()

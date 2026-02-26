@@ -43,6 +43,7 @@ jobs:
 
     - name: Run pip-audit on server dependencies
       working-directory: ./server
+      continue-on-error: true  # 취약점 발견 시 exit 1 → 워크플로우 실패 방지 (보고 목적)
       run: |
         echo "=== 서버 의존성 취약점 스캔 ==="
         uvx pip-audit --format=json --output=../pip-audit-server.json || true

@@ -1,0 +1,140 @@
+.seat-cell {
+    width: 80px;
+    height: 80px;
+    background: #1a1a1a;
+    border: 2px solid #444;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    padding: 0.5em;
+    text-align: center;
+    font-size: 0.8em;
+    box-sizing: border-box;
+    position: relative;
+    user-select: none;
+}
+
+.seat-cell.occupied {
+    background: #10b981;
+    border: 2px solid #10b981;
+}
+
+.seat-cell.empty {
+    background: #2a2a2a;
+    border: 2px dashed #666;
+}
+
+.seat-cell:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.5);
+}
+
+.seat-cell.selected {
+    border: 3px solid #fbbf24 !important;
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.6) !important;
+}
+
+.seat-checkbox {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid #333;
+    border-radius: 4px;
+    display: none;
+    cursor: pointer;
+}
+
+.seat-cell.selection-mode .seat-checkbox {
+    display: block;
+}
+
+.seat-checkbox.checked {
+    background: #fbbf24;
+    border-color: #f59e0b;
+}
+
+.seat-checkbox.checked::after {
+    content: '✓';
+    color: #000;
+    font-size: 14px;
+    font-weight: bold;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.selected-pc-tag {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 0.4em 0.8em;
+    border-radius: 6px;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.selected-pc-tag .remove-btn {
+    background: rgba(220, 38, 38, 0.8);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+}
+
+/* 명령 실행 결과 모달 스타일 */
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #4a9eff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.result-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1em;
+    margin-bottom: 0.8em;
+    border-radius: 8px;
+    border-left: 4px solid #888;
+}
+
+.result-item.completed { border-left-color: #10b981; }
+.result-item.error { border-left-color: #dc2626; }
+.result-item.pending { border-left-color: #f59e0b; }
+.result-item.executing { border-left-color: #4a9eff; }
+.result-item.skipped { border-left-color: #6366f1; }
+
+.result-content {
+    background: #1a1a1a;
+    padding: 1em;
+    border-radius: 6px;
+    margin-top: 0.5em;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85em;
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+}
