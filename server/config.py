@@ -33,7 +33,7 @@ class Config:
     PORT = int(os.getenv('WCMS_PORT', '5050'))
 
     # 타임아웃 설정
-    OFFLINE_THRESHOLD_MINUTES = int(os.getenv('WCMS_OFFLINE_THRESHOLD', '2'))  # PC 오프라인 판단 기준
+    OFFLINE_THRESHOLD_SECONDS = int(os.getenv('WCMS_OFFLINE_THRESHOLD', '40'))  # PC 오프라인 판단 기준 (long-poll 30s + 여유 10s)
     BACKGROUND_CHECK_INTERVAL = int(os.getenv('WCMS_BG_CHECK_INTERVAL', '30'))  # 백그라운드 체크 주기
 
     # 명령 설정

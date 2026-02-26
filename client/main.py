@@ -1,5 +1,4 @@
 import threading
-import psutil
 import requests
 import os
 import logging
@@ -8,7 +7,7 @@ from datetime import datetime
 from typing import Optional
 
 from config import (
-    SERVER_URL, MACHINE_ID, REGISTRATION_PIN, HEARTBEAT_INTERVAL, COMMAND_POLL_INTERVAL,
+    SERVER_URL, MACHINE_ID, REGISTRATION_PIN, HEARTBEAT_INTERVAL, LONG_POLL_TIMEOUT,
     LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_MAX_BYTES, LOG_BACKUP_COUNT,
     REQUEST_TIMEOUT, SHUTDOWN_TIMEOUT, __version__, POWER_COMMAND_GRACE_PERIOD, validate_config
 )
@@ -254,91 +253,88 @@ def execute_command_async(cmd_id: int, cmd_type: str, cmd_data: dict):
     t.start()
 
 
+def send_offline_signal():
+    """서버에 네트워크 오프라인 신호 전송 (단발성, 타임아웃 3초)"""
+    try:
+        requests.post(
+            f"{SERVER_URL}api/client/offline",
+            json={"machine_id": MACHINE_ID},
+            timeout=3
+        )
+        logger.info("오프라인 신호 전송")
+    except Exception:
+        pass  # 네트워크가 완전히 끊겼으면 전송 불가 - 서버 백그라운드 체커(40초)가 처리
+
+
 def poll_command(stop_event: threading.Event):
-    """명령 폴링 + 경량 하트비트 통합 (v0.8.0 네트워크 최적화)
+    """명령 대기 (Long-polling)
 
-    - POST 방식으로 명령 조회
-    - 경량 하트비트 (CPU, RAM, IP) 함께 전송
-    - 2초마다 폴링 (즉시 응답)
+    - GET /api/client/commands?machine_id=X&timeout=30
+    - 서버가 30초 동안 연결 유지, 명령 있으면 즉시 반환
+    - Timeout(30초 만료) → 즉시 재연결 (sleep 없음)
+    - ConnectionError → offline 신호 전송 후 30초마다 재연결 시도
     """
-    import socket
-
-    def get_ip_address():
-        """현재 IP 주소 조회"""
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except:
-            return "Unknown"
-
-    logger.info("명령 폴링 시작 (경량 하트비트 통합)")
+    logger.info("명령 대기 시작 (long-poll)")
 
     while not stop_event.is_set():
         try:
-            # 경량 하트비트 데이터 수집
-            cpu_usage = psutil.cpu_percent(interval=0.1)
-            ram_usage = psutil.virtual_memory().percent
-            ip_address = get_ip_address()
-
-            # POST 방식으로 명령 조회 + 경량 하트비트 전송
-            r = safe_request(
-                f"{SERVER_URL}api/client/commands",  # 변경: command → commands
-                method='POST',
-                json={
-                    "machine_id": MACHINE_ID,
-                    "heartbeat": {
-                        "cpu_usage": cpu_usage,
-                        "ram_usage_percent": ram_usage,
-                        "ip_address": ip_address
-                    }
-                },
-                timeout=REQUEST_TIMEOUT,
-                max_retries=2
+            r = requests.get(
+                f"{SERVER_URL}api/client/commands",
+                params={"machine_id": MACHINE_ID, "timeout": LONG_POLL_TIMEOUT},
+                timeout=LONG_POLL_TIMEOUT + 5
             )
 
-            if r and r.status_code == 200:
+            if r.status_code == 200:
                 data = r.json()
-
-                # 새 API 응답 형식 체크
                 if data.get('status') != 'success':
-                    logger.error(f"API 오류: {data.get('error', {}).get('message', 'Unknown error')}")
+                    logger.error(f"API 오류: {data.get('error', {}).get('message', 'Unknown')}")
                     if stop_event.wait(5):
                         break
                     continue
 
                 response_data = data.get('data', {})
-
-                # IP 변경 감지
-                if response_data.get('ip_changed'):
-                    logger.info(f"IP 주소 변경됨: {ip_address}")
-
-                # 명령 처리 (v0.8.0: 새 API 형식)
                 if response_data.get('has_command'):
-                    cmd = response_data.get('command', {})
-                    cmd_id = cmd.get('id')
-                    cmd_type = cmd.get('type')
-                    cmd_data = cmd.get('parameters', {})
+                    cmd = response_data['command']
+                    logger.info(f"명령 수신: {cmd.get('type')} | ID: {cmd.get('id')}")
+                    execute_command_async(cmd['id'], cmd['type'], cmd.get('parameters', {}))
+                # 명령 없음 (timeout 만료) → 즉시 재연결
 
-                    logger.info(f"명령 수신: {cmd_type} | ID: {cmd_id}")
-
-                    # 비동기 실행 (스레드 분리)
-                    execute_command_async(cmd_id, cmd_type, cmd_data)
-                else:
-                    logger.debug(f"명령 없음 (경량 하트비트 전송됨)")
+            elif r.status_code == 404:
+                logger.warning("Long-poll: 등록되지 않은 PC. 30초 후 재시도")
+                if stop_event.wait(30):
+                    break
             else:
-                logger.debug(f"명령 조회 오류: {r.status_code if r else 'No response'}")
+                logger.warning(f"Long-poll 응답 오류: {r.status_code}")
+                if stop_event.wait(5):
+                    break
+
+        except requests.exceptions.Timeout:
+            # 정상: 서버 timeout 만료, 즉시 재연결
+            continue
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+            logger.error(f"네트워크 오류: {e}")
+            send_offline_signal()
+
+            # 재연결 루프: 30초마다 시도
+            while not stop_event.is_set():
+                if stop_event.wait(30):
+                    return
+                try:
+                    requests.get(
+                        f"{SERVER_URL}api/client/commands",
+                        params={"machine_id": MACHINE_ID, "timeout": LONG_POLL_TIMEOUT},
+                        timeout=LONG_POLL_TIMEOUT + 5
+                    )
+                    logger.info("재연결 성공")
+                    break
+                except (requests.exceptions.ConnectionError, requests.exceptions.RequestException):
+                    logger.debug("재연결 시도 중...")
 
         except Exception as e:
-            logger.error(f"명령 조회 오류: {e}")
+            logger.error(f"명령 대기 오류: {e}")
             if stop_event.wait(5):
                 break
-
-        # 2초 대기 (폴링 주기)
-        if stop_event.wait(COMMAND_POLL_INTERVAL):
-            break
 
 
 def send_command_result(command_id: int, status: str, result: str):

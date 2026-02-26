@@ -81,11 +81,10 @@ class CommandExecutor:
         """PC 종료"""
         try:
             delay = max(0, delay)
-            cmd = f'shutdown /s /t {delay}'
+            cmd = ['shutdown', '/s', '/t', str(delay)]
             if message:
-                cmd += f' /c "{message}"'
-
-            subprocess.run(cmd, shell=True)
+                cmd += ['/c', message]
+            subprocess.run(cmd)
             return f"종료 명령 실행됨 (지연: {delay}초)"
         except Exception as e:
             return f"종료 실패: {str(e)}"
@@ -95,11 +94,10 @@ class CommandExecutor:
         """PC 재시작"""
         try:
             delay = max(0, delay)
-            cmd = f'shutdown /r /t {delay}'
+            cmd = ['shutdown', '/r', '/t', str(delay)]
             if message:
-                cmd += f' /c "{message}"'
-
-            subprocess.run(cmd, shell=True)
+                cmd += ['/c', message]
+            subprocess.run(cmd)
             return f"재시작 명령 실행됨 (지연: {delay}초)"
         except Exception as e:
             return f"재시작 실패: {str(e)}"
@@ -129,7 +127,7 @@ class CommandExecutor:
         """Chocolatey 설치 확인 및 설치"""
         # choco 명령 확인
         try:
-            result = subprocess.run('choco --version', shell=True, capture_output=True, text=True)
+            result = subprocess.run(['choco', '--version'], capture_output=True, text=True)
             if result.returncode == 0:
                 return True
         except:
@@ -168,25 +166,13 @@ class CommandExecutor:
             return "오류: Chocolatey를 설치할 수 없어 프로그램을 설치할 수 없습니다."
 
         try:
-            # choco install 명령 구성
-            # -y: 모든 프롬프트에 예라고 대답
-            # --force: 강제 설치
-            choco_cmd = f'choco install {app_id} -y --force'
-            
-            # PowerShell을 통해 실행 (환경 변수 갱신 문제 해결 위해)
-            # Chocolatey 설치 직후에는 PATH가 갱신되지 않았을 수 있으므로 절대 경로 시도 또는 refreshenv 필요하지만
-            # 서비스 환경에서는 refreshenv가 동작하지 않을 수 있음.
             # choco.exe는 보통 C:\ProgramData\chocolatey\bin\choco.exe에 있음
-            
             choco_path = r"C:\ProgramData\chocolatey\bin\choco.exe"
-            if os.path.exists(choco_path):
-                cmd = f'"{choco_path}" install {app_id} -y --force'
-            else:
-                cmd = choco_cmd # PATH에 있다고 가정
+            choco_exe = choco_path if os.path.exists(choco_path) else 'choco'
+            cmd = [choco_exe, 'install', app_id, '-y', '--force']
 
             result = subprocess.run(
                 cmd,
-                shell=True,
                 capture_output=True,
                 text=True,
                 timeout=600 # 설치는 시간이 걸릴 수 있음
@@ -214,20 +200,12 @@ class CommandExecutor:
             return "오류: Chocolatey를 설치할 수 없어 프로그램을 삭제할 수 없습니다."
 
         try:
-            # choco uninstall 명령 구성
-            # -y: 모든 프롬프트에 예라고 대답
-            # --remove-dependencies: 의존성 패키지도 삭제
-            choco_cmd = f'choco uninstall {app_id} -y --remove-dependencies'
-            
             choco_path = r"C:\ProgramData\chocolatey\bin\choco.exe"
-            if os.path.exists(choco_path):
-                cmd = f'"{choco_path}" uninstall {app_id} -y --remove-dependencies'
-            else:
-                cmd = choco_cmd # PATH에 있다고 가정
+            choco_exe = choco_path if os.path.exists(choco_path) else 'choco'
+            cmd = [choco_exe, 'uninstall', app_id, '-y', '--remove-dependencies']
 
             result = subprocess.run(
                 cmd,
-                shell=True,
                 capture_output=True,
                 text=True,
                 timeout=600 # 삭제는 시간이 걸릴 수 있음
@@ -343,16 +321,18 @@ class CommandExecutor:
                     CommandExecutor._install_language_pack(language)
 
                 # 2. 계정 생성
-                cmd = f'net user {username} {password} /add'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    ['net', 'user', username, password, '/add'],
+                    capture_output=True, text=True
+                )
 
                 if result.returncode == 0:
                     msg = f"사용자 계정 생성됨: {username}"
-                    
+
                     if full_name:
                         subprocess.run(
-                            f'wmic useraccount where name="{username}" set fullname="{full_name}"',
-                            shell=True, capture_output=True
+                            ['wmic', 'useraccount', f'where name="{username}"', 'set', f'fullname="{full_name}"'],
+                            capture_output=True
                         )
                     
                     # 3. 언어 설정 (RunOnce 레지스트리 활용)
@@ -416,8 +396,10 @@ class CommandExecutor:
                     return f"사용자 생성 실패: {result.stderr}"
 
             elif action == 'delete':
-                cmd = f'net user {username} /delete'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    ['net', 'user', username, '/delete'],
+                    capture_output=True, text=True
+                )
 
                 if result.returncode == 0:
                     return f"사용자 계정 삭제됨: {username}"
@@ -428,8 +410,10 @@ class CommandExecutor:
                 if not password:
                     return "오류: 새 비밀번호가 필요합니다"
 
-                cmd = f'net user {username} {password}'
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    ['net', 'user', username, password],
+                    capture_output=True, text=True
+                )
 
                 if result.returncode == 0:
                     return f"비밀번호 변경됨: {username}"
@@ -447,8 +431,7 @@ class CommandExecutor:
     def show_message(message: str, duration: int = 10) -> str:
         """사용자에게 메시지 표시"""
         try:
-            cmd = f'msg * "{message}"'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['msg', '*', message], capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:
                 return f"메시지 표시됨: {message}"
@@ -467,8 +450,10 @@ class CommandExecutor:
             if not process_name.lower().endswith('.exe'):
                 process_name += '.exe'
 
-            cmd = f'taskkill /F /IM "{process_name}"'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(
+                ['taskkill', '/F', '/IM', process_name],
+                capture_output=True, text=True, timeout=10
+            )
 
             if result.returncode == 0:
                 return f"프로세스 종료됨: {process_name}"

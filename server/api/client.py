@@ -5,20 +5,13 @@
 from flask import Blueprint, request, jsonify
 import json
 import time
-import os
 import logging
-from collections import defaultdict
 from models import PCModel, CommandModel
-from services.pc_service import PCService
 from utils import get_db
 
 logger = logging.getLogger('wcms.client_api')
 
 client_bp = Blueprint('client', __name__, url_prefix='/api/client')
-
-# Rate limiting: machine_id별 마지막 요청 시간 기록
-_last_command_poll = defaultdict(float)
-_POLL_MIN_INTERVAL = 2.0  # 최소 2초 간격
 
 
 @client_bp.route('/register', methods=['POST'])
@@ -190,152 +183,149 @@ def shutdown_signal():
         return jsonify({'status': 'error', 'message': 'machine_id is required'}), 400
 
     machine_id = data['machine_id']
-    
-    if PCService.set_offline_immediately(machine_id):
-        return jsonify({'status': 'success', 'message': 'Shutdown signal received'}), 200
-    else:
-        # PC를 찾지 못했거나 업데이트 실패해도 클라이언트 종료를 막으면 안 되므로 200 반환 가능성 고려
-        # 하지만 명확한 에러 전달을 위해 404/500 사용. 클라이언트는 어차피 종료됨.
-        return jsonify({'status': 'error', 'message': 'Failed to process shutdown signal'}), 500
+
+    pc = PCModel.get_by_machine_id(machine_id)
+    if not pc:
+        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
+
+    pc_id = pc['id']
+    db = get_db()
+    db.execute('UPDATE pc_info SET is_online=0, last_seen=CURRENT_TIMESTAMP WHERE id=?', (pc_id,))
+
+    # 열린 network_events 레코드가 없으면 새로 생성
+    existing = db.execute(
+        'SELECT id FROM network_events WHERE pc_id=? AND online_at IS NULL',
+        (pc_id,)
+    ).fetchone()
+    if not existing:
+        db.execute(
+            'INSERT INTO network_events (pc_id, offline_at, reason) VALUES (?, CURRENT_TIMESTAMP, ?)',
+            (pc_id, 'shutdown')
+        )
+    db.commit()
+
+    logger.info(f"[종료] PC {pc_id} ({machine_id}) 종료 신호 수신")
+    return jsonify({'status': 'success', 'message': 'Shutdown signal received'}), 200
 
 
-@client_bp.route('/commands', methods=['POST'])
+@client_bp.route('/commands', methods=['GET'])
 def poll_commands():
-    """명령 조회 (짧은 폴링 방식, 경량 하트비트 통합)
+    """명령 대기 (Long-polling, GET)
 
-    POST 방식으로 통일하여 경량 하트비트를 함께 전송
+    GET /api/client/commands?machine_id=X&timeout=30
+    - 서버가 timeout초 동안 연결 유지, 0.5초마다 명령 확인
+    - 연결 시작 시 last_seen 즉시 업데이트 (연결 자체가 생존 신호)
+    - 오프라인이었던 PC 재연결 시 is_online=1 복원 + network_events 기록
     """
-    data = request.json or {}
-    machine_id = data.get('machine_id')
-    pc_id = data.get('pc_id')
-    heartbeat = data.get('heartbeat')  # 선택적 경량 하트비트
+    machine_id = request.args.get('machine_id')
+    timeout = min(int(request.args.get('timeout', 30)), 60)
 
-    # 필수 파라미터 검증
-    if not machine_id and not pc_id:
+    if not machine_id:
         return jsonify({
             'status': 'error',
-            'error': {
-                'code': 'MISSING_IDENTIFIER',
-                'message': 'machine_id or pc_id required'
-            }
+            'error': {'code': 'MISSING_IDENTIFIER', 'message': 'machine_id required'}
         }), 400
 
-    # machine_id → pc_id 변환
-    if machine_id:
-        pc = PCModel.get_by_machine_id(machine_id)
-        if not pc:
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 'PC_NOT_FOUND',
-                    'message': f'PC not registered: {machine_id}'
-                }
-            }), 404
-        pc_id = pc['id']
-    elif not PCModel.get_by_id(pc_id):
+    pc = PCModel.get_by_machine_id(machine_id)
+    if not pc:
         return jsonify({
             'status': 'error',
-            'error': {
-                'code': 'PC_NOT_FOUND',
-                'message': f'PC not found: {pc_id}'
-            }
+            'error': {'code': 'PC_NOT_FOUND', 'message': f'PC not registered: {machine_id}'}
         }), 404
 
-    # Rate limiting: 2초 간격 강제
-    rate_key = machine_id or str(pc_id)
-    now = time.time()
-    last_poll = _last_command_poll.get(rate_key, 0)
+    pc_id = pc['id']
+    db = get_db()
 
-    if now - last_poll < _POLL_MIN_INTERVAL:
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'has_command': False,
-                'command': None,
-                'heartbeat_processed': False,
-                'ip_changed': False
-            }
-        }), 200
+    # 재연결 감지: 오프라인이었으면 온라인으로 복원 + network_events 닫기
+    was_offline = not pc['is_online']
+    if was_offline:
+        db.execute('UPDATE pc_info SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE id=?', (pc_id,))
+        open_event = db.execute(
+            'SELECT id, offline_at FROM network_events WHERE pc_id=? AND online_at IS NULL ORDER BY offline_at DESC LIMIT 1',
+            (pc_id,)
+        ).fetchone()
+        if open_event:
+            db.execute('''
+                UPDATE network_events
+                SET online_at=CURRENT_TIMESTAMP,
+                    duration_sec=CAST((julianday('now') - julianday(offline_at)) * 86400 AS INTEGER)
+                WHERE id=?
+            ''', (open_event['id'],))
+        db.commit()
+        logger.info(f"[재연결] PC {pc_id} ({machine_id}) 온라인 복원")
+    else:
+        # 연결 시작 시 last_seen 즉시 업데이트
+        db.execute('UPDATE pc_info SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE id=?', (pc_id,))
+        db.commit()
 
-    _last_command_poll[rate_key] = now
+    # Long-poll: timeout초 동안 명령 대기 (0.5초마다 확인, 최소 1회 실행)
+    deadline = time.time() + timeout
+    while True:
+        cmds = CommandModel.get_pending_for_pc(pc_id)
+        if cmds:
+            cmd = cmds[0]
+            logger.info(f"[명령조회] 명령 발견: PC {pc_id}, 명령 {cmd['id']} ({cmd['command_type']})")
+            CommandModel.start_execution(cmd['id'])
 
-    # 경량 하트비트 처리
-    ip_changed = False
-    if heartbeat:
-        ip_address = heartbeat.get('ip_address')
-        cpu_usage = heartbeat.get('cpu_usage')
-        ram_usage = heartbeat.get('ram_usage_percent')
+            command_data = cmd['command_data']
+            if isinstance(command_data, str):
+                try:
+                    command_data = json.loads(command_data)
+                except Exception:
+                    command_data = {}
 
-        db = get_db()
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'has_command': True,
+                    'command': {
+                        'id': cmd['id'],
+                        'type': cmd['command_type'],
+                        'parameters': command_data,
+                        'timeout': cmd.get('timeout_seconds', 300),
+                        'priority': cmd.get('priority', 5),
+                        'created_at': cmd.get('created_at')
+                    }
+                }
+            }), 200
+        if time.time() >= deadline:
+            break
+        time.sleep(0.5)
 
-        # IP 변경 감지 및 업데이트
-        if ip_address:
-            current_ip = db.execute(
-                'SELECT ip_address FROM pc_info WHERE id=?', (pc_id,)
-            ).fetchone()
+    # timeout 만료 - 명령 없음, 클라이언트 즉시 재연결
+    return jsonify({'status': 'success', 'data': {'has_command': False, 'command': None}}), 200
 
-            if current_ip and current_ip['ip_address'] != ip_address:
-                ip_changed = True
-                logger.info(f"[명령조회] IP 변경: PC {pc_id}, {current_ip['ip_address']} → {ip_address}")
 
-            db.execute(
-                'UPDATE pc_info SET ip_address=?, last_seen=CURRENT_TIMESTAMP WHERE id=?',
-                (ip_address, pc_id)
-            )
-            db.commit()
+@client_bp.route('/offline', methods=['POST'])
+def report_offline():
+    """클라이언트 네트워크 오프라인 신호 (즉시 오프라인 처리)"""
+    data = request.json or {}
+    machine_id = data.get('machine_id')
+    if not machine_id:
+        return jsonify({'status': 'error', 'message': 'machine_id required'}), 400
 
-        # CPU/RAM 업데이트 (pc_dynamic_info) - 부분 업데이트 사용
-        if cpu_usage is not None or ram_usage is not None:
-            PCModel.update_light_heartbeat(
-                pc_id=pc_id,
-                cpu_usage=cpu_usage or 0,
-                ram_usage_percent=ram_usage or 0
-            )
+    pc = PCModel.get_by_machine_id(machine_id)
+    if not pc:
+        return jsonify({'status': 'error', 'message': 'PC not found'}), 404
 
-    # 대기 중인 명령 조회
-    commands = CommandModel.get_pending_for_pc(pc_id)
+    pc_id = pc['id']
+    db = get_db()
+    db.execute('UPDATE pc_info SET is_online=0 WHERE id=?', (pc_id,))
 
-    if commands:
-        cmd = commands[0]
-        logger.info(f"[명령조회] 명령 발견: PC {pc_id}, 명령 {cmd['id']} ({cmd['command_type']})")
+    # 열린 이벤트가 없으면 새로 생성
+    existing = db.execute(
+        'SELECT id FROM network_events WHERE pc_id=? AND online_at IS NULL',
+        (pc_id,)
+    ).fetchone()
+    if not existing:
+        db.execute(
+            'INSERT INTO network_events (pc_id, offline_at, reason) VALUES (?, CURRENT_TIMESTAMP, ?)',
+            (pc_id, 'network_error')
+        )
+    db.commit()
 
-        # 명령을 executing 상태로 변경
-        CommandModel.start_execution(cmd['id'])
-
-        command_data = cmd['command_data']
-        if isinstance(command_data, str):
-            try:
-                command_data = json.loads(command_data)
-            except:
-                command_data = {}
-
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'has_command': True,
-                'command': {
-                    'id': cmd['id'],
-                    'type': cmd['command_type'],
-                    'parameters': command_data,
-                    'timeout': cmd.get('timeout_seconds', 300),
-                    'priority': cmd.get('priority', 5),
-                    'created_at': cmd.get('created_at')
-                },
-                'heartbeat_processed': heartbeat is not None,
-                'ip_changed': ip_changed
-            }
-        }), 200
-
-    # 명령 없음
-    return jsonify({
-        'status': 'success',
-        'data': {
-            'has_command': False,
-            'command': None,
-            'heartbeat_processed': heartbeat is not None,
-            'ip_changed': ip_changed
-        }
-    }), 200
+    logger.info(f"[오프라인] PC {pc_id} ({machine_id}) 네트워크 오프라인 신호")
+    return jsonify({'status': 'success'}), 200
 
 
 @client_bp.route('/commands/<int:command_id>/result', methods=['POST'])

@@ -1,53 +1,49 @@
 {% extends "base.html" %}
-
 {% block title %}클라이언트 버전 관리{% endblock %}
-
 {% block content %}
-<div style="max-width: 1400px; margin: 0 auto;">
+<div class="page-container-lg">
     <h2 style="margin-bottom: 1.5em;">📦 클라이언트 버전 관리</h2>
 
     <!-- 버전 등록 폼 -->
-    <div style="background: #2a2a2a; border-radius: 12px; padding: 1.5em; margin-bottom: 1.5em;">
+    <div class="section-card">
         <h3 style="margin-top: 0; margin-bottom: 1em; font-size: 1.1em; color: #ddd;">새 버전 등록</h3>
         <form id="versionForm">
-            <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 1em; margin-bottom: 1em;">
+            <div class="form-grid-3" style="margin-bottom: 1em;">
                 <div>
-                    <label style="display: block; margin-bottom: 0.5em; font-weight: 500; color: #aaa;">버전 *</label>
-                    <input type="text" id="version" placeholder="0.7.0" required style="width: 100%; padding: 0.5em; border: 1px solid #444; border-radius: 6px; background: #1a1a1a; color: #ddd;">
+                    <label class="form-label fw-600">버전 *</label>
+                    <input type="text" id="version" placeholder="0.7.0" required class="form-input" style="padding: 0.5em;">
                 </div>
                 <div>
-                    <label style="display: block; margin-bottom: 0.5em; font-weight: 500; color: #aaa;">다운로드 URL *</label>
-                    <input type="url" id="downloadUrl" placeholder="https://github.com/..." required style="width: 100%; padding: 0.5em; border: 1px solid #444; border-radius: 6px; background: #1a1a1a; color: #ddd;">
+                    <label class="form-label fw-600">다운로드 URL *</label>
+                    <input type="url" id="downloadUrl" placeholder="https://github.com/..." required class="form-input" style="padding: 0.5em;">
                 </div>
-                <div style="display: flex; align-items: flex-end;">
-                    <button type="submit" style="width: 100%; padding: 0.5em 1em; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">등록</button>
+                <div class="flex-end">
+                    <button type="submit" class="btn btn-info" style="width: 100%; padding: 0.5em 1em;">등록</button>
                 </div>
             </div>
             <div>
-                <label style="display: block; margin-bottom: 0.5em; font-weight: 500; color: #aaa;">변경사항</label>
-                <textarea id="changelog" rows="2" placeholder="자동 빌드 - v0.7.0 릴리스" style="width: 100%; padding: 0.5em; border: 1px solid #444; border-radius: 6px; resize: vertical; background: #1a1a1a; color: #ddd;"></textarea>
+                <label class="form-label fw-600">변경사항</label>
+                <textarea id="changelog" rows="2" placeholder="자동 빌드 - v0.7.0 릴리스" class="form-input" style="resize: vertical; padding: 0.5em;"></textarea>
             </div>
         </form>
     </div>
 
     <!-- 버전 목록 -->
-    <div style="background: #2a2a2a; border-radius: 12px; padding: 1.5em;">
+    <div class="section-card">
         <h3 style="margin-top: 0; margin-bottom: 1em; font-size: 1.1em; color: #ddd;">등록된 버전 목록</h3>
         <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
+            <table class="data-table">
                 <thead>
-                    <tr style="border-bottom: 2px solid #444;">
-                        <th style="padding: 0.75em; text-align: left; font-weight: 600; color: #aaa;">버전</th>
-                        <th style="padding: 0.75em; text-align: left; font-weight: 600; color: #aaa;">다운로드 URL</th>
-                        <th style="padding: 0.75em; text-align: left; font-weight: 600; color: #aaa;">변경사항</th>
-                        <th style="padding: 0.75em; text-align: left; font-weight: 600; color: #aaa;">등록일시</th>
-                        <th style="padding: 0.75em; text-align: left; font-weight: 600; color: #aaa;">작업</th>
+                    <tr>
+                        <th>버전</th>
+                        <th>다운로드 URL</th>
+                        <th>변경사항</th>
+                        <th>등록일시</th>
+                        <th>작업</th>
                     </tr>
                 </thead>
                 <tbody id="versionList">
-                    <tr>
-                        <td colspan="5" style="padding: 2em; text-align: center; color: #888;">로딩 중...</td>
-                    </tr>
+                    <tr><td colspan="5" class="text-center-msg" style="color: #888;">로딩 중...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -55,7 +51,6 @@
 </div>
 
 <script>
-// 버전 목록 로드
 function loadVersions() {
     fetch('/api/client/versions')
         .then(response => response.json())
@@ -63,89 +58,58 @@ function loadVersions() {
             const tbody = document.getElementById('versionList');
             if (data.status === 'success' && data.versions.length > 0) {
                 tbody.innerHTML = data.versions.map((v, index) => `
-                    <tr style="border-bottom: 1px solid #444;">
-                        <td style="padding: 0.75em; color: #ddd;">
+                    <tr>
+                        <td>
                             <strong>${v.version}</strong>
-                            ${index === 0 ? '<span style="display: inline-block; margin-left: 0.5em; padding: 0.25em 0.5em; background: #10b981; color: white; border-radius: 4px; font-size: 0.75em; font-weight: 600;">최신</span>' : ''}
+                            ${index === 0 ? '<span class="badge-latest">최신</span>' : ''}
                         </td>
-                        <td style="padding: 0.75em;"><a href="${v.download_url}" target="_blank" style="color: #60a5fa; text-decoration: none; max-width: 300px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${v.download_url}</a></td>
-                        <td style="padding: 0.75em; color: #aaa;">${v.changelog || '-'}</td>
-                        <td style="padding: 0.75em; color: #aaa;">${new Date(v.released_at).toLocaleString('ko-KR')}</td>
-                        <td style="padding: 0.75em;">
-                            <button onclick="deleteVersion(${v.id}, '${v.version}')" style="padding: 0.25em 0.75em; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875em;">삭제</button>
+                        <td><a href="${v.download_url}" target="_blank" style="color: #60a5fa; text-decoration: none; max-width: 300px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${v.download_url}</a></td>
+                        <td class="text-muted-sm">${v.changelog || '-'}</td>
+                        <td class="text-muted-sm">${new Date(v.released_at).toLocaleString('ko-KR')}</td>
+                        <td>
+                            <button onclick="deleteVersion(${v.id}, '${v.version}')" class="btn btn-danger" style="padding: 0.25em 0.75em; font-size: 0.875em;">삭제</button>
                         </td>
                     </tr>
                 `).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" style="padding: 2em; text-align: center; color: #888;">등록된 버전이 없습니다</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center-msg" style="color: #888;">등록된 버전이 없습니다</td></tr>';
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            document.getElementById('versionList').innerHTML = '<tr><td colspan="5" style="padding: 2em; text-align: center; color: #ef4444;">로드 실패</td></tr>';
+            document.getElementById('versionList').innerHTML = '<tr><td colspan="5" class="text-center-msg text-error">로드 실패</td></tr>';
         });
 }
 
-// 버전 등록
 document.getElementById('versionForm').addEventListener('submit', function(e) {
     e.preventDefault();
-
     const version = document.getElementById('version').value.trim();
     const downloadUrl = document.getElementById('downloadUrl').value.trim();
     const changelog = document.getElementById('changelog').value.trim();
-
     fetch('/api/client/version', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            version: version,
-            download_url: downloadUrl,
-            changelog: changelog
-        })
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ version, download_url: downloadUrl, changelog })
     })
     .then(response => response.json())
     .then(data => {
-        if (data.status === 'success') {
-            alert('버전이 등록되었습니다.');
-            document.getElementById('versionForm').reset();
-            loadVersions();
-        } else {
-            alert('등록 실패: ' + data.message);
-        }
+        if (data.status === 'success') { alert('버전이 등록되었습니다.'); document.getElementById('versionForm').reset(); loadVersions(); }
+        else { alert('등록 실패: ' + data.message); }
     })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('등록 중 오류가 발생했습니다.');
-    });
+    .catch(error => { console.error('Error:', error); alert('등록 중 오류가 발생했습니다.'); });
 });
 
-// 버전 삭제
 function deleteVersion(id, version) {
-    if (!confirm(`버전 ${version}을(를) 삭제하시겠습니까?`)) {
-        return;
-    }
-
-    fetch(`/api/client/version/${id}`, {
-        method: 'DELETE'
-    })
+    if (!confirm(`버전 ${version}을(를) 삭제하시겠습니까?`)) return;
+    fetch(`/api/client/version/${id}`, { method: 'DELETE' })
     .then(response => response.json())
     .then(data => {
-        if (data.status === 'success') {
-            alert('버전이 삭제되었습니다.');
-            loadVersions();
-        } else {
-            alert('삭제 실패: ' + data.message);
-        }
+        if (data.status === 'success') { alert('버전이 삭제되었습니다.'); loadVersions(); }
+        else { alert('삭제 실패: ' + data.message); }
     })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('삭제 중 오류가 발생했습니다.');
-    });
+    .catch(error => { console.error('Error:', error); alert('삭제 중 오류가 발생했습니다.'); });
 }
 
-// 페이지 로드 시 버전 목록 로드
 loadVersions();
 </script>
 {% endblock %}

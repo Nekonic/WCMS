@@ -109,7 +109,7 @@
                             </h6>
 
                             <!-- 디스크 정보 표시 -->
-                            <div style="text-align: center; margin-bottom: 15px;">
+                            <div class="text-center mb-3">
                                 {% if info.used_gb is defined and info.free_gb is defined and info.total_gb is defined %}
                                     {% set total_gb = info.total_gb %}
                                     {% set used_gb = info.used_gb %}
@@ -128,32 +128,32 @@
                                 {% endif %}
 
                                 <!-- 도넛 차트 -->
-                                <div style="max-width: 200px; margin: 0 auto 20px;">
+                                <div class="disk-chart-wrapper">
                                     <canvas id="diskChart_{{ dev|replace('\\', '_')|replace(':', '') }}"></canvas>
                                 </div>
 
                                 <p class="mb-2">
-                                    <strong style="font-size: 1.5em; color: #dc3545;">{{ usage_percent }}%</strong>
+                                    <strong class="usage-percent-text">{{ usage_percent }}%</strong>
                                     <small class="text-muted">사용 중</small>
                                 </p>
 
-                                <!-- 진행 바 -->
-                                <div class="progress" style="height: 25px;">
+                                <!-- 진행 바 (Z-01: data-width + JS로 인라인 style 제거) -->
+                                <div class="progress progress-lg">
                                     {% if usage_percent > 90 %}
                                         <div class="progress-bar bg-danger" role="progressbar"
-                                             style="width: {{ usage_percent }}%;"
+                                             data-width="{{ usage_percent }}"
                                              aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100">
                                             {{ used_gb|round(1) }} GB
                                         </div>
                                     {% elif usage_percent > 75 %}
                                         <div class="progress-bar bg-warning" role="progressbar"
-                                             style="width: {{ usage_percent }}%;"
+                                             data-width="{{ usage_percent }}"
                                              aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100">
                                             {{ used_gb|round(1) }} GB
                                         </div>
                                     {% else %}
                                         <div class="progress-bar bg-success" role="progressbar"
-                                             style="width: {{ usage_percent }}%;"
+                                             data-width="{{ usage_percent }}"
                                              aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100">
                                             {{ used_gb|round(1) }} GB
                                         </div>
@@ -277,6 +277,13 @@
 </div>
 
 <script>
+// Z-01: 진행 바 너비를 data-width 속성으로부터 설정 (CSP unsafe-inline 미사용)
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.progress-bar[data-width]').forEach(function(el) {
+        el.style.width = el.dataset.width + '%';
+    });
+});
+
 function sendCommand(type) {
     if (!confirm(`정말로 ${type === 'shutdown' ? '종료' : '재시작'}하시겠습니까?`)) return;
 

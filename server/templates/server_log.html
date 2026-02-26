@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}서버 로그 - WCMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>서버 로그</h1>
+</div>
+
+<div class="section">
+    <h2>네트워크 이벤트 (최근 100건)</h2>
+    {% if events %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>PC</th>
+                <th>오프라인 시각</th>
+                <th>온라인 복원</th>
+                <th>단절 시간</th>
+                <th>원인</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in events %}
+            <tr>
+                <td>{{ e.hostname }}</td>
+                <td>{{ e.offline_at }}</td>
+                <td>{{ e.online_at or '-' }}</td>
+                <td>
+                    {% if e.duration_sec is not none %}
+                        {% if e.duration_sec >= 3600 %}
+                            {{ (e.duration_sec // 3600) }}시간 {{ ((e.duration_sec % 3600) // 60) }}분
+                        {% elif e.duration_sec >= 60 %}
+                            {{ (e.duration_sec // 60) }}분 {{ (e.duration_sec % 60) }}초
+                        {% else %}
+                            {{ e.duration_sec }}초
+                        {% endif %}
+                    {% else %}
+                        진행 중
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge badge-{{ 'danger' if e.reason == 'timeout' else ('warning' if e.reason == 'network_error' else 'secondary') }}">
+                        {{ {'shutdown': '정상 종료', 'network_error': '네트워크 오류', 'timeout': '타임아웃'}.get(e.reason, e.reason) }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-message">기록된 네트워크 이벤트가 없습니다.</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>서버 로그 (최근 200줄)</h2>
+    {% if log_lines %}
+    <pre class="log-output">{% for line in log_lines %}{{ line }}{% endfor %}</pre>
+    {% else %}
+    <p class="empty-message">로그 파일이 없습니다. (서버 재시작 후 생성됩니다)</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.page-header { margin-bottom: 1.5rem; }
+.page-header h1 { font-size: 1.4rem; font-weight: 600; }
+.section { margin-bottom: 2rem; }
+.section h2 { font-size: 1rem; font-weight: 600; margin-bottom: 0.8rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.data-table th { text-align: left; padding: 0.5rem 0.75rem; color: #888; border-bottom: 1px solid #333; font-weight: 500; }
+.data-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #2a2a2a; }
+.data-table tbody tr:hover { background: #1e1e1e; }
+.badge { display: inline-block; padding: 0.2em 0.55em; border-radius: 3px; font-size: 0.78rem; font-weight: 500; }
+.badge-danger { background: rgba(220,53,69,0.2); color: #f87171; }
+.badge-warning { background: rgba(255,193,7,0.15); color: #fbbf24; }
+.badge-secondary { background: rgba(108,117,125,0.2); color: #9ca3af; }
+.log-output { background: #111; border: 1px solid #333; border-radius: 4px; padding: 1rem; font-size: 0.78rem; line-height: 1.6; overflow-x: auto; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: #ccc; }
+.empty-message { color: #666; font-size: 0.9rem; }
+</style>
+{% endblock %}

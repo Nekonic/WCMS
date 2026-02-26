@@ -36,7 +36,7 @@ class PCModel:
         """Machine ID로 PC 정보 조회"""
         db = get_db()
         row = db.execute(
-            'SELECT id FROM pc_info WHERE machine_id=?',
+            'SELECT id, is_online FROM pc_info WHERE machine_id=?',
             (machine_id,)
         ).fetchone()
         return dict(row) if row else None

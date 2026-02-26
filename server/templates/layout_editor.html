@@ -3,110 +3,29 @@
 {% block content %}
 <h2>{{ room }} 좌석 배치 에디터</h2>
 
-<div style="margin-bottom: 1em;">
-    <button onclick="saveLayout()" style="background: #10b981; color: white; padding: 0.7em 1.5em; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">💾 저장</button>
-    <button onclick="goBack()" style="background: #666; color: white; padding: 0.7em 1.5em; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 0.5em;">⬅️ 돌아가기</button>
+<div class="editor-toolbar">
+    <button onclick="saveLayout()" class="btn btn-success">💾 저장</button>
+    <button onclick="goBack()" class="btn btn-secondary" style="margin-left: 0.5em;">⬅️ 돌아가기</button>
 
-    <span style="margin-left: 2em; color: #ddd;">행:</span>
-    <input type="number" id="rows" value="4" min="1" max="20" onchange="updateGrid()" style="width: 60px; padding: 0.5em; margin-left: 0.5em; background: #2a2a2a; color: white; border: 1px solid #444; border-radius: 4px;">
+    <span class="toolbar-label" style="margin-left: 2em;">행:</span>
+    <input type="number" id="rows" value="4" min="1" max="20" onchange="updateGrid()" class="grid-number-input">
 
-    <span style="margin-left: 1em; color: #ddd;">열:</span>
-    <input type="number" id="cols" value="10" min="1" max="20" onchange="updateGrid()" style="width: 60px; padding: 0.5em; margin-left: 0.5em; background: #2a2a2a; color: white; border: 1px solid #444; border-radius: 4px;">
+    <span class="toolbar-label" style="margin-left: 1em;">열:</span>
+    <input type="number" id="cols" value="10" min="1" max="20" onchange="updateGrid()" class="grid-number-input">
 </div>
 
 <!-- 좌석 배치 그리드 -->
-<div style="background: #2a2a2a; padding: 2em; border-radius: 10px; width: fit-content; margin-bottom: 2em;">
-    <h3 style="margin-top: 0;">좌석 배치</h3>
-    <div id="layoutGrid" style="
-        display: grid;
-        grid-template-columns: repeat(10, 1fr);
-        gap: 0.5em;
-        width: fit-content;
-    ">
+<div class="editor-panel">
+    <h3>좌석 배치</h3>
+    <div id="layoutGrid" style="display: grid; grid-template-columns: repeat(10, 1fr); gap: 0.5em; width: fit-content;">
     </div>
 </div>
 
 <!-- 미할당 PC 목록 -->
-<div style="background: #2a2a2a; padding: 2em; border-radius: 10px;">
-    <h3 style="margin-top: 0;">할당되지 않은 PC (아래에서 드래그해서 위에 놓으세요)</h3>
-    <div id="unassignedPCs" style="
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1em;
-        min-height: 60px;
-        background: #1a1a1a;
-        padding: 1em;
-        border-radius: 8px;
-        border: 2px dashed #444;
-    ">
-    </div>
+<div class="unassigned-panel">
+    <h3>할당되지 않은 PC (아래에서 드래그해서 위에 놓으세요)</h3>
+    <div id="unassignedPCs"></div>
 </div>
-
-<style>
-.seat-cell {
-    width: 80px;
-    height: 80px;
-    background: #1a1a1a;
-    border: 2px solid #444;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s;
-    padding: 0.5em;
-    text-align: center;
-    font-size: 0.8em;
-    box-sizing: border-box;
-}
-
-.seat-cell.occupied {
-    background: #10b981;
-    border: 2px solid #10b981;
-}
-
-.seat-cell.empty {
-    background: #2a2a2a;
-    border: 2px dashed #666;
-}
-
-.seat-cell:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.5);
-}
-
-.seat-cell.drag-over {
-    background: #4a9eff !important;
-    border: 2px solid #4a9eff !important;
-    box-shadow: inset 0 0 10px rgba(74, 158, 255, 0.5);
-}
-
-.pc-badge {
-    background: #4a9eff;
-    color: white;
-    padding: 0.5em 1em;
-    border-radius: 6px;
-    cursor: grab;
-    user-select: none;
-    font-weight: 600;
-    transition: all 0.3s;
-}
-
-.pc-badge:active {
-    cursor: grabbing;
-}
-
-.pc-badge:hover {
-    background: #3a8eef;
-    transform: scale(1.05);
-}
-
-#unassignedPCs.drag-over {
-    background: rgba(74, 158, 255, 0.2) !important;
-    border: 2px dashed #4a9eff !important;
-}
-</style>
 
 <script>
 const room = "{{ room }}";
@@ -145,9 +64,7 @@ function renderGrid() {
     grid.innerHTML = '';
 
     const pcMap = {};
-    allPCs.forEach(pc => {
-        pcMap[pc.id] = pc;
-    });
+    allPCs.forEach(pc => { pcMap[pc.id] = pc; });
 
     for (let row = 0; row < layoutConfig.rows; row++) {
         for (let col = 0; col < layoutConfig.cols; col++) {
@@ -172,26 +89,15 @@ function renderGrid() {
                 div.style.borderColor = color;
 
                 div.innerHTML = `
-                    <div style="font-weight: bold; color: white; font-size: 0.9em;">
-                        ${pc.seat_number || pc.id}
-                    </div>
-                    <div style="font-size: 0.75em; color: #ddd;">
-                        ${pc.hostname || 'PC-' + pc.id}
-                    </div>
-                    <div style="font-size: 0.65em; color: #ccc; cursor: grab; margin-top: 0.3em;">
-                        📌 드래그
-                    </div>
+                    <div class="seat-pc-name">${pc.seat_number || pc.id}</div>
+                    <div class="seat-pc-host">${pc.hostname || 'PC-' + pc.id}</div>
+                    <div class="seat-pc-drag">📌 드래그</div>
                 `;
 
                 div.draggable = true;
                 div.addEventListener('dragstart', (e) => handleDragStart(e, pc.id));
             } else {
-                div.innerHTML = `
-                    <div style="color: #666; font-size: 0.8em; line-height: 1.4;">
-                        빈 칸<br>
-                        <small>(PC를 여기에 드롭)</small>
-                    </div>
-                `;
+                div.innerHTML = `<div class="seat-empty-text">빈 칸<br><small>(PC를 여기에 드롭)</small></div>`;
             }
 
             grid.appendChild(div);
@@ -205,7 +111,7 @@ function renderUnassigned() {
     const unassigned = allPCs.filter(pc => !assignedPCIds.includes(pc.id));
 
     container.innerHTML = unassigned.length === 0
-        ? '<div style="color: #888;">모든 PC가 할당되었습니다! ✓</div>'
+        ? '<div class="text-none">모든 PC가 할당되었습니다! ✓</div>'
         : unassigned.map(pc => `
             <div class="pc-badge" draggable="true" data-pc-id="${pc.id}">
                 [${pc.seat_number || pc.id}] ${pc.hostname || 'PC-' + pc.id}
@@ -224,50 +130,28 @@ function renderUnassigned() {
         e.dataTransfer.dropEffect = 'move';
         container.classList.add('drag-over');
     });
-
-    container.addEventListener('dragleave', () => {
-        container.classList.remove('drag-over');
-    });
-
+    container.addEventListener('dragleave', () => { container.classList.remove('drag-over'); });
     container.addEventListener('drop', (e) => {
         e.preventDefault();
         container.classList.remove('drag-over');
-        if (draggedPC) {
-            removeSeatByPC(draggedPC);
-            draggedPC = null;
-        }
+        if (draggedPC) { removeSeatByPC(draggedPC); draggedPC = null; }
     });
 }
 
-function handleDragStart(e, pcId) {
-    draggedPC = pcId;
-    e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    e.target.classList.add('drag-over');
-}
-
-function handleDragLeave(e) {
-    e.target.classList.remove('drag-over');
-}
-
+function handleDragStart(e, pcId) { draggedPC = pcId; e.dataTransfer.effectAllowed = 'move'; }
+function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.target.classList.add('drag-over'); }
+function handleDragLeave(e) { e.target.classList.remove('drag-over'); }
 function handleDrop(e, row, col) {
     e.preventDefault();
     e.target.classList.remove('drag-over');
-
     if (draggedPC) {
         layoutData = layoutData.filter(s => s.pc_id !== draggedPC);
         layoutData.push({ room_name: room, row, col, pc_id: draggedPC });
-
         renderGrid();
         renderUnassigned();
         draggedPC = null;
     }
 }
-
 function removeSeatByPC(pcId) {
     layoutData = layoutData.filter(s => s.pc_id !== pcId);
     renderGrid();
@@ -278,30 +162,17 @@ function saveLayout() {
     fetch(`/api/layout/map/${room}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            rows: layoutConfig.rows,
-            cols: layoutConfig.cols,
-            seats: layoutData.filter(s => s.pc_id)
-        })
+        body: JSON.stringify({ rows: layoutConfig.rows, cols: layoutConfig.cols, seats: layoutData.filter(s => s.pc_id) })
     })
     .then(res => res.json())
     .then(data => {
-        if (data.status === 'success') {
-            alert('배치 저장 완료!');
-            window.location.href = `/?room=${room}`;
-        } else {
-            alert('오류: ' + (data.message || '저장 실패'));
-        }
+        if (data.status === 'success') { alert('배치 저장 완료!'); window.location.href = `/?room=${room}`; }
+        else { alert('오류: ' + (data.message || '저장 실패')); }
     })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('저장 중 오류가 발생했습니다.');
-    });
+    .catch(error => { console.error('Error:', error); alert('저장 중 오류가 발생했습니다.'); });
 }
 
-function goBack() {
-    window.location.href = `/?room=${room}`;
-}
+function goBack() { window.location.href = `/?room=${room}`; }
 
 initLayout();
 </script>

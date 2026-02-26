@@ -7,6 +7,42 @@
 
 ---
 
+## [0.9.2] - 2026-02-27
+
+> **상태**: Released
+> **테마**: 클라이언트 통신 개선, 코드 정리, 보안 강화
+
+### Added - 새로운 기능
+- **Long-polling 복원** (`GET /api/client/commands?timeout=30`)
+  - 2초 short-polling(1,800 req/시간) → long-polling(120 req/시간), 90% 트래픽 감소
+  - 서버가 30초 동안 연결 유지, 0.5초마다 명령 확인 → 즉시 반환
+  - 연결 자체를 `last_seen` 업데이트 신호로 활용
+- **네트워크 단절 감지** (`POST /api/client/offline`, `network_events` 테이블)
+  - 클라이언트 연결 실패 시 offline 신호 전송 후 30초마다 재연결 시도
+  - 단절 이력 기록: `offline_at`, `online_at`, `duration_sec`, `reason`
+  - 오프라인 판정 threshold: 2분 → 40초
+- **서버 로그 페이지** (`GET /admin/server-log`)
+  - 서버 로그 tail (최근 200줄) + 네트워크 단절 이력 표시
+
+### Changed - 변경
+- **DB 스키마 v3.0** (`server/migrations/schema.sql`)
+  - 미사용 테이블/뷰 제거: `admin_logs`, 5개 VIEW
+  - 미사용 필드 제거: `retry_count`, `max_retries`, `archive_completed_commands` trigger
+  - `idx_commands_pending` partial index 수정 (`WHERE status = 'pending'`)
+- **CommandModel 정리**: `increment_retry()` 제거, `create()`에서 archive 호환 코드 제거
+- **인라인 CSS 외부화**: `static/css/components.css` 생성
+  - 10개 템플릿에서 `<style>` 블록 및 인라인 `style=""` 전부 제거
+  - (`about`, `system_status`, `layout_editor`, `room_manager`, `client_versions`, `registration_tokens`, `pc_detail`, `process_history`, `login`, `base`)
+
+### Security - 보안
+- **Z-01**: CSP `style-src` 에서 `unsafe-inline` 제거 (progress bar → `data-width` + JS)
+- **Z-02**: CORS 허용 오리진 환경변수화 (`WCMS_ALLOWED_ORIGINS`, 기본 `*`)
+- **Z-03**: 로그인 폼 CSRF 보호 (`Flask-WTF CSRFProtect`, API Blueprint 제외)
+- **C-01/C-02**: `client/executor.py` `subprocess(shell=True)` → 리스트 방식
+  - 적용 대상: `shutdown`, `reboot`, `show_message`, `kill_process`, `manage_account`(net user), `install`/`uninstall`(choco)
+
+---
+
 ## [0.9.1] - 2026-02-26
 
 > **상태**: Released

@@ -105,13 +105,14 @@ MACHINE_ID = next(
 )
 
 
-# ==================== 주기 설정 (v0.8.0 네트워크 최적화) ====================
+# ==================== 주기 설정 ====================
 
 # 하트비트 전송 주기 (초) - 전체 하트비트
 HEARTBEAT_INTERVAL = int(os.getenv('WCMS_HEARTBEAT_INTERVAL', '300'))  # 5분
 
-# 명령 폴링 주기 (초) - 경량 하트비트 통합
-COMMAND_POLL_INTERVAL = int(os.getenv('WCMS_COMMAND_POLL_INTERVAL', '2'))  # 2초 (네트워크 최적화)
+# Long-poll 서버 대기 시간 (초) - 서버가 이 시간 동안 연결 유지
+# HTTP 타임아웃은 LONG_POLL_TIMEOUT + 5 로 설정
+LONG_POLL_TIMEOUT = int(os.getenv('WCMS_LONG_POLL_TIMEOUT', '30'))  # 30초
 
 # 전원 명령 유예 시간 (초) - 부팅 직후 전원 명령 방지
 POWER_COMMAND_GRACE_PERIOD = int(os.getenv('WCMS_POWER_GRACE_PERIOD', '10'))  # 10초
@@ -191,8 +192,8 @@ def validate_config():
     if HEARTBEAT_INTERVAL < 10:
         errors.append(f"HEARTBEAT_INTERVAL이 너무 짧습니다: {HEARTBEAT_INTERVAL}초 (최소 10초)")
 
-    if COMMAND_POLL_INTERVAL < 1:
-        errors.append(f"COMMAND_POLL_INTERVAL이 너무 짧습니다: {COMMAND_POLL_INTERVAL}초 (최소 1초)")
+    if LONG_POLL_TIMEOUT < 5:
+        errors.append(f"LONG_POLL_TIMEOUT이 너무 짧습니다: {LONG_POLL_TIMEOUT}초 (최소 5초)")
 
     if errors:
         raise ValueError(f"설정 검증 실패:\n" + "\n".join(f"  - {e}" for e in errors))
@@ -207,7 +208,7 @@ def print_config():
     print(f"서버 URL:         {SERVER_URL}")
     print(f"Machine ID:       {MACHINE_ID}")
     print(f"하트비트 주기:    {HEARTBEAT_INTERVAL}초")
-    print(f"명령 폴링 주기:   {COMMAND_POLL_INTERVAL}초")
+    print(f"Long-poll 대기:   {LONG_POLL_TIMEOUT}초")
     print(f"로그 디렉토리:    {LOG_DIR}")
     print(f"로그 레벨:        {LOG_LEVEL}")
     print("=" * 60)

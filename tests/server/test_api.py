@@ -61,8 +61,8 @@ class TestClientAPI:
         })
         pc_id = reg_response.get_json()['pc_id']
 
-        response = client.post('/api/client/commands', json={
-            'pc_id': pc_id
+        response = client.get('/api/client/commands', query_string={
+            'machine_id': 'TEST-CMD-GET-001', 'timeout': 0
         })
         assert response.status_code == 200
         data = response.get_json()

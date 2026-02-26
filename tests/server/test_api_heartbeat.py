@@ -1,96 +1,130 @@
-﻿"""
-명령 조회 + 하트비트 통합 API 테스트
+"""
+Long-poll 명령 조회 API 및 네트워크 이벤트 테스트
 """
 import pytest
-import time
 
 
-class TestCommandHeartbeatIntegration:
-    """명령 조회 + 하트비트 통합 테스트"""
+class TestLongPollCommands:
+    """Long-poll 명령 조회 테스트"""
 
-    def test_command_get_with_heartbeat(self, client, registered_pc):
-        """POST 방식 명령 조회 + 경량 하트비트"""
+    def test_longpoll_no_command(self, client, registered_pc):
+        """명령 없을 때 즉시 반환 (timeout=0)"""
         pc_id, machine_id = registered_pc
 
-        response = client.post('/api/client/commands', json={
-            'machine_id': machine_id,
-            'heartbeat': {
-                'cpu_usage': 50.0,
-                'ram_usage_percent': 60.0,
-                'ip_address': '192.168.1.100'
-            }
-        })
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data['status'] == 'success'
-        assert data['data']['heartbeat_processed'] is True
-        assert 'ip_changed' in data['data']
-
-    def test_command_get_without_heartbeat(self, client, registered_pc):
-        """명령 조회 (하트비트 없음)"""
-        pc_id, machine_id = registered_pc
-
-        response = client.post('/api/client/commands', json={
-            'machine_id': machine_id
+        response = client.get('/api/client/commands', query_string={
+            'machine_id': machine_id, 'timeout': 0
         })
 
         assert response.status_code == 200
         data = response.get_json()
         assert data['status'] == 'success'
         assert data['data']['has_command'] is False
-        assert data['data']['heartbeat_processed'] is False
+        assert data['data']['command'] is None
 
-    def test_heartbeat_ip_changed_detection(self, client, test_pin):
-        """IP 변경 감지"""
-        # PC 등록 시 IP 설정
-        reg_response = client.post('/api/client/register', json={
-            'machine_id': 'IP-CHANGE-TEST',
-            'pin': test_pin,
-            'hostname': 'test-ip',
-            'mac_address': 'AA:BB:CC:DD:EE:99',
-            'ip_address': '192.168.1.100'  # 초기 IP
-        })
-        machine_id = 'IP-CHANGE-TEST'
-
-        # 첫 번째 요청 (동일 IP: 192.168.1.100)
-        response1 = client.post('/api/client/commands', json={
-            'machine_id': machine_id,
-            'heartbeat': {
-                'cpu_usage': 50.0,
-                'ram_usage_percent': 60.0,
-                'ip_address': '192.168.1.100'
-            }
-        })
-
-        data1 = response1.get_json()
-        assert data1['status'] == 'success'
-        # 동일 IP이므로 변경 없음
-        assert data1['data']['ip_changed'] is False
-
-        # Rate limiting 회피를 위해 2초 대기
-        time.sleep(2.1)
-
-        # 두 번째 요청 (IP 변경: 192.168.1.101)
-        response2 = client.post('/api/client/commands', json={
-            'machine_id': machine_id,
-            'heartbeat': {
-                'cpu_usage': 55.0,
-                'ram_usage_percent': 65.0,
-                'ip_address': '192.168.1.101'
-            }
-        })
-
-        data2 = response2.get_json()
-        assert data2['status'] == 'success'
-        # IP 변경 감지되어야 함
-        assert data2['data']['ip_changed'] is True
-
-    def test_heartbeat_full_update_flag(self, client, registered_pc):
-        """full_update 플래그 테스트"""
+    def test_longpoll_with_pending_command(self, client, registered_pc):
+        """대기 중인 명령이 있을 때 즉시 반환"""
         pc_id, machine_id = registered_pc
 
-        # 전체 하트비트
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
+
+        # 명령 생성
+        client.post(f'/api/pc/{pc_id}/shutdown', json={'delay': 0})
+
+        # long-poll 요청 (timeout=0으로 즉시 반환)
+        response = client.get('/api/client/commands', query_string={
+            'machine_id': machine_id, 'timeout': 0
+        })
+
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['data']['has_command'] is True
+        assert data['data']['command']['type'] == 'shutdown'
+
+    def test_longpoll_unknown_machine(self, client):
+        """등록되지 않은 machine_id"""
+        response = client.get('/api/client/commands', query_string={
+            'machine_id': 'UNKNOWN-MACHINE', 'timeout': 0
+        })
+        assert response.status_code == 404
+
+    def test_longpoll_missing_machine_id(self, client):
+        """machine_id 누락"""
+        response = client.get('/api/client/commands', query_string={'timeout': 0})
+        assert response.status_code == 400
+
+    def test_longpoll_updates_online_status(self, client, registered_pc):
+        """long-poll 시작 시 PC is_online=1로 업데이트"""
+        pc_id, machine_id = registered_pc
+
+        response = client.get('/api/client/commands', query_string={
+            'machine_id': machine_id, 'timeout': 0
+        })
+        assert response.status_code == 200
+
+        # 관리자 API로 online 상태 확인
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
+        pc_resp = client.get(f'/api/pc/{pc_id}')
+        assert pc_resp.status_code == 200
+        pc_data = pc_resp.get_json()
+        assert pc_data.get('is_online') == 1
+
+    def test_offline_signal(self, client, registered_pc):
+        """네트워크 오프라인 신호"""
+        pc_id, machine_id = registered_pc
+
+        response = client.post('/api/client/offline', json={'machine_id': machine_id})
+        assert response.status_code == 200
+
+    def test_offline_signal_sets_pc_offline(self, client, registered_pc):
+        """오프라인 신호 수신 후 PC is_online=0"""
+        pc_id, machine_id = registered_pc
+
+        # 먼저 online 상태로 만들기
+        client.get('/api/client/commands', query_string={'machine_id': machine_id, 'timeout': 0})
+
+        # 오프라인 처리
+        response = client.post('/api/client/offline', json={'machine_id': machine_id})
+        assert response.status_code == 200
+
+        # 관리자 API로 offline 상태 확인
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
+        pc_resp = client.get(f'/api/pc/{pc_id}')
+        assert pc_resp.status_code == 200
+        pc_data = pc_resp.get_json()
+        assert pc_data.get('is_online') == 0
+
+    def test_reconnect_restores_online_status(self, client, registered_pc):
+        """오프라인 후 재연결 시 is_online=1 복원"""
+        pc_id, machine_id = registered_pc
+
+        # 오프라인 처리
+        client.post('/api/client/offline', json={'machine_id': machine_id})
+
+        # 재연결 (long-poll)
+        response = client.get('/api/client/commands', query_string={
+            'machine_id': machine_id, 'timeout': 0
+        })
+        assert response.status_code == 200
+
+        # 관리자 API로 online 상태 확인
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
+        pc_resp = client.get(f'/api/pc/{pc_id}')
+        assert pc_resp.status_code == 200
+        pc_data = pc_resp.get_json()
+        assert pc_data.get('is_online') == 1
+
+    def test_heartbeat_full_update(self, client, registered_pc):
+        """/api/client/heartbeat 전체 업데이트"""
+        pc_id, machine_id = registered_pc
+
         response = client.post('/api/client/heartbeat', json={
             'machine_id': machine_id,
             'full_update': True,
@@ -98,9 +132,7 @@ class TestCommandHeartbeatIntegration:
                 'cpu_usage': 45.0,
                 'ram_used': 8.0,
                 'ram_usage_percent': 50.0,
-                'disk_usage': {
-                    'C:\\\\': {'used_gb': 100, 'free_gb': 100, 'percent': 50}
-                },
+                'disk_usage': {'C:\\\\': {'used_gb': 100, 'free_gb': 100, 'percent': 50}},
                 'current_user': 'student',
                 'uptime': 3600,
                 'ip_address': '192.168.1.100',
@@ -113,7 +145,7 @@ class TestCommandHeartbeatIntegration:
         assert data['full_update'] is True
 
     def test_heartbeat_light_update(self, client, registered_pc):
-        """경량 하트비트 (full_update=false)"""
+        """/api/client/heartbeat 경량 업데이트"""
         pc_id, machine_id = registered_pc
 
         response = client.post('/api/client/heartbeat', json={
@@ -129,56 +161,3 @@ class TestCommandHeartbeatIntegration:
         assert response.status_code == 200
         data = response.get_json()
         assert data['full_update'] is False
-
-    def test_command_with_pending_command(self, client, registered_pc):
-        """대기 중인 명령이 있을 때"""
-        pc_id, machine_id = registered_pc
-
-        # 관리자로 로그인하여 명령 생성
-        with client.session_transaction() as sess:
-            sess['admin'] = True
-            sess['username'] = 'admin'
-
-        # shutdown 명령 생성 (API 사용)
-        client.post(f'/api/pc/{pc_id}/shutdown', json={'delay': 0})
-
-        # 명령 조회 + 하트비트
-        response = client.post('/api/client/commands', json={
-            'machine_id': machine_id,
-            'heartbeat': {
-                'cpu_usage': 50.0,
-                'ram_usage_percent': 60.0,
-                'ip_address': '192.168.1.100'
-            }
-        })
-
-        data = response.get_json()
-        assert data['status'] == 'success'
-        assert data['data']['has_command'] is True
-        assert data['data']['command']['type'] == 'shutdown'
-        assert data['data']['heartbeat_processed'] is True
-
-    def test_rate_limiting(self, client, registered_pc):
-        """Rate limiting (2초 간격)"""
-        pc_id, machine_id = registered_pc
-
-        # 첫 번째 요청
-        response1 = client.post('/api/client/commands', json={
-            'machine_id': machine_id,
-            'heartbeat': {'cpu_usage': 50.0, 'ram_usage_percent': 60.0}
-        })
-        assert response1.status_code == 200
-
-        # 즉시 두 번째 요청 (rate limit에 걸려야 함)
-        response2 = client.post('/api/client/commands', json={
-            'machine_id': machine_id,
-            'heartbeat': {'cpu_usage': 50.0, 'ram_usage_percent': 60.0}
-        })
-
-        # Rate limit에 걸려도 200 OK, 단 has_command: false
-        assert response2.status_code == 200
-        data2 = response2.get_json()
-        assert data2['status'] == 'success'
-        assert data2['data']['has_command'] is False
-        # Note: Rate limit 체크는 구현에 따라 다를 수 있음
-

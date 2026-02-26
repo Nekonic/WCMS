@@ -5,9 +5,7 @@ PC 관리 서비스
 import time
 import threading
 import logging
-from typing import List, Dict, Any, Optional
-from models import PCModel
-from utils import get_db, execute_query
+from utils import get_db
 
 logger = logging.getLogger('wcms')
 
@@ -16,64 +14,46 @@ class PCService:
     """PC 관련 비즈니스 로직"""
 
     @staticmethod
-    def update_offline_status(threshold_minutes: int = 2) -> int:
+    def update_offline_status(threshold_seconds: int = 40) -> int:
         """
-        오랫동안 하트비트가 없는 PC를 오프라인으로 전환
-        
-        Args:
-            threshold_minutes: 오프라인 판단 기준 시간 (분)
-            
-        Returns:
-            업데이트된 PC 수
+        last_seen이 threshold_seconds 초 이상 갱신되지 않은 PC를 오프라인으로 전환
+
+        long-poll timeout 30s + 여유 10s = 기본 40초
         """
         try:
-            # 직접 DB 연결 사용 (스레드 안전성 확보)
-            # utils.execute_query는 g.db를 사용하므로 백그라운드 스레드에서는 부적절할 수 있음
-            # 하지만 여기서는 간단히 모델을 통해 호출하거나, 별도 연결을 맺어야 함
-            
-            # 모델 메서드 활용 (내부적으로 get_db 호출 -> g.db 사용)
-            # 백그라운드 스레드에서는 app_context가 필요함
-            
-            # 쿼리 직접 실행
             db = get_db()
-            cursor = db.execute("""
-                UPDATE pc_info 
-                SET is_online=0 
-                WHERE is_online=1 
-                AND (julianday('now') - julianday(last_seen)) * 24 * 60 > ?
-            """, (threshold_minutes,))
-            
-            count = cursor.rowcount
-            if count > 0:
-                db.commit()
-                logger.info(f"[+] 오프라인 상태 업데이트: {count}대")
-                
+
+            # 오프라인으로 전환될 PC 목록 조회
+            to_offline = db.execute("""
+                SELECT id FROM pc_info
+                WHERE is_online=1
+                AND (julianday('now') - julianday(last_seen)) * 86400 > ?
+            """, (threshold_seconds,)).fetchall()
+
+            count = len(to_offline)
+            if count == 0:
+                return 0
+
+            for row in to_offline:
+                pc_id = row['id']
+                db.execute('UPDATE pc_info SET is_online=0 WHERE id=?', (pc_id,))
+                # 열린 network_events 레코드가 없으면 timeout으로 기록
+                existing = db.execute(
+                    'SELECT id FROM network_events WHERE pc_id=? AND online_at IS NULL',
+                    (pc_id,)
+                ).fetchone()
+                if not existing:
+                    db.execute(
+                        'INSERT INTO network_events (pc_id, offline_at, reason) VALUES (?, CURRENT_TIMESTAMP, ?)',
+                        (pc_id, 'timeout')
+                    )
+
+            db.commit()
+            logger.info(f"[+] 오프라인 상태 업데이트: {count}대")
             return count
         except Exception as e:
             logger.error(f"[!] 오프라인 상태 업데이트 실패: {e}")
             return 0
-
-    @staticmethod
-    def set_offline_immediately(machine_id: str) -> bool:
-        """
-        특정 PC를 즉시 오프라인으로 전환 (종료 시 호출)
-        """
-        try:
-            db = get_db()
-            cursor = db.execute("""
-                UPDATE pc_info 
-                SET is_online=0, last_seen=CURRENT_TIMESTAMP
-                WHERE machine_id=?
-            """, (machine_id,))
-            
-            if cursor.rowcount > 0:
-                db.commit()
-                logger.info(f"[+] PC 종료 감지: {machine_id} -> Offline")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"[!] PC 종료 처리 실패 ({machine_id}): {e}")
-            return False
 
     @staticmethod
     def start_background_checker(app, interval: int = 30):

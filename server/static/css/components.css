@@ -1,0 +1,241 @@
+/* ==================== WCMS components.css ====================
+ * 여러 템플릿에서 공유하는 UI 컴포넌트 스타일
+ * 각 템플릿의 <style> 블록 및 인라인 style="" 속성을 대체
+ * ============================================================ */
+
+/* ===== 레이아웃 ===== */
+.page-container    { max-width: 900px;  margin: 0 auto; }
+.page-container-md { max-width: 1200px; margin: 0 auto; }
+.page-container-lg { max-width: 1400px; margin: 0 auto; }
+
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2em; }
+.page-header h2 { margin: 0; }
+.page-subtitle { color: #999; font-size: 1.1em; margin-bottom: 2em; }
+.page-footer { text-align: center; margin-top: 3em; padding-top: 2em; border-top: 1px solid #333; }
+.page-footer p { color: #999; font-size: 0.9em; margin-top: 0.5em; }
+
+/* ===== 그리드 / 플렉스 ===== */
+.grid-auto  { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5em; }
+.grid-2     { display: grid; grid-template-columns: 1fr 1fr; gap: 2em; }
+.grid-3     { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.flex-wrap-gap { display: flex; gap: 1em; flex-wrap: wrap; }
+.flex-gap   { display: flex; gap: 1em; }
+.flex-end   { display: flex; align-items: flex-end; }
+
+/* ===== 섹션 카드 ===== */
+.section-card        { background: #2a2a2a; padding: 2em; border-radius: 12px; margin-bottom: 2em; }
+.section-card-accent { border-left: 4px solid #4a9eff; }
+.section-title       { color: #4a9eff; margin-bottom: 1em; font-size: 1.5em; }
+.section-title-lg    { margin-bottom: 1.5em; }
+
+/* ===== 기능 카드 (about.html) ===== */
+.feature-card  { background: #1f1f1f; padding: 1.5em; border-radius: 8px; border: 1px solid #333; }
+.feature-icon  { font-size: 2em; margin-bottom: 0.5em; }
+.feature-title { color: #e0e0e0; margin-bottom: 0.5em; font-size: 1.1em; }
+.feature-desc  { color: #999; font-size: 0.95em; line-height: 1.6; }
+
+/* ===== 페이지 제목 (about.html) ===== */
+.about-title { margin-bottom: 0.5em; font-size: 2.2em; color: #4a9eff; }
+
+/* ===== 기술 스택 목록 (about.html) ===== */
+.tech-section-title-backend  { color: #10b981; margin-bottom: 1em; font-size: 1.2em; }
+.tech-section-title-frontend { color: #f59e0b; margin-bottom: 1em; font-size: 1.2em; }
+.tech-list { list-style: none; padding: 0; }
+.tech-list li { padding: 0.5em 0; color: #ccc; border-bottom: 1px solid #333; }
+.tech-list li:last-child { border-bottom: none; }
+.tech-list i { margin-right: 0.5em; }
+
+/* ===== 버전 정보 (about.html) ===== */
+.version-info    { display: flex; gap: 2em; flex-wrap: wrap; }
+.version-main    { flex: 1; min-width: 200px; }
+.version-main .v-label { font-size: 0.9em; color: #999; margin-bottom: 0.5em; }
+.version-main .v-value { font-size: 2em; font-weight: bold; color: #4a9eff; }
+.version-main .v-date  { font-size: 0.85em; color: #999; margin-top: 0.5em; }
+.version-changes { flex: 2; min-width: 300px; }
+.version-changes .v-label { font-size: 0.9em; color: #999; margin-bottom: 0.5em; }
+.changelog-list  { list-style: none; padding: 0; color: #ccc; }
+.changelog-list li { padding: 0.3em 0; }
+
+/* ===== 링크 버튼 (about.html) ===== */
+.link-buttons { display: flex; gap: 1em; flex-wrap: wrap; }
+.link-btn {
+    color: white; padding: 1em 2em; border-radius: 8px; text-decoration: none;
+    font-weight: 600; transition: all 0.3s; display: inline-flex; align-items: center; gap: 0.5em;
+}
+.link-btn:hover { transform: translateY(-2px); }
+.link-btn-github { background: linear-gradient(135deg, #24292e 0%, #1a1d21 100%); border: 1px solid #333; }
+.link-btn-github:hover { box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3); }
+.link-btn-green { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.link-btn-green:hover { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
+.link-btn-blue  { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+.link-btn-blue:hover  { box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+
+/* ===== 버튼 (base.css .btn 확장) ===== */
+.btn-success { background: #10b981; color: #fff; }
+.btn-success:hover { background: #059669; }
+.btn-secondary { background: #666; color: #fff; }
+.btn-secondary:hover { background: #555; }
+.btn-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+.btn-primary:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+.btn-close-red { background: #dc2626; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer; }
+
+/* ===== 배지 ===== */
+.badge          { display: inline-block; padding: 0.3em 0.8em; border-radius: 12px; font-size: 0.85em; font-weight: 600; }
+.badge-active   { background: #10b981; color: white; }
+.badge-inactive { background: #6b7280; color: white; }
+.badge-single   { background: #fef3c7; color: #92400e; }
+.badge-multi    { background: #dbeafe; color: #1e40af; }
+.badge-latest   { display: inline-block; margin-left: 0.5em; padding: 0.25em 0.5em; background: #10b981; color: white; border-radius: 4px; font-size: 0.75em; font-weight: 600; }
+
+/* ===== 통계 카드 (system_status.html) ===== */
+.stat-grid         { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5em; margin-bottom: 2em; }
+.stat-card         { padding: 1.5em; border-radius: 10px; color: white; }
+.stat-card-online  { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.stat-card-offline { background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); }
+.stat-card-total   { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+.stat-card-update  { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+.stat-label   { font-size: 0.9em; opacity: 0.9; margin-bottom: 0.5em; }
+.stat-value   { font-size: 2.5em; font-weight: bold; }
+.stat-value-sm { font-size: 1.2em; font-weight: bold; }
+
+/* ===== 필터 바 (system_status.html) ===== */
+.filter-bar { background: #2a2a2a; padding: 1em; border-radius: 8px; margin-bottom: 1.5em; }
+.filter-bar label { color: #aaa; }
+.filter-btn { background: #444; color: white; border: none; padding: 0.6em 1.2em; border-radius: 6px; cursor: pointer; transition: all 0.3s; }
+.filter-btn:hover  { background: #555; }
+.filter-btn.active { background: #4a9eff; }
+
+/* ===== 상태 배지 (system_status.html) ===== */
+.status-badge   { display: inline-block; padding: 0.4em 0.8em; border-radius: 12px; font-size: 0.85em; font-weight: 600; }
+.status-online  { background: #10b981; color: white; }
+.status-offline { background: #6b7280; color: white; }
+.status-warning { background: #f59e0b; color: white; }
+
+/* ===== 데이터 테이블 ===== */
+.data-table-container { background: #2a2a2a; border-radius: 10px; overflow: hidden; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead tr { background: #1a1a1a; border-bottom: 2px solid #444; }
+.data-table th { padding: 1em; text-align: left; color: #aaa; font-weight: 600; }
+.data-table td { padding: 0.75em; color: #ddd; }
+.data-table tbody tr { border-bottom: 1px solid #444; }
+
+tr.pc-row { border-bottom: 1px solid #333; transition: background 0.2s; }
+tr.pc-row:hover { background: rgba(74, 158, 255, 0.1); }
+tr.pc-row td { padding: 1em; color: #e0e0e0; }
+
+/* ===== 좌석 에디터 (layout_editor.html) ===== */
+.editor-toolbar { margin-bottom: 1em; }
+.editor-toolbar .toolbar-label { margin-left: 2em; color: #ddd; }
+.grid-number-input { width: 60px; padding: 0.5em; margin-left: 0.5em; background: #2a2a2a; color: white; border: 1px solid #444; border-radius: 4px; }
+.editor-panel { background: #2a2a2a; padding: 2em; border-radius: 10px; width: fit-content; margin-bottom: 2em; }
+.editor-panel h3 { margin-top: 0; }
+.unassigned-panel { background: #2a2a2a; padding: 2em; border-radius: 10px; }
+.unassigned-panel h3 { margin-top: 0; }
+#unassignedPCs {
+    display: flex; flex-wrap: wrap; gap: 1em; min-height: 60px;
+    background: #1a1a1a; padding: 1em; border-radius: 8px; border: 2px dashed #444;
+}
+.seat-cell {
+    width: 80px; height: 80px; background: #1a1a1a; border: 2px solid #444; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.3s; padding: 0.5em; text-align: center; font-size: 0.8em; box-sizing: border-box;
+}
+.seat-cell.occupied   { background: #10b981; border-color: #10b981; }
+.seat-cell.empty      { background: #2a2a2a; border: 2px dashed #666; }
+.seat-cell:hover      { transform: scale(1.05); box-shadow: 0 4px 12px rgba(74, 158, 255, 0.5); }
+.seat-cell.drag-over  { background: #4a9eff !important; border: 2px solid #4a9eff !important; box-shadow: inset 0 0 10px rgba(74, 158, 255, 0.5); }
+.seat-pc-name { font-weight: bold; color: white; font-size: 0.9em; }
+.seat-pc-host { font-size: 0.75em; color: #ddd; }
+.seat-pc-drag { font-size: 0.65em; color: #ccc; cursor: grab; margin-top: 0.3em; }
+.seat-empty-text { color: #666; font-size: 0.8em; line-height: 1.4; }
+.pc-badge { background: #4a9eff; color: white; padding: 0.5em 1em; border-radius: 6px; cursor: grab; user-select: none; font-weight: 600; transition: all 0.3s; }
+.pc-badge:active  { cursor: grabbing; }
+.pc-badge:hover   { background: #3a8eef; transform: scale(1.05); }
+#unassignedPCs.drag-over { background: rgba(74, 158, 255, 0.2) !important; border: 2px dashed #4a9eff !important; }
+
+/* ===== 실습실 관리 (room_manager.html) ===== */
+.room-card        { background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%); border-radius: 10px; border: 1px solid #333; padding: 1.5em; transition: all 0.3s; }
+.room-card:hover  { border-color: #4a9eff; box-shadow: 0 4px 12px rgba(74, 158, 255, 0.2); }
+.room-card.inactive { opacity: 0.6; border-color: #555; }
+.room-card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1em; }
+.room-info-grid        { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin-bottom: 1em; }
+.room-info-cell        { padding: 0.8em; border-radius: 6px; }
+.room-info-cell-blue   { background: rgba(74, 158, 255, 0.1); }
+.room-info-cell-green  { background: rgba(16, 185, 129, 0.1); }
+.room-info-cell-purple { background: rgba(139, 92, 246, 0.1); }
+.info-label    { color: #aaa; font-size: 0.85em; margin-bottom: 0.3em; }
+.info-value    { color: white; font-weight: 600; }
+.info-value-sm { font-size: 0.9em; }
+.room-actions { display: flex; gap: 0.5em; margin-top: 1em; }
+.room-actions button { flex: 1; padding: 0.6em; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s; }
+.btn-edit         { background: #3b82f6; color: white; }
+.btn-edit:hover   { background: #2563eb; }
+.btn-delete       { background: #dc2626; color: white; }
+.btn-delete:hover { background: #b91c1c; }
+
+/* ===== 모달 오버레이 (room_manager.html) ===== */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; padding: 2em; }
+.modal-overlay.show { display: block; }
+.modal-dialog { max-width: 600px; margin: 4em auto; background: #2a2a2a; border-radius: 12px; padding: 2em; }
+.modal-dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em; }
+.modal-dialog-header h3 { margin: 0; color: white; }
+
+/* ===== 폼 요소 ===== */
+.form-label   { display: block; margin-bottom: 0.5em; color: #aaa; }
+.form-input   { width: 100%; padding: 0.8em; background: #1a1a1a; border: 1px solid #444; border-radius: 6px; color: white; font-size: 1em; }
+.form-group   { margin-bottom: 1.5em; }
+.form-grid-2  { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+.form-grid-3  { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 1em; }
+
+/* ===== 등록 토큰 (registration_tokens.html) ===== */
+.token-display-card  { background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); border: 2px solid #3b82f6; }
+.token-pin-display   { background: #1e293b; padding: 1.5em; border-radius: 12px; text-align: center; margin-bottom: 1em; }
+.token-pin-text      { font-size: 3em; font-weight: 700; letter-spacing: 0.5em; color: #60a5fa; font-family: 'Courier New', monospace; }
+.token-meta          { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1em; font-size: 0.9em; color: #bfdbfe; }
+.token-table         { width: 100%; border-collapse: collapse; }
+.token-table th      { background: #2a2a2a; padding: 1em; text-align: left; color: #9ca3af; font-weight: 600; border-bottom: 2px solid #374151; }
+.token-table td      { padding: 1em; border-bottom: 1px solid #374151; }
+.token-table tr:hover { background: rgba(59, 130, 246, 0.05); }
+.token-pin           { font-family: 'Courier New', monospace; font-size: 1.3em; font-weight: 700; letter-spacing: 0.2em; color: #60a5fa; }
+
+/* ===== 로딩 / 빈 상태 ===== */
+.loading-state { text-align: center; padding: 2em; color: #6b7280; }
+.loading-icon  { font-size: 2em; }
+.empty-state   { text-align: center; padding: 3em; color: #6b7280; }
+.empty-icon    { font-size: 3em; margin-bottom: 1em; }
+
+/* ===== 프로세스 기록 (process_history.html) ===== */
+.history-container { background: #2a2a2a; padding: 2em; border-radius: 10px; border: 1px solid #333; }
+.history-header { color: #4a9eff; margin-bottom: 1.5em; padding-bottom: 0.5em; border-bottom: 1px solid #444; }
+.history-table { width: 100%; border-collapse: collapse; color: #e0e0e0; }
+.history-table th, .history-table td { padding: 0.9em 1.2em; text-align: left; border-bottom: 1px solid #3a3a3a; }
+.history-table thead { background: #333; }
+.history-table th { font-weight: 600; color: #ccc; }
+.history-table tbody tr:hover { background: #303030; }
+/* process_history의 badge (inline span badges) */
+.history-table .badge {
+    background-color: #555; color: #fff;
+    margin-right: 5px; margin-bottom: 5px;
+    padding: 0.4em 0.7em; font-size: 0.85em;
+    border-radius: 0.375rem; white-space: nowrap;
+}
+
+/* ===== PC 상세 정보 (pc_detail.html) ===== */
+.disk-chart-wrapper  { max-width: 200px; margin: 0 auto 20px; }
+.usage-percent-text  { font-size: 1.5em; color: #dc3545; }
+.progress-lg         { height: 25px; }
+
+/* ===== 텍스트 유틸리티 ===== */
+.text-muted-sm  { color: #aaa; font-size: 0.9em; }
+.text-muted     { color: #aaa; margin: 0; }
+.text-error     { color: #ef4444; }
+.text-error-bold { color: #ef4444; font-weight: 600; }
+.text-none      { color: #777; }
+.text-mono      { font-family: monospace; font-size: 0.9em; }
+.fw-600         { font-weight: 600; }
+.text-center-msg { text-align: center; padding: 2em; }

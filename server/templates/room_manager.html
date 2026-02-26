@@ -1,21 +1,10 @@
 {% extends "base.html" %}
 {% block title %}실습실 관리{% endblock %}
 {% block content %}
-<div style="max-width: 1200px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2em;">
-        <h2 style="margin: 0;">🏫 실습실 관리</h2>
-        <button onclick="showCreateRoomModal()" style="
-            background: #10b981;
-            color: white;
-            padding: 0.7em 1.5em;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s;
-        " onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">
-            ➕ 실습실 추가
-        </button>
+<div class="page-container-md">
+    <div class="page-header">
+        <h2>🏫 실습실 관리</h2>
+        <button onclick="showCreateRoomModal()" class="btn btn-success">➕ 실습실 추가</button>
     </div>
 
     <!-- 실습실 목록 -->
@@ -25,247 +14,81 @@
 </div>
 
 <!-- 실습실 생성 모달 -->
-<div id="createRoomModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; padding: 2em;">
-    <div style="max-width: 600px; margin: 4em auto; background: #2a2a2a; border-radius: 12px; padding: 2em;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
-            <h3 style="margin: 0; color: white;">새 실습실 생성</h3>
-            <button onclick="closeCreateRoomModal()" style="background: #dc2626; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer;">닫기</button>
+<div id="createRoomModal" class="modal-overlay">
+    <div class="modal-dialog">
+        <div class="modal-dialog-header">
+            <h3>새 실습실 생성</h3>
+            <button onclick="closeCreateRoomModal()" class="btn-close-red">닫기</button>
         </div>
-
         <form id="createRoomForm" onsubmit="createRoom(event)">
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; margin-bottom: 0.5em; color: #aaa;">실습실 이름 *</label>
-                <input type="text" id="newRoomName" required placeholder="예: 5실습실, A동 실습실" style="
-                    width: 100%;
-                    padding: 0.8em;
-                    background: #1a1a1a;
-                    border: 1px solid #444;
-                    border-radius: 6px;
-                    color: white;
-                    font-size: 1em;
-                ">
+            <div class="form-group">
+                <label class="form-label">실습실 이름 *</label>
+                <input type="text" id="newRoomName" required placeholder="예: 5실습실, A동 실습실" class="form-input">
             </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-bottom: 1.5em;">
+            <div class="form-grid-2 form-group">
                 <div>
-                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">행 (세로)</label>
-                    <input type="number" id="newRoomRows" value="6" min="1" max="20" style="
-                        width: 100%;
-                        padding: 0.8em;
-                        background: #1a1a1a;
-                        border: 1px solid #444;
-                        border-radius: 6px;
-                        color: white;
-                    ">
+                    <label class="form-label">행 (세로)</label>
+                    <input type="number" id="newRoomRows" value="6" min="1" max="20" class="form-input">
                 </div>
                 <div>
-                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">열 (가로)</label>
-                    <input type="number" id="newRoomCols" value="8" min="1" max="20" style="
-                        width: 100%;
-                        padding: 0.8em;
-                        background: #1a1a1a;
-                        border: 1px solid #444;
-                        border-radius: 6px;
-                        color: white;
-                    ">
+                    <label class="form-label">열 (가로)</label>
+                    <input type="number" id="newRoomCols" value="8" min="1" max="20" class="form-input">
                 </div>
             </div>
-
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; margin-bottom: 0.5em; color: #aaa;">설명 (선택)</label>
-                <textarea id="newRoomDesc" rows="3" placeholder="예: 3층 동쪽 실습실" style="
-                    width: 100%;
-                    padding: 0.8em;
-                    background: #1a1a1a;
-                    border: 1px solid #444;
-                    border-radius: 6px;
-                    color: white;
-                    font-size: 1em;
-                    resize: vertical;
-                "></textarea>
+            <div class="form-group">
+                <label class="form-label">설명 (선택)</label>
+                <textarea id="newRoomDesc" rows="3" placeholder="예: 3층 동쪽 실습실" class="form-input" style="resize: vertical;"></textarea>
             </div>
-
-            <button type="submit" style="
-                width: 100%;
-                background: #10b981;
-                color: white;
-                padding: 0.9em;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                font-weight: 600;
-                font-size: 1em;
-            ">생성</button>
+            <button type="submit" class="btn btn-success" style="width: 100%;">생성</button>
         </form>
     </div>
 </div>
 
 <!-- 실습실 수정 모달 -->
-<div id="editRoomModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; padding: 2em;">
-    <div style="max-width: 600px; margin: 4em auto; background: #2a2a2a; border-radius: 12px; padding: 2em;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5em;">
-            <h3 style="margin: 0; color: white;">실습실 수정</h3>
-            <button onclick="closeEditRoomModal()" style="background: #dc2626; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer;">닫기</button>
+<div id="editRoomModal" class="modal-overlay">
+    <div class="modal-dialog">
+        <div class="modal-dialog-header">
+            <h3>실습실 수정</h3>
+            <button onclick="closeEditRoomModal()" class="btn-close-red">닫기</button>
         </div>
-
         <form id="editRoomForm" onsubmit="updateRoom(event)">
             <input type="hidden" id="editRoomId">
-
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; margin-bottom: 0.5em; color: #aaa;">실습실 이름 *</label>
-                <input type="text" id="editRoomName" required style="
-                    width: 100%;
-                    padding: 0.8em;
-                    background: #1a1a1a;
-                    border: 1px solid #444;
-                    border-radius: 6px;
-                    color: white;
-                    font-size: 1em;
-                ">
+            <div class="form-group">
+                <label class="form-label">실습실 이름 *</label>
+                <input type="text" id="editRoomName" required class="form-input">
             </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-bottom: 1.5em;">
+            <div class="form-grid-2 form-group">
                 <div>
-                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">행 (세로)</label>
-                    <input type="number" id="editRoomRows" min="1" max="20" style="
-                        width: 100%;
-                        padding: 0.8em;
-                        background: #1a1a1a;
-                        border: 1px solid #444;
-                        border-radius: 6px;
-                        color: white;
-                    ">
+                    <label class="form-label">행 (세로)</label>
+                    <input type="number" id="editRoomRows" min="1" max="20" class="form-input">
                 </div>
                 <div>
-                    <label style="display: block; margin-bottom: 0.5em; color: #aaa;">열 (가로)</label>
-                    <input type="number" id="editRoomCols" min="1" max="20" style="
-                        width: 100%;
-                        padding: 0.8em;
-                        background: #1a1a1a;
-                        border: 1px solid #444;
-                        border-radius: 6px;
-                        color: white;
-                    ">
+                    <label class="form-label">열 (가로)</label>
+                    <input type="number" id="editRoomCols" min="1" max="20" class="form-input">
                 </div>
             </div>
-
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; margin-bottom: 0.5em; color: #aaa;">설명</label>
-                <textarea id="editRoomDesc" rows="3" style="
-                    width: 100%;
-                    padding: 0.8em;
-                    background: #1a1a1a;
-                    border: 1px solid #444;
-                    border-radius: 6px;
-                    color: white;
-                    font-size: 1em;
-                    resize: vertical;
-                "></textarea>
+            <div class="form-group">
+                <label class="form-label">설명</label>
+                <textarea id="editRoomDesc" rows="3" class="form-input" style="resize: vertical;"></textarea>
             </div>
-
-            <div style="margin-bottom: 1.5em;">
+            <div class="form-group">
                 <label style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
                     <input type="checkbox" id="editRoomActive" style="width: 20px; height: 20px;">
-                    <span style="color: #aaa;">활성화 (사이드바에 표시)</span>
+                    <span class="form-label" style="margin-bottom: 0;">활성화 (사이드바에 표시)</span>
                 </label>
             </div>
-
-            <button type="submit" style="
-                width: 100%;
-                background: #3b82f6;
-                color: white;
-                padding: 0.9em;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                font-weight: 600;
-                font-size: 1em;
-            ">수정</button>
+            <button type="submit" class="btn btn-info" style="width: 100%;">수정</button>
         </form>
     </div>
 </div>
 
-<style>
-.room-card {
-    background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%);
-    border-radius: 10px;
-    border: 1px solid #333;
-    padding: 1.5em;
-    transition: all 0.3s;
-}
-
-.room-card:hover {
-    border-color: #4a9eff;
-    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.2);
-}
-
-.room-card.inactive {
-    opacity: 0.6;
-    border-color: #555;
-}
-
-.room-actions {
-    display: flex;
-    gap: 0.5em;
-    margin-top: 1em;
-}
-
-.room-actions button {
-    flex: 1;
-    padding: 0.6em;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-}
-
-.btn-edit {
-    background: #3b82f6;
-    color: white;
-}
-
-.btn-edit:hover {
-    background: #2563eb;
-}
-
-.btn-delete {
-    background: #dc2626;
-    color: white;
-}
-
-.btn-delete:hover {
-    background: #b91c1c;
-}
-
-.badge {
-    display: inline-block;
-    padding: 0.3em 0.8em;
-    border-radius: 12px;
-    font-size: 0.85em;
-    font-weight: 600;
-}
-
-.badge-active {
-    background: #10b981;
-    color: white;
-}
-
-.badge-inactive {
-    background: #6b7280;
-    color: white;
-}
-</style>
-
 <script>
 let allRooms = [];
 
-// 실습실 목록 로드
 async function loadRooms() {
     try {
         const response = await fetch('/api/rooms');
         const data = await response.json();
-
         allRooms = data.rooms;
         renderRooms();
     } catch (error) {
@@ -274,13 +97,12 @@ async function loadRooms() {
     }
 }
 
-// 실습실 목록 렌더링
 function renderRooms() {
     const container = document.getElementById('roomsList');
 
     if (allRooms.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 3em; color: #888;">
+            <div class="empty-state">
                 <p style="font-size: 1.2em; margin-bottom: 0.5em;">등록된 실습실이 없습니다</p>
                 <p>오른쪽 상단의 "➕ 실습실 추가" 버튼을 클릭하세요</p>
             </div>
@@ -290,7 +112,7 @@ function renderRooms() {
 
     container.innerHTML = allRooms.map(room => `
         <div class="room-card ${room.is_active ? '' : 'inactive'}">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1em;">
+            <div class="room-card-header">
                 <div>
                     <h3 style="margin: 0 0 0.5em 0; color: white; font-size: 1.3em;">
                         ${room.room_name}
@@ -298,179 +120,105 @@ function renderRooms() {
                             ${room.is_active ? '활성' : '비활성'}
                         </span>
                     </h3>
-                    ${room.description ? `<p style="color: #aaa; margin: 0;">${room.description}</p>` : ''}
+                    ${room.description ? `<p class="text-muted">${room.description}</p>` : ''}
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin-bottom: 1em;">
-                <div style="background: rgba(74, 158, 255, 0.1); padding: 0.8em; border-radius: 6px;">
-                    <div style="color: #aaa; font-size: 0.85em; margin-bottom: 0.3em;">배치 크기</div>
-                    <div style="color: white; font-weight: 600;">${room.rows}행 × ${room.cols}열</div>
+            <div class="room-info-grid">
+                <div class="room-info-cell room-info-cell-blue">
+                    <div class="info-label">배치 크기</div>
+                    <div class="info-value">${room.rows}행 × ${room.cols}열</div>
                 </div>
-                <div style="background: rgba(16, 185, 129, 0.1); padding: 0.8em; border-radius: 6px;">
-                    <div style="color: #aaa; font-size: 0.85em; margin-bottom: 0.3em;">등록된 PC</div>
-                    <div style="color: white; font-weight: 600;">${room.pc_count}대</div>
+                <div class="room-info-cell room-info-cell-green">
+                    <div class="info-label">등록된 PC</div>
+                    <div class="info-value">${room.pc_count}대</div>
                 </div>
-                <div style="background: rgba(139, 92, 246, 0.1); padding: 0.8em; border-radius: 6px;">
-                    <div style="color: #aaa; font-size: 0.85em; margin-bottom: 0.3em;">생성일</div>
-                    <div style="color: white; font-weight: 600; font-size: 0.9em;">${formatDate(room.created_at)}</div>
+                <div class="room-info-cell room-info-cell-purple">
+                    <div class="info-label">생성일</div>
+                    <div class="info-value info-value-sm">${formatDate(room.created_at)}</div>
                 </div>
             </div>
 
             <div class="room-actions">
-                <button class="btn-edit" onclick="showEditRoomModal(${room.id})">
-                    ✏️ 수정
-                </button>
-                <button class="btn-delete" onclick="deleteRoom(${room.id}, '${room.room_name}', ${room.pc_count})">
-                    🗑️ 삭제
-                </button>
+                <button class="btn-edit" onclick="showEditRoomModal(${room.id})">✏️ 수정</button>
+                <button class="btn-delete" onclick="deleteRoom(${room.id}, '${room.room_name}', ${room.pc_count})">🗑️ 삭제</button>
             </div>
         </div>
     `).join('');
 }
 
 function formatDate(dateStr) {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('ko-KR');
+    return new Date(dateStr).toLocaleDateString('ko-KR');
 }
 
-// 생성 모달
 function showCreateRoomModal() {
-    document.getElementById('createRoomModal').style.display = 'block';
+    document.getElementById('createRoomModal').classList.add('show');
     document.getElementById('createRoomForm').reset();
 }
-
-function closeCreateRoomModal() {
-    document.getElementById('createRoomModal').style.display = 'none';
-}
+function closeCreateRoomModal() { document.getElementById('createRoomModal').classList.remove('show'); }
 
 async function createRoom(event) {
     event.preventDefault();
-
     const roomName = document.getElementById('newRoomName').value.trim();
     const rows = parseInt(document.getElementById('newRoomRows').value);
     const cols = parseInt(document.getElementById('newRoomCols').value);
     const description = document.getElementById('newRoomDesc').value.trim();
-
     try {
         const response = await fetch('/api/rooms', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                room_name: roomName,
-                rows: rows,
-                cols: cols,
-                description: description
-            })
+            body: JSON.stringify({ room_name: roomName, rows, cols, description })
         });
-
         const data = await response.json();
-
-        if (response.ok) {
-            alert(`✅ ${roomName}이(가) 생성되었습니다.`);
-            closeCreateRoomModal();
-            loadRooms();
-            location.reload(); // 사이드바 새로고침
-        } else {
-            alert(`❌ ${data.message || '생성 실패'}`);
-        }
-    } catch (error) {
-        console.error('Create room error:', error);
-        alert('실습실 생성 중 오류가 발생했습니다.');
-    }
+        if (response.ok) { alert(`✅ ${roomName}이(가) 생성되었습니다.`); closeCreateRoomModal(); loadRooms(); location.reload(); }
+        else { alert(`❌ ${data.message || '생성 실패'}`); }
+    } catch (error) { console.error('Create room error:', error); alert('실습실 생성 중 오류가 발생했습니다.'); }
 }
 
-// 수정 모달
 function showEditRoomModal(roomId) {
     const room = allRooms.find(r => r.id === roomId);
     if (!room) return;
-
     document.getElementById('editRoomId').value = room.id;
     document.getElementById('editRoomName').value = room.room_name;
     document.getElementById('editRoomRows').value = room.rows;
     document.getElementById('editRoomCols').value = room.cols;
     document.getElementById('editRoomDesc').value = room.description || '';
     document.getElementById('editRoomActive').checked = room.is_active === 1;
-
-    document.getElementById('editRoomModal').style.display = 'block';
+    document.getElementById('editRoomModal').classList.add('show');
 }
-
-function closeEditRoomModal() {
-    document.getElementById('editRoomModal').style.display = 'none';
-}
+function closeEditRoomModal() { document.getElementById('editRoomModal').classList.remove('show'); }
 
 async function updateRoom(event) {
     event.preventDefault();
-
     const roomId = document.getElementById('editRoomId').value;
     const roomName = document.getElementById('editRoomName').value.trim();
     const rows = parseInt(document.getElementById('editRoomRows').value);
     const cols = parseInt(document.getElementById('editRoomCols').value);
     const description = document.getElementById('editRoomDesc').value.trim();
     const isActive = document.getElementById('editRoomActive').checked ? 1 : 0;
-
     try {
         const response = await fetch(`/api/rooms/${roomId}`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                room_name: roomName,
-                rows: rows,
-                cols: cols,
-                description: description,
-                is_active: isActive
-            })
+            body: JSON.stringify({ room_name: roomName, rows, cols, description, is_active: isActive })
         });
-
         const data = await response.json();
-
-        if (response.ok) {
-            alert(`✅ ${roomName}이(가) 수정되었습니다.`);
-            closeEditRoomModal();
-            loadRooms();
-            location.reload(); // 사이드바 새로고침
-        } else {
-            alert(`❌ ${data.message || '수정 실패'}`);
-        }
-    } catch (error) {
-        console.error('Update room error:', error);
-        alert('실습실 수정 중 오류가 발생했습니다.');
-    }
+        if (response.ok) { alert(`✅ ${roomName}이(가) 수정되었습니다.`); closeEditRoomModal(); loadRooms(); location.reload(); }
+        else { alert(`❌ ${data.message || '수정 실패'}`); }
+    } catch (error) { console.error('Update room error:', error); alert('실습실 수정 중 오류가 발생했습니다.'); }
 }
 
-// 삭제
 async function deleteRoom(roomId, roomName, pcCount) {
-    if (pcCount > 0) {
-        alert(`❌ 이 실습실에는 ${pcCount}대의 PC가 배치되어 있습니다.\n먼저 배치 편집에서 PC를 제거하세요.`);
-        return;
-    }
-
-    if (!confirm(`정말로 "${roomName}"을(를) 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
-        return;
-    }
-
+    if (pcCount > 0) { alert(`❌ 이 실습실에는 ${pcCount}대의 PC가 배치되어 있습니다.\n먼저 배치 편집에서 PC를 제거하세요.`); return; }
+    if (!confirm(`정말로 "${roomName}"을(를) 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) return;
     try {
-        const response = await fetch(`/api/rooms/${roomId}`, {
-            method: 'DELETE'
-        });
-
+        const response = await fetch(`/api/rooms/${roomId}`, { method: 'DELETE' });
         const data = await response.json();
-
-        if (response.ok) {
-            alert(`✅ ${roomName}이(가) 삭제되었습니다.`);
-            loadRooms();
-            location.reload(); // 사이드바 새로고침
-        } else {
-            alert(`❌ ${data.message || '삭제 실패'}`);
-        }
-    } catch (error) {
-        console.error('Delete room error:', error);
-        alert('실습실 삭제 중 오류가 발생했습니다.');
-    }
+        if (response.ok) { alert(`✅ ${roomName}이(가) 삭제되었습니다.`); loadRooms(); location.reload(); }
+        else { alert(`❌ ${data.message || '삭제 실패'}`); }
+    } catch (error) { console.error('Delete room error:', error); alert('실습실 삭제 중 오류가 발생했습니다.'); }
 }
 
-// 페이지 로드 시 실습실 목록 로드
 loadRooms();
 </script>
 {% endblock %}
-

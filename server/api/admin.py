@@ -125,7 +125,6 @@ def send_command(pc_id):
         command_data=data.get('data'),
         admin_username=session.get('username'),
         priority=data.get('priority', 5),
-        max_retries=data.get('max_retries', 3),
         timeout_seconds=data.get('timeout_seconds', 300)
     )
 

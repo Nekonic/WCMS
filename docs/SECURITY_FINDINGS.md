@@ -24,9 +24,9 @@
 
 | # | 항목 | 심각도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| Z-01 | Content Security Policy: `unsafe-inline` 허용 | Medium | `[~]` | `script-src`에 nonce 적용 중, `style-src` 미처리 |
-| Z-02 | CORS: `/api/*` 전체 오리진 허용 (`origins: "*"`) | Medium | `[ ]` | 내부망 전용이지만 명시적 오리진 제한 필요 |
-| Z-03 | Anti-CSRF 토큰 없음 (로그인 폼) | Low | `[ ]` | Flask-WTF 의존성 있으나 미적용 |
+| Z-01 | Content Security Policy: `unsafe-inline` 허용 | Medium | `[-]` | `style-src` unsafe-inline 제거, progress bar → data-width+JS |
+| Z-02 | CORS: `/api/*` 전체 오리진 허용 (`origins: "*"`) | Medium | `[-]` | `WCMS_ALLOWED_ORIGINS` 환경변수로 제어 |
+| Z-03 | Anti-CSRF 토큰 없음 (로그인 폼) | Low | `[-]` | Flask-WTF CSRFProtect 적용, API Blueprint 제외 |
 | Z-04 | X-Content-Type-Options 헤더 | Low | `[-]` | Talisman이 자동 적용 |
 | Z-05 | Referrer-Policy 헤더 | Info | `[ ]` | Talisman 설정에 추가 필요 |
 
@@ -34,8 +34,8 @@
 
 | # | 항목 | 심각도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| C-01 | `subprocess(shell=True)` 사용 | High | `[ ]` | `client/executor.py` 전반, 명령어 직접 조립 |
-| C-02 | 사용자 입력이 명령 파라미터로 전달 | High | `[ ]` | `execute()`, `shutdown()`, `message()` 등 |
+| C-01 | `subprocess(shell=True)` 사용 | High | `[-]` | `shutdown/reboot/install/uninstall/net/taskkill/msg` 리스트 전환 |
+| C-02 | 사용자 입력이 명령 파라미터로 전달 | High | `[-]` | 리스트 방식으로 쉘 주입 방지. `execute()`는 관리자 전용 유지 |
 | C-03 | 민감 정보 로그 출력 가능성 | Low | `[ ]` | 예외 메시지에 내부 경로 포함 가능 |
 
 ### pip-audit 발견 항목

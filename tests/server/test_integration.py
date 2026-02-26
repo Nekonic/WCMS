@@ -87,8 +87,8 @@ class TestClientServerIntegration:
         assert cmd_response.status_code == 200
 
         # 5. 클라이언트가 명령 조회 (새 API)
-        cmd_get_response = client.post('/api/client/commands', json={
-            'machine_id': 'HEARTBEAT-TEST-001'
+        cmd_get_response = client.get('/api/client/commands', query_string={
+            'machine_id': 'HEARTBEAT-TEST-001', 'timeout': 0
         })
         assert cmd_get_response.status_code == 200
         cmd_data = cmd_get_response.get_json()

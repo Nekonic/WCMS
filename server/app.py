@@ -19,6 +19,7 @@ from flask_session import Session
 from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 import cachelib
 
 # 프로젝트 루트 경로
@@ -38,6 +39,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger('wcms')
 
+
+def _setup_file_logging(log_file: str):
+    """서버 로그 파일 핸들러 추가 (중복 방지)"""
+    from logging.handlers import RotatingFileHandler
+    wcms_logger = logging.getLogger('wcms')
+    if any(isinstance(h, RotatingFileHandler) for h in wcms_logger.handlers):
+        return
+    try:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding='utf-8')
+        handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s'))
+        wcms_logger.addHandler(handler)
+    except Exception as e:
+        logger.warning(f"파일 로깅 설정 실패: {e}")
+
 # Flask 기본 로거 설정 (개발 시 환경변수 DEBUG=1 설정)
 if os.getenv('DEBUG') == '1':
     # 개발 모드: 모든 요청 로그 표시
@@ -56,8 +72,9 @@ def create_app(config_name='development'):
     config = get_config(config_name)
     app.config.from_object(config)
 
-    # CORS 활성화
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # CORS 활성화 (Z-02: 환경변수로 허용 오리진 제한)
+    allowed_origins = [o.strip() for o in os.getenv('WCMS_ALLOWED_ORIGINS', '*').split(',')]
+    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
     # 세션 설정 (flask_session DeprecationWarning 해결)
     # FileSystemSessionInterface 대신 cachelib 직접 사용
@@ -71,14 +88,19 @@ def create_app(config_name='development'):
 
     Session(app)
 
+    # CSRF 보호 (Z-03: 로그인 폼 등 브라우저 폼 보호)
+    csrf = CSRFProtect(app)
+
     # 보안 헤더 설정 (Flask-Talisman) - 개발 환경에서는 선택적 활성화
     if config_name == 'production':
         # 프로덕션: HTTPS 강제, 보안 헤더 전체 적용
+        # Z-01: style-src에서 unsafe-inline 제거 (인라인 CSS 외부화 완료)
         csp = {
             'default-src': "'self'",
             'script-src': ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
-            'style-src': ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+            'style-src': ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
             'img-src': ["'self'", "data:"],
+            'font-src': ["'self'", "cdnjs.cloudflare.com"],
         }
         Talisman(app,
                  force_https=True,
@@ -100,6 +122,10 @@ def create_app(config_name='development'):
         storage_uri="memory://"
     )
 
+    # 파일 로깅 설정 (테스트 환경 제외)
+    if config_name != 'test':
+        _setup_file_logging(config.LOG_FILE)
+
     # DB 초기화/정리
     init_db_manager(app.config['DB_PATH'], app.config['DB_TIMEOUT'])
 
@@ -119,6 +145,14 @@ def create_app(config_name='development'):
     # - 2초 폴링 = 시간당 1,800회로 전역 제한(50회/시간)에 걸림
     # - 토큰 인증으로 이미 보호되므로 IP 기반 제한 불필요
     limiter.exempt(client_bp)
+
+    # API Blueprint는 CSRF 제외 (Z-03: 토큰/세션 인증으로 대체)
+    # - client_bp: 클라이언트 토큰 인증
+    # - admin_bp: 브라우저 AJAX (fetch), 세션 인증
+    # - install_bp: 설치 스크립트 배포
+    csrf.exempt(client_bp)
+    csrf.exempt(admin_bp)
+    csrf.exempt(install_bp)
 
 
     # ==================== 웹 페이지 라우트 (레거시 호환) ====================
@@ -307,6 +341,36 @@ def create_app(config_name='development'):
         return """User-agent: *
 Disallow: /
 """, 200, {'Content-Type': 'text/plain'}
+
+    # 서버 로그 페이지
+    @app.route('/admin/server-log')
+    @require_admin
+    def server_log_page():
+        """서버 로그 및 네트워크 이벤트 페이지"""
+        log_file = config.LOG_FILE
+        log_lines = []
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                    lines = f.readlines()
+                    log_lines = lines[-200:]
+            except Exception as e:
+                log_lines = [f"로그 파일 읽기 실패: {e}\n"]
+
+        db = get_db()
+        events = db.execute('''
+            SELECT ne.id, ne.pc_id, ne.offline_at, ne.online_at, ne.duration_sec, ne.reason,
+                   pi.hostname
+            FROM network_events ne
+            JOIN pc_info pi ON ne.pc_id = pi.id
+            ORDER BY ne.offline_at DESC
+            LIMIT 100
+        ''').fetchall()
+
+        return render_template('server_log.html',
+                               log_lines=log_lines,
+                               events=[dict(e) for e in events],
+                               username=session.get('username'))
 
     # 소개 페이지
     @app.route('/about')

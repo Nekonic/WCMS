@@ -50,7 +50,7 @@ body { background: #1a1a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif;
 .sidebar .divider {
     height: 1px;
     background: #333;
-    margin: 1em 1em;
+    margin: 1em 0.8em;
 }
 .sidebar button {
     color: #ff6b6b;

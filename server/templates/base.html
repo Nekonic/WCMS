@@ -5,6 +5,7 @@
     <title>{% block title %}Woosuk Computer Management System{% endblock %}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     {% block styles %}{% endblock %}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -19,12 +20,13 @@
                     {{ room_name.replace('실습실', '실습실 ') }}
                 </a>
                 {% endfor %}
-                <div class="divider" style="margin: 1em 0.8em;"></div>
+                <div class="divider"></div>
                 {% if session.get('username') %}
                 <a href="{{ url_for('system_status') }}">🔍 시스템 상태</a>
                 <a href="{{ url_for('manage_rooms') }}">🏫 실습실 관리</a>
                 <a href="{{ url_for('registration_tokens_page') }}">🔑 등록 토큰</a>
                 <a href="{{ url_for('client_versions_page') }}">📦 클라이언트 버전</a>
+                <a href="{{ url_for('server_log_page') }}" {% if request.endpoint == 'server_log_page' %}class="active"{% endif %}>📋 서버 로그</a>
                 {% endif %}
             </div>
         </div>
