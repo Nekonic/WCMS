@@ -258,36 +258,80 @@ class CommandExecutor:
 
     @staticmethod
     def _install_language_pack(language_code: str) -> bool:
-        """LXP(Language Experience Pack) 설치 - Windows 표시 언어에 필요"""
-        try:
-            # 이미 설치됐는지 확인
-            check = subprocess.run(
-                ['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                 f'(Get-InstalledLanguage | Where-Object {{ $_.LanguageId -like "{language_code}*" }}).Count -gt 0'],
-                capture_output=True, text=True, timeout=30
-            )
-            if check.returncode == 0 and check.stdout.strip().lower() == 'true':
-                logger.info(f"언어 팩 이미 설치됨: {language_code}")
-                return True
+        """LXP(Language Experience Pack) 설치 - Windows 표시 언어에 필요.
+        Start-Job으로 Install-Language 실행: NonInteractive의 ShouldProcess 억제 우회.
+        lang_test.ps1에서 검증된 방식.
+        """
+        ps_script = r"""param($Language)
+$hasCmd = $null -ne (Get-Command Install-Language -ErrorAction SilentlyContinue)
+if (-not $hasCmd) { Write-Output "SKIP:Install-Language cmdlet 없음 (Windows 10 또는 모듈 없음)"; exit 0 }
 
-            logger.info(f"언어 팩 설치 시작: {language_code}")
+$lxp = Get-InstalledLanguage | Where-Object { $_.LanguageId -like "$Language*" }
+if ($lxp) { Write-Output "ALREADY:$($lxp.LanguageId)"; exit 0 }
+
+Write-Output "START:$Language 설치 시작"
+$jobStart = Get-Date
+$job = Start-Job -ScriptBlock { param($l); Install-Language -Language $l -ErrorAction Stop } -ArgumentList $Language
+
+while ($job.State -eq 'Running') {
+    Start-Sleep -Seconds 60
+    $elapsed = [int]((Get-Date) - $jobStart).TotalSeconds
+    Receive-Job $job | ForEach-Object { Write-Output "LOG:$_" }
+    Write-Output "STATUS:${elapsed}초 경과 (State=$($job.State))"
+}
+Receive-Job $job | ForEach-Object { Write-Output "LOG:$_" }
+
+if ($job.State -eq 'Completed') {
+    $lxp2 = Get-InstalledLanguage | Where-Object { $_.LanguageId -like "$Language*" }
+    Remove-Job $job -Force
+    if ($lxp2) { Write-Output "OK:$($lxp2.LanguageId)"; exit 0 }
+    else { Write-Output "FAIL:설치 완료 but LXP 없음 (해당 언어팩이 지원되지 않을 수 있음)"; exit 1 }
+} else {
+    $err = $job.ChildJobs[0].JobStateInfo.Reason
+    Remove-Job $job -Force
+    Write-Output "FAIL:$err"; exit 1
+}
+"""
+        script_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.ps1', delete=False, encoding='utf-8'
+            ) as f:
+                f.write(ps_script)
+                script_path = f.name
+
             result = subprocess.run(
-                ['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                 f'Install-Language -Language {language_code}'],
+                ['powershell', '-NoProfile', '-NonInteractive',
+                 '-ExecutionPolicy', 'Bypass', '-File', script_path, language_code],
                 capture_output=True, text=True, timeout=1800
             )
-            if result.returncode == 0:
-                logger.info(f"언어 팩 설치 완료: {language_code}")
-                return True
-            else:
-                logger.error(f"언어 팩 설치 실패: {result.stderr}")
-                return False
+            success = False
+            for line in result.stdout.splitlines():
+                if line.startswith('OK:') or line.startswith('ALREADY:'):
+                    logger.info(f"언어 팩 준비 완료: {line}")
+                    success = True
+                elif line.startswith('SKIP:'):
+                    logger.warning(f"언어 팩: {line[5:]}")
+                    success = True
+                elif line.startswith('FAIL:'):
+                    logger.error(f"언어 팩 설치 실패: {line[5:]}")
+                elif line.startswith('START:') or line.startswith('STATUS:') or line.startswith('LOG:'):
+                    logger.info(f"언어 팩: {line}")
+            if result.stderr:
+                logger.error(f"언어 팩 stderr: {result.stderr.strip()}")
+            return success
         except subprocess.TimeoutExpired:
             logger.error(f"언어 팩 설치 타임아웃 (30분): {language_code}")
             return False
         except Exception as e:
             logger.error(f"언어 팩 설치 오류: {e}")
             return False
+        finally:
+            if script_path and os.path.exists(script_path):
+                try:
+                    os.unlink(script_path)
+                except Exception:
+                    pass
 
     @staticmethod
     def _setup_user_language(username: str, password: str, language: str) -> bool:
@@ -415,8 +459,11 @@ reg unload $hive | Out-Null
                     return "오류: 비밀번호가 필요합니다"
 
                 # 1. 언어 팩 설치 (계정 생성 전)
+                lang_pack_ok = True
                 if language:
-                    CommandExecutor._install_language_pack(language)
+                    lang_pack_ok = CommandExecutor._install_language_pack(language)
+                    if not lang_pack_ok:
+                        logger.warning(f"언어 팩 설치 실패 ({language}), 계정 생성은 계속 진행")
 
                 # 2. 계정 생성
                 result = subprocess.run(
@@ -435,7 +482,9 @@ reg unload $hive | Out-Null
                     
                     # 3. 언어 설정 (프로필 강제 생성 + NTUSER.DAT 레지스트리 직접 설정)
                     if language:
-                        if CommandExecutor._setup_user_language(username, password, language):
+                        if not lang_pack_ok:
+                            msg += f" (언어 팩 없음: {language})"
+                        elif CommandExecutor._setup_user_language(username, password, language):
                             msg += f" (언어: {language})"
                         else:
                             msg += f" (언어 설정 실패: {language})"

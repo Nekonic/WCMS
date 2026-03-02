@@ -12,6 +12,32 @@ import shutil
 def print_step(message):
     print(f"\n\033[1;34m[WCMS] {message}\033[0m")
 
+
+def get_client_version() -> str:
+    """클라이언트 최신 버전 반환.
+    1순위: git 태그 (client-v*) 중 가장 높은 버전
+    2순위: client/VERSION 파일
+    """
+    try:
+        result = subprocess.run(
+            ['git', 'tag', '--list', 'client-v*', '--sort=-version:refname'],
+            capture_output=True, text=True
+        )
+        tags = [t.strip() for t in result.stdout.splitlines() if t.strip().startswith('client-v')]
+        if tags:
+            return tags[0].replace('client-v', '')
+    except Exception:
+        pass
+
+    version_file = os.path.join('client', 'VERSION')
+    try:
+        with open(version_file, encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception:
+        pass
+
+    return '0.0.0'
+
 def check_uv():
     """uv 설치 확인 및 안내"""
     if shutil.which("uv") is None:
@@ -134,26 +160,27 @@ def init_db(force=False):
 
     # 클라이언트 버전 초기 데이터 삽입
     print_step("클라이언트 버전 초기 데이터 삽입 중...")
+    client_ver = get_client_version()
     try:
         conn = sqlite3.connect(db_path)
         conn.execute('''
             INSERT INTO client_versions (version, download_url, changelog)
             VALUES (?, ?, ?)
         ''', (
-            '0.9.2',
-            'https://github.com/Nekonic/WCMS/releases/download/client-v0.9.2/WCMS-Client.exe',
-            'v0.9.2 - BUG FIX'
+            client_ver,
+            f'https://github.com/Nekonic/WCMS/releases/download/client-v{client_ver}/WCMS-Client.exe',
+            f'v{client_ver}'
         ))
         conn.commit()
         conn.close()
-        print("[✓] 클라이언트 버전 0.9.2 등록 완료.")
+        print(f"[✓] 클라이언트 버전 {client_ver} 등록 완료.")
     except Exception as e:
         print(f"[!] 클라이언트 버전 삽입 실패: {e}")
 
     print("\n✅ 초기화 완료.")
     print("    관리자 ID: admin")
     print("    비밀번호 : admin")
-    print("    클라이언트 버전: 0.9.2")
+    print(f"    클라이언트 버전: {client_ver}")
 
 def migrate_db(migration_file=None):
     """데이터베이스 마이그레이션 실행

@@ -301,7 +301,7 @@ async function startResultPolling(commandIds) {
     };
 
     await poll();
-    resultPollingInterval = setInterval(poll, 2000);
+    resultPollingInterval = setInterval(poll, 5000);
 }
 
 function updateCommandResult(cmd) {
