@@ -263,6 +263,7 @@ class CommandExecutor:
         lang_test.ps1에서 검증된 방식.
         """
         ps_script = r"""param($Language)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $hasCmd = $null -ne (Get-Command Install-Language -ErrorAction SilentlyContinue)
 if (-not $hasCmd) { Write-Output "SKIP:Install-Language cmdlet 없음 (Windows 10 또는 모듈 없음)"; exit 0 }
 
@@ -304,7 +305,7 @@ if ($job.State -eq 'Completed') {
             result = subprocess.run(
                 ['powershell', '-NoProfile', '-NonInteractive',
                  '-ExecutionPolicy', 'Bypass', '-File', script_path, language_code],
-                capture_output=True, text=True, timeout=1800
+                capture_output=True, text=True, encoding='utf-8', timeout=1800
             )
             logger.info(f"언어 팩 설치 스크립트 종료 (rc={result.returncode})")
             success = False
@@ -341,6 +342,7 @@ if ($job.State -eq 'Completed') {
         lang_test.ps1 에서 검증된 방식: LogonUser + LoadUserProfile + reg load/add/unload
         """
         ps_script = r"""param($Username, $Password, $Language)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 Add-Type -TypeDefinition @'
 using System;
@@ -417,7 +419,7 @@ reg unload $hive | Out-Null
                 ['powershell', '-NoProfile', '-NonInteractive',
                  '-ExecutionPolicy', 'Bypass', '-File', script_path,
                  username, password, language],
-                capture_output=True, text=True, timeout=60
+                capture_output=True, text=True, encoding='utf-8', timeout=60
             )
             if result.returncode == 0:
                 logger.info(f"언어 레지스트리 설정 완료: {username} -> {language}")
@@ -532,9 +534,11 @@ reg unload $hive | Out-Null
     def show_message(message: str, duration: int = 10) -> str:
         """사용자에게 메시지 표시"""
         try:
-            msg_exe = r'C:\Windows\System32\msg.exe'
+            system_root = os.environ.get('SystemRoot', r'C:\Windows')
+            msg_exe = os.path.join(system_root, 'System32', 'msg.exe')
             if not os.path.exists(msg_exe):
-                msg_exe = 'msg'
+                # 32비트 프로세스(WOW64)에서 64비트 System32 접근용 alias
+                msg_exe = os.path.join(system_root, 'Sysnative', 'msg.exe')
             result = subprocess.run([msg_exe, '*', message], capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:

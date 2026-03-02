@@ -315,16 +315,25 @@ def create_app(config_name='development'):
         """등록 토큰 관리 페이지"""
         return render_template('registration_tokens.html', username=session.get('username'))
 
-    # 컨텍스트 프로세서 (모든 템플릿에 실습실 목록 주입)
+    # 컨텍스트 프로세서 (모든 템플릿에 실습실 목록 및 서버 버전 주입)
     @app.context_processor
     def inject_rooms():
         try:
             db = get_db()
             rooms = db.execute('SELECT room_name FROM seat_layout WHERE is_active=1 ORDER BY room_name').fetchall()
             room_list = [r['room_name'] for r in rooms]
-            return {'all_rooms': room_list}
         except Exception:
-            return {'all_rooms': []}
+            room_list = []
+        server_version = ''
+        server_version_date = ''
+        try:
+            version_path = os.path.join(os.path.dirname(__file__), 'VERSION')
+            lines = open(version_path, encoding='utf-8').read().splitlines()
+            server_version = lines[0] if lines else ''
+            server_version_date = lines[1] if len(lines) > 1 else ''
+        except Exception:
+            pass
+        return {'all_rooms': room_list, 'server_version': server_version, 'server_version_date': server_version_date}
 
     # 에러 핸들러
     @app.errorhandler(404)

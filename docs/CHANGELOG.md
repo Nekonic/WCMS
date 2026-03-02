@@ -7,9 +7,72 @@
 
 ---
 
-## [0.9.3] - 2026-03-02
+## [0.9.6] - 2026-03-03
 
 > **상태**: In Progress
+> **테마**: 버그 수정
+
+### Fixed - 버그 수정
+- **메시지 전송 오류 (WOW64)** (`client/executor.py`)
+  - 32비트 서비스 프로세스에서 WOW64 파일시스템 리디렉션으로 `System32\msg.exe` 접근 불가
+  - `Sysnative` 별칭을 폴백으로 추가: `System32` 미존재 시 `Sysnative` 경로 시도
+
+### Changed - 변경
+- **서버 버전 자동 주입** (`server/VERSION`, `server/app.py`, `server/templates/about.html`)
+  - `server/VERSION` 파일(버전, 날짜 2줄)을 컨텍스트 프로세서로 모든 템플릿에 주입
+  - `about.html` 버전/날짜 하드코딩 → `{{ server_version }}` / `{{ server_version_date }}`
+
+---
+
+## [0.9.5] - 2026-03-03
+
+> **상태**: Released
+> **테마**: 버그 수정, 언어 팩 설치 안정화
+
+### Fixed - 버그 수정
+- **언어 팩 설치 실패 (mn-MN 등)** (`client/executor.py`)
+  - `Install-Language`가 `-NonInteractive` 모드의 `ShouldProcess` 확인으로 차단됨
+  - `Start-Job`으로 별도 세션 실행하여 stdin 격리, 차단 우회
+  - 설치 진행 상황 60초 주기 로그 출력 추가 (최대 30분 대기)
+- **명령 결과 Rate Limit 초과** (`server/app.py`, `server/static/js/commands.js`)
+  - `get_command_results` 2초 폴링 → 시간당 1,800 요청으로 50회/시간 제한 초과
+  - `limiter.exempt(admin_bp)` 적용 (세션 인증으로 보호됨)
+  - 폴링 간격 2,000ms → 5,000ms
+- **설치 스크립트 다운로드 후 Enter 키 블로킹** (`server/api/install.py`)
+  - `Invoke-WebRequest` 진행 표시줄이 배치 스크립트 stdin 버퍼 손상
+  - `$ProgressPreference = 'SilentlyContinue'` 추가
+- **PowerShell 출력 한글 깨짐** (`client/executor.py`)
+  - 한국어 Windows에서 PowerShell 기본 stdout 인코딩 CP949
+  - PS1 스크립트 상단에 `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()` 추가
+  - `subprocess.run` 호출 `encoding='utf-8'` 지정
+
+### Changed - 변경
+- **클라이언트 버전 자동 감지** (`manage.py`, `client/VERSION`)
+  - git 태그(`client-v*`) 우선 조회, 없으면 `client/VERSION` 파일 폴백
+  - `client/VERSION` 파일 추가 (git 태그 없는 환경 대비)
+
+### Docs - 문서
+- `README.md`, `docs/GETTING_STARTED.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/API.md` v0.9.5 기준 갱신
+- `docs/README.md` 신규 추가 (문서 목록 인덱스)
+- 사이드바 "소개" 링크 실습실 목록 위로 이동 (`server/templates/base.html`)
+
+---
+
+## [0.9.4] - 2026-03-02
+
+> **상태**: Released
+> **테마**: 언어 설정 초기 구현 (불안정, v0.9.5에서 수정)
+
+### Changed - 변경
+- **계정 언어 설정 1차 구현** (`client/executor.py`)
+  - `Install-Language` + `LogonUser`/`LoadUserProfile` + NTUSER.DAT 레지스트리 직접 설정
+  - 알려진 문제: `-NonInteractive` 모드에서 언어 팩 미설치 (v0.9.5에서 수정)
+
+---
+
+## [0.9.3] - 2026-03-01
+
+> **상태**: Released
 > **테마**: 버그 수정, 언어 설정 재구현
 
 ### Fixed - 버그 수정

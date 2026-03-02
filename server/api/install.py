@@ -117,7 +117,7 @@ SET EXE_PATH=%TEMP_DIR%\\WCMS-Client.exe
 
 if not exist "%TEMP_DIR%" mkdir "%TEMP_DIR%"
 
-powershell -Command "Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%EXE_PATH%' -UseBasicParsing"
+powershell -Command "$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%EXE_PATH%' -UseBasicParsing"
 if %errorLevel% neq 0 (
     echo [ERROR] Download failed
     echo.

@@ -94,15 +94,16 @@
         <div class="version-info">
             <div class="version-main">
                 <div class="v-label">현재 버전</div>
-                <div class="v-value">v0.9.2</div>
-                <div class="v-date">2026-02-26</div>
+                <div class="v-value">v{{ server_version }}</div>
+                <div class="v-date">{{ server_version_date }}</div>
             </div>
             <div class="version-changes">
                 <div class="v-label">최신 업데이트</div>
                 <ul class="changelog-list">
-                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>Long-poll 통신 복원 (120 req/시간)</li>
-                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>네트워크 이벤트 이력 기록</li>
-                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>서버 로그 관리자 페이지</li>
+                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>메시지 전송 오류 수정 (WOW64 → Sysnative 폴백)</li>
+                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>언어 팩 설치 Start-Job 방식으로 안정화</li>
+                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>명령 결과 Rate Limit 오류 수정</li>
+                    <li><i class="fas fa-check" style="color: #10b981; margin-right: 0.5em;"></i>설치 스크립트 다운로드 중단 버그 수정</li>
                 </ul>
             </div>
         </div>
