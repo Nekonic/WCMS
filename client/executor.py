@@ -300,11 +300,13 @@ if ($job.State -eq 'Completed') {
                 f.write(ps_script)
                 script_path = f.name
 
+            logger.info(f"언어 팩 설치 시작: {language_code} (Start-Job, 최대 30분 소요)")
             result = subprocess.run(
                 ['powershell', '-NoProfile', '-NonInteractive',
                  '-ExecutionPolicy', 'Bypass', '-File', script_path, language_code],
                 capture_output=True, text=True, timeout=1800
             )
+            logger.info(f"언어 팩 설치 스크립트 종료 (rc={result.returncode})")
             success = False
             for line in result.stdout.splitlines():
                 if line.startswith('OK:') or line.startswith('ALREADY:'):
@@ -454,6 +456,7 @@ reg unload $hive | Out-Null
                       language: str = None) -> str:
         """Windows 계정 관리 통합 함수"""
         try:
+            logger.info(f"계정 관리 명령: action={action}, username={username}, language={language}")
             if action == 'create':
                 if not password:
                     return "오류: 비밀번호가 필요합니다"
