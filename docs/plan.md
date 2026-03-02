@@ -5,31 +5,77 @@
 
 ---
 
-## [v0.9.3] - 보안 강화 (ZAP 보고서 기반)
+## [v0.9.3] - 안정화 및 보안 강화
 
-`docs/SECURITY_FINDINGS.md` 기반. ZAP 스캔 보고서(v0.9.2 기준) 신규 발견 항목.
+### 기능 점검 (코드 → VM 순서)
 
-### 신규 보안 항목
+> 점검 방법: 코드 확인 → 서버 로컬 실행 → VM 클라이언트 연결 순서로 진행
+> 상태: `[ ]` 미점검 / `[o]` 코드 확인 완료 / `[-]` VM 검증 완료 / `[x]` 버그 발견
 
-- [ ] SRI (Subresource Integrity): CDN 링크에 `integrity` 속성 추가
-  - Font Awesome (`cdnjs.cloudflare.com`)
-  - Chart.js (`cdn.jsdelivr.net`)
-- [ ] Cross-Origin 헤더 추가 (Talisman 설정)
-  - `Cross-Origin-Embedder-Policy: require-corp`
-  - `Cross-Origin-Opener-Policy: same-origin`
-  - `Cross-Origin-Resource-Policy: same-origin`
-- [ ] `Permissions-Policy` 헤더 추가 (Talisman 설정)
-- [ ] `Server` 헤더 버전 정보 노출 제거 (`Werkzeug/3.1.6 Python/3.9.25`)
-  - Gunicorn 설정 또는 Flask after_request 훅으로 제거
-- [ ] 로그인 500 에러 원인 조사
-  - ZAP POST `/login` → HTTP 500, SQL 구문이 에러 페이지에 노출됨
-  - CSRF 수정 후 재현 여부 확인 (이제 400 반환 예상)
+#### 인증
+- [ ] 로그인 / 로그아웃
+- [ ] 미로그인 시 관리자 페이지 접근 차단
+
+#### 메인 화면 (index)
+- [ ] 실습실 선택 및 사이드바 표시
+- [ ] PC 그리드 렌더링 (좌석 배치)
+- [ ] PC 클릭 → 모달 표시 (페이지 이동 없이)
+- [ ] 모달: PC 정보 표시 (상태, CPU, RAM, 디스크, IP)
+- [ ] 선택 모드 (토글, 체크박스, 드래그)
+- [ ] 일괄 명령 전송 (선택된 PC)
+
+#### PC 명령 (클라이언트 실행 확인)
+- [ ] 종료 / 재시작 (delay, message 포함)
+- [ ] 메시지 전송 (`msg *`)
+- [ ] 프로세스 강제 종료 (`taskkill`)
+- [ ] 계정 생성 / 삭제 / 비밀번호 변경 (`net user`)
+  - [-] 계정 생성 시 언어팩 설치 및 표시 언어 지정 (`Install-Language` + NTUSER.DAT)
+        검증 완료 (lang_test.ps1), executor.py 적용 완료
+- [ ] 프로그램 설치 / 삭제 (Chocolatey)
+- [ ] CMD 명령 실행 (`execute`)
+
+#### 클라이언트 통신
+- [ ] Long-poll 연결 유지 (30초 주기)
+- [ ] 명령 수신 후 즉시 실행
+- [ ] 오프라인 판정 (40초 threshold)
+- [ ] 네트워크 단절 → offline 신호 → 재연결 흐름
+- [ ] 재연결 시 network_events 기록
+
+#### 관리자 페이지
+- [ ] 시스템 상태 (`/system/status`)
+- [ ] 실습실 관리 - 생성 / 수정 / 삭제
+- [ ] 좌석 배치 편집기 - 드래그 배치 / 저장
+- [ ] 등록 토큰 - 생성 / 삭제 / 사용 여부
+- [ ] 클라이언트 버전 관리 페이지
+- [ ] 서버 로그 페이지 (로그 tail + 단절 이력)
+- [ ] 프로세스 기록 (`/pc/<id>/history`)
+
+#### PC 등록 흐름
+- [ ] 토큰 생성 → 클라이언트 등록 → 그리드 표시
+- [ ] 미검증 PC 처리
+
+### 안정화 - 버그 수정
+
+- [x] PC 클릭 시 새 페이지로 이동하던 버그 수정 (`pc-grid.js openModal` 덮어쓰기 제거)
+
+### 보안 (ZAP 보고서 기반)
+
+- [ ] SRI: CDN 링크에 `integrity` 속성 추가 (Font Awesome, Chart.js)
+- [ ] Cross-Origin 헤더 추가 (COEP / COOP / CORP) — Talisman 설정
+- [ ] `Permissions-Policy` 헤더 추가 — Talisman 설정
+- [ ] `Server` 헤더 버전 노출 제거 (`Werkzeug/3.1.6 Python/3.9.25`)
+- [ ] 로그인 POST 500 에러 재현 여부 확인 (CSRF 수정 후)
+
+### 테스트 커버리지 개선
+
+- [ ] 웹 페이지 라우트 테스트 추가 (`/`, `/login`, `/system/status` 등)
+- [ ] 기능 점검 결과 기반으로 누락된 시나리오 테스트 작성
 
 ---
 
-## [v0.10.x ~] - 기능 추가 및 안정화
+## [v0.10.x ~] - 기능 추가
 
-> v0.9.x 안정화 후 기능별로 버전 올리며 진행.
+> v0.9.x 안정화 완료 후 진행.
 
 ### 인증 강화
 - [ ] 관리자 2FA (OTP 기반)
@@ -40,6 +86,3 @@
 ### 모니터링
 - [ ] 대시보드 개선 (실시간 리소스 그래프)
 - [ ] 알림 시스템 (디스코드/슬랙)
-
-### 테스트
-- [ ] Docker E2E 테스트 강화

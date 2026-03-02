@@ -7,6 +7,36 @@
 
 ---
 
+## [0.9.3] - 2026-03-02
+
+> **상태**: In Progress
+> **테마**: 버그 수정, 언어 설정 재구현
+
+### Fixed - 버그 수정
+- **메시지 전송 오류** (`client/executor.py`)
+  - `msg.exe` 경로 미지정으로 서비스 컨텍스트(LocalSystem)에서 `[WinError 2]` 발생
+  - 전체 경로 `C:\Windows\System32\msg.exe` 지정, 없을 경우 `msg` 폴백
+- **`manage.py run` 이중 로그 출력** (`server/app.py`, `manage.py`)
+  - Flask debug 모드 실행 시 reloader가 부모/자식 프로세스를 각각 실행
+  - `WERKZEUG_RUN_MAIN` 환경변수 확인으로 백그라운드 체커를 자식 프로세스에서만 시작
+- **종료 후 타임아웃 로그 중복 기록** (`server/api/client.py`)
+  - shutdown 신호와 Long-poll 요청이 동시에 처리될 때 경쟁 조건 발생
+  - shutdown 이벤트 기준 5초 이내 폴링은 재연결로 처리하지 않도록 수정
+
+### Changed - 변경
+- **계정 언어 설정 방식 재구현** (`client/executor.py`)
+  - 기존: HKLM RunOnce + 조건부 실행 (미검증, 불안정)
+  - 변경: `Install-Language`(LXP) + `LogonUser`/`LoadUserProfile` + NTUSER.DAT 레지스트리 직접 설정
+  - 검증 완료: 첫 로그인부터 표시 언어 적용, Enter 키 블로킹 없음
+
+### Docs - 문서
+- **`docs/API.md` 전면 재작성**
+  - v0.9.2 실제 코드 기준으로 엔드포인트 경로/메서드/파라미터 전부 수정
+  - admin Blueprint prefix 오류 수정 (`/api/admin/...` → `/api/...`)
+  - Long-poll 방식, offline 신호, 설치 API 문서 추가
+
+---
+
 ## [0.9.2] - 2026-02-27
 
 > **상태**: Released

@@ -1,786 +1,536 @@
-# WCMS API 문서
+# WCMS API 레퍼런스
 
-> **버전**: 0.8.7  
-> **기본 URL**: `http://your-server:5050`  
-> **업데이트**: 2026-02-11  
-> **주요 변경**: 자동 업데이트, 프로그램 삭제, 계정 생성 옵션 추가
-
----
-
-## 목차
-
-1. [개요](#개요)
-2. [인증](#인증)
-3. [클라이언트 API](#클라이언트-api)
-4. [관리자 API](#관리자-api)
-5. [오류 코드](#오류-코드)
-
----
-
-## 개요
-
-### 통신 프로토콜
-- **프로토콜**: HTTP/1.1
-- **데이터 형식**: JSON
-- **문자 인코딩**: UTF-8
-- **타임아웃**: 30초 (요청), 5초 (명령 폴링)
-
-### v0.8.7 주요 변경사항
-1. **자동 업데이트**: 클라이언트가 서버에서 새 버전을 감지하고 자동으로 업데이트합니다.
-2. **프로그램 삭제**: Chocolatey를 사용하여 프로그램을 삭제할 수 있습니다.
-3. **계정 생성 옵션**: 윈도우 계정 생성 시 언어 및 키보드 설정 파라미터가 추가되었습니다.
+> **버전**: v0.9.2
+> **Base URL**: `http://<server>:5050`
 
 ---
 
 ## 인증
 
-### 관리자 API
+| 대상 | 방식 |
+|------|------|
+| 클라이언트 API | `machine_id` (등록된 PC 식별) |
+| 관리자 API | 세션 쿠키 (`/login` POST 후) |
+| 공개 엔드포인트 | 없음 |
 
-관리자 API는 **세션 기반 인증**을 사용합니다.
-
-#### 로그인
-
-**엔드포인트:**
-```http
-POST /login
-Content-Type: application/x-www-form-urlencoded
-```
-
-**요청 본문:**
-```
-username=admin&password=your_password
-```
-
-**응답:**
-- 성공: 302 Redirect to /
-- 실패: 302 Redirect to /login
-
-**세션 관리:**
-- 쿠키 이름: `session`
-- 만료: 브라우저 종료 시
-
-### 클라이언트 API
-
-클라이언트 API는 **PIN 기반 등록 인증**을 사용합니다.
-
-- **등록 시**: 관리자가 생성한 6자리 PIN 필수
-- **등록 후**: `machine_id` 기반 식별
+관리자 전용 엔드포인트는 미로그인 시 `401` 반환.
 
 ---
 
-## 클라이언트 API
+## 엔드포인트 목록
 
-### 1. 버전 확인
+### 클라이언트 API (`/api/client`)
 
-최신 클라이언트 버전을 조회합니다.
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/client/register` | PC 등록 (PIN 필수) |
+| POST | `/api/client/heartbeat` | 상태 업데이트 |
+| GET | `/api/client/commands` | 명령 대기 (Long-poll) |
+| POST | `/api/client/commands/<id>/result` | 명령 결과 제출 |
+| POST | `/api/client/offline` | 네트워크 오프라인 신호 |
+| POST | `/api/client/shutdown` | 종료 신호 |
+| GET | `/api/client/version` | 최신 클라이언트 버전 조회 |
 
-**엔드포인트:**
-```http
-GET /api/client/version
-```
+### 관리자 API - PC
 
-**응답:**
-```json
-{
-  "status": "success",
-  "version": "0.8.7",
-  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.8.7/WCMS-Client.exe",
-  "changelog": "자동 업데이트 및 프로그램 삭제 기능 추가"
-}
-```
+| 메서드 | 경로 | 인증 | 설명 |
+|--------|------|------|------|
+| GET | `/api/pcs` | 없음 | PC 목록 (`?room=<name>` 필터) |
+| GET | `/api/pc/<id>` | 없음 | PC 상세 정보 |
+| GET | `/api/pc/<id>/history` | 관리자 | 프로세스 기록 |
+| DELETE | `/api/pc/<id>` | 관리자 | PC 삭제 |
+| GET | `/api/pcs/duplicates` | 관리자 | 중복 호스트명 PC 목록 |
+| GET | `/api/admin/pcs/unverified` | 관리자 | 미검증 PC 목록 |
+
+### 관리자 API - PC 명령
+
+모든 명령 엔드포인트는 관리자 인증 필요.
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/pc/<id>/command` | 범용 명령 전송 |
+| POST | `/api/pc/<id>/shutdown` | 종료 |
+| POST | `/api/pc/<id>/restart` | 재시작 |
+| POST | `/api/pc/<id>/message` | 메시지 전송 |
+| POST | `/api/pc/<id>/kill-process` | 프로세스 강제 종료 |
+| POST | `/api/pc/<id>/install` | 프로그램 설치 (Chocolatey) |
+| POST | `/api/pc/<id>/uninstall` | 프로그램 삭제 (Chocolatey) |
+| POST | `/api/pc/<id>/account/create` | Windows 계정 생성 |
+| POST | `/api/pc/<id>/account/delete` | Windows 계정 삭제 |
+| POST | `/api/pc/<id>/account/password` | 비밀번호 변경 |
+| DELETE | `/api/pc/<id>/commands/clear` | 대기 명령 전체 삭제 |
+
+### 관리자 API - 일괄 명령
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/pcs/bulk-command` | 여러 PC에 동시 명령 |
+| DELETE | `/api/pcs/commands/clear` | 여러 PC 대기 명령 삭제 |
+| GET | `/api/commands/pending` | 전체 대기 명령 목록 |
+| POST | `/api/commands/results` | 명령 결과 조회 (폴링) |
+
+### 관리자 API - 실습실 / 좌석 배치
+
+| 메서드 | 경로 | 인증 | 설명 |
+|--------|------|------|------|
+| GET | `/api/rooms` | 관리자 | 실습실 목록 |
+| POST | `/api/rooms` | 관리자 | 실습실 생성 |
+| PUT | `/api/rooms/<id>` | 관리자 | 실습실 수정 |
+| DELETE | `/api/rooms/<id>` | 관리자 | 실습실 삭제 |
+| GET | `/api/layout/map/<room_name>` | 없음 | 좌석 배치 조회 |
+| POST | `/api/layout/map/<room_name>` | 관리자 | 좌석 배치 저장 |
+
+### 관리자 API - 클라이언트 버전
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/client/versions` | 버전 목록 |
+| POST | `/api/client/version` | 버전 등록 |
+| DELETE | `/api/client/version/<id>` | 버전 삭제 |
+
+### 관리자 API - 등록 토큰
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/admin/registration-token` | 토큰 생성 |
+| GET | `/api/admin/registration-tokens` | 토큰 목록 |
+| DELETE | `/api/admin/registration-token/<id>` | 토큰 삭제 |
+
+### 설치 API (`/install`)
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/install/install.cmd` | Windows Batch 설치 스크립트 |
+| GET | `/install/install.ps1` | PowerShell 설치 스크립트 |
+| GET | `/install/version` | 버전 조회 (→ `/api/client/version` 리다이렉트) |
+
+`?server=<url>` 쿼리로 스크립트 내 서버 URL 지정 가능. 미지정 시 현재 호스트 사용.
 
 ---
 
-### 2. 클라이언트 등록 (PIN 필수)
+## 상세
 
-**엔드포인트:**
-```http
-POST /api/client/register
-Content-Type: application/json
-```
+### POST /api/client/register
 
-**요청:**
 ```json
+// Request
 {
-  "machine_id": "A1B2C3D4E5F6",
+  "machine_id": "DESKTOP-ABCDEF",
   "pin": "123456",
-  "hostname": "LAB-PC-01",
-  "mac_address": "A1:B2:C3:D4:E5:F6",
+  "hostname": "DESKTOP-ABCDEF",
+  "mac_address": "AA:BB:CC:DD:EE:FF",
   "ip_address": "192.168.1.100",
-  "cpu_model": "Intel Core i5-9400",
+  "cpu_model": "Intel Core i5-10400",
   "cpu_cores": 6,
-  "cpu_threads": 6,
-  "ram_total": 16.0,
-  "disk_info": {
-    "C:\\": {"total_gb": 237.0, "fstype": "NTFS"}
-  },
+  "cpu_threads": 12,
+  "ram_total": 16384,
+  "disk_info": "[{\"device\": \"C:\\\\\", \"total\": 512000, \"used\": 128000}]",
   "os_edition": "Windows 10 Pro",
   "os_version": "10.0.19045"
 }
+
+// Response 200
+{ "status": "success", "pc_id": 1 }
+// Response 400: machine_id 또는 pin 누락
+// Response 403: PIN 검증 실패 또는 만료
 ```
-
-**필수 필드:**
-- `machine_id`: 하드웨어 ID
-- `pin`: 6자리 숫자 PIN
-- `hostname`: PC 이름
-- `mac_address`: MAC 주소
-
-**응답:**
-```json
-{
-  "status": "success",
-  "message": "Registration successful",
-  "pc_id": 123
-}
-```
-
-**오류:**
-- `400`: PIN 누락
-- `403`: PIN 검증 실패 (`"Invalid or expired PIN"`)
-- `403`: 1회용 PIN 재사용 (`"PIN already used"`)
 
 ---
 
-### 3. 하트비트 (네트워크 최적화)
+### POST /api/client/heartbeat
 
-클라이언트의 동적 상태를 전송합니다. **네트워크 부하 최소화를 위해 델타 전송 방식 지원**
+`full_update=true` (기본): CPU, RAM, 디스크, 프로세스 전체 저장.
+`full_update=false`: CPU, RAM만 경량 업데이트.
 
-**엔드포인트:**
-```http
-POST /api/client/heartbeat
-Content-Type: application/json
-```
-
-**전체 하트비트 (초회 또는 5분마다):**
 ```json
+// Request
 {
-  "machine_id": "A1B2C3D4E5F6",
+  "machine_id": "DESKTOP-ABCDEF",
   "full_update": true,
   "system_info": {
     "cpu_usage": 45.2,
-    "ram_used": 8.5,
-    "ram_usage_percent": 53.1,
-    "disk_usage": {
-      "C:\\": {"used_gb": 107.2, "free_gb": 129.8, "percent": 45.2}
-    },
+    "ram_used": 8192,
+    "ram_usage_percent": 50.0,
+    "disk_usage": "[{\"device\": \"C:\\\\\", \"percent\": 25.0}]",
     "current_user": "student",
-    "uptime": 86400,
+    "uptime": 3600,
     "ip_address": "192.168.1.100",
-    "processes": ["chrome.exe", "Code.exe", "python.exe"]
+    "processes": ["chrome.exe", "notepad.exe"]
   }
 }
-```
 
-**경량 하트비트 (명령 조회 시 함께 전송):**
-```json
-{
-  "machine_id": "A1B2C3D4E5F6",
-  "full_update": false,
-  "system_info": {
-    "cpu_usage": 52.1,
-    "ram_usage_percent": 58.3,
-    "ip_address": "192.168.1.101"
-  }
-}
-```
-
-**필드 설명:**
-
-| 필드 | 전체 | 경량 | 설명 |
-|------|------|------|------|
-| `full_update` | ✅ | ✅ | 전체 업데이트 여부 |
-| `cpu_usage` | ✅ | ✅ | CPU 사용률 (0~100) |
-| `ram_usage_percent` | ✅ | ✅ | RAM 사용률 (0~100) |
-| `ip_address` | ✅ | ✅ | IP 주소 (변경 감지용) |
-| `ram_used` | ✅ | ❌ | RAM 사용량 (GB) |
-| `disk_usage` | ✅ | ❌ | 디스크 사용량 (5분마다만) |
-| `current_user` | ✅ | ❌ | 현재 사용자 |
-| `uptime` | ✅ | ❌ | 가동 시간 |
-| `processes` | ✅ | ❌ | 프로세스 목록 (대역폭 큰 데이터) |
-
-**네트워크 최적화 전략:**
-
-1. **IP 주소 자동 업데이트**
-   - 모든 하트비트에 IP 포함 (4바이트)
-   - 서버가 자동으로 `pc_info.ip_address` 업데이트
-   - DHCP, VPN, 네트워크 전환 대응
-
-2. **델타 전송 (경량 하트비트)**
-   - 명령 조회 시 함께 전송 (HTTP 오버헤드 제거)
-   - 프로세스 목록 제외 → **대역폭 90% 절감**
-   - 2초마다: CPU, RAM, IP만 전송 (~100바이트)
-
-3. **전체 업데이트 (5분마다)**
-   - 디스크, 사용자, 프로세스 목록 포함
-   - 데이터 정합성 보장
-   - 프로세스 히스토리 수집
-
-**응답:**
-```json
-{
-  "status": "success",
-  "message": "Heartbeat received",
-  "ip_changed": true
-}
-```
-
-**대역폭 비교:**
-
-| 항목 | 기존 방식 | 개선 방식 | 절감률 |
-|------|----------|----------|--------|
-| 하트비트 주기 | 5분 | 5분 (전체) + 2초 (경량) | - |
-| 전체 데이터 크기 | ~5KB | ~5KB | 0% |
-| 경량 데이터 크기 | - | ~100B | - |
-| 시간당 전송량 (100대) | 60MB | 6MB (전체) + 18MB (경량) = 24MB | **60% 절감** |
-| 명령 조회 통합 | ❌ | ✅ | HTTP 오버헤드 50% 절감 |
-
-**클라이언트 구현 권장:**
-```python
-last_full_heartbeat = 0
-FULL_HEARTBEAT_INTERVAL = 300  # 5분
-
-while True:
-    # 명령 조회 + 경량 하트비트 (2초마다)
-    response = requests.post(
-        f"{SERVER_URL}/api/client/command",  # GET → POST로 변경
-        json={
-            "machine_id": MACHINE_ID,
-            "heartbeat": {
-                "full_update": False,
-                "system_info": {
-                    "cpu_usage": psutil.cpu_percent(),
-                    "ram_usage_percent": psutil.virtual_memory().percent,
-                    "ip_address": get_ip_address()
-                }
-            }
-        }
-    )
-    
-    # 5분마다 전체 하트비트
-    if time.time() - last_full_heartbeat > FULL_HEARTBEAT_INTERVAL:
-        send_full_heartbeat()
-        last_full_heartbeat = time.time()
-    
-    time.sleep(2)
+// Response 200
+{ "status": "success", "full_update": true, "ip_changed": false }
 ```
 
 ---
 
-### 4. 명령 조회 + 경량 하트비트 (통합 엔드포인트)
+### GET /api/client/commands
 
-명령 조회와 경량 하트비트를 통합하여 **HTTP 요청 오버헤드 50% 절감**
+명령이 올 때까지 연결을 유지하는 Long-poll.
+`timeout`초(최대 60) 동안 0.5초마다 명령을 확인하고 즉시 반환.
+연결 자체가 생존 신호로 처리되어 `last_seen`을 갱신함.
+오프라인이었던 PC가 재연결하면 `network_events`에 복구 이벤트가 기록됨.
 
-**엔드포인트:**
-```http
-POST /api/client/commands
-Content-Type: application/json
+```
+GET /api/client/commands?machine_id=DESKTOP-ABCDEF&timeout=30
 ```
 
-**요청 (하트비트 포함):**
 ```json
-{
-  "machine_id": "A1B2C3D4E5F6",
-  "heartbeat": {
-    "cpu_usage": 52.1,
-    "ram_usage_percent": 58.3,
-    "ip_address": "192.168.1.101"
-  }
-}
-```
-
-**요청 (하트비트 없음):**
-```json
-{
-  "machine_id": "A1B2C3D4E5F6"
-}
-```
-
-**응답 (명령 있음):**
-```json
+// 명령 있음
 {
   "status": "success",
   "data": {
     "has_command": true,
     "command": {
-      "id": 456,
+      "id": 42,
       "type": "shutdown",
-      "parameters": {
-        "delay": 60,
-        "message": "System maintenance"
-      },
+      "parameters": { "delay": 60, "message": "점검을 위해 종료합니다." },
       "timeout": 300,
-      "priority": 5
-    },
-    "heartbeat_processed": true,
-    "ip_changed": true
+      "priority": 5,
+      "created_at": "2026-02-27T10:00:00"
+    }
   }
 }
+
+// 명령 없음 (timeout 만료)
+{ "status": "success", "data": { "has_command": false, "command": null } }
 ```
 
-**응답 (명령 없음):**
-```json
-{
-  "status": "success",
-  "data": {
-    "has_command": false,
-    "command": null,
-    "heartbeat_processed": true,
-    "ip_changed": false
-  }
-}
-```
-
-**에러 응답:**
-```json
-{
-  "status": "error",
-  "error": {
-    "code": "PC_NOT_FOUND",
-    "message": "PC not registered: A1B2C3D4E5F6"
-  }
-}
-```
-
-**명령 타입:**
-- `shutdown`: 종료
-- `restart`: 재시작 (reboot → restart로 통일)
-- `message`: 메시지 표시
-- `kill_process`: 프로세스 종료
-- `execute`: CMD 실행
-- `install`: 프로그램 설치 (Chocolatey)
-  - 파라미터: `app_id` (예: `googlechrome`)
-- `uninstall`: 프로그램 삭제 (Chocolatey) **(v0.8.7 추가)**
-  - 파라미터: `app_id` (예: `googlechrome`)
-- `download`: 파일 다운로드
-  - 파라미터: `url`, `destination` (선택)
-- `create_user`: 사용자 생성
-  - 파라미터: `username`, `password`, `full_name`, `comment`, `language`, `keyboard` **(v0.8.7 추가)**
-- `delete_user`: 사용자 삭제
-- `change_password`: 비밀번호 변경
-
-**Rate Limiting:** 최소 2초 간격
-
-**네트워크 최적화 효과:**
-- 기존: 명령 조회 (2초마다) + 하트비트 (5분마다) = 1,800회/시간 + 12회/시간
-- 개선: 통합 요청 (2초마다) = **1,800회/시간 (50% 절감)**
-- HTTP 헤더 오버헤드: ~500바이트/요청 × 12회 절감 = 6KB/시간/PC
-- 100대 기준: **600KB/시간 절감**
-
-**클라이언트 구현 (권장):**
-```python
-import psutil
-import requests
-import time
-
-def get_ip_address():
-    """현재 IP 주소 조회"""
-    import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except:
-        return "Unknown"
-
-last_full_heartbeat = 0
-FULL_HEARTBEAT_INTERVAL = 300  # 5분
-
-while True:
-    # 명령 조회 + 경량 하트비트 통합
-    response = requests.post(
-        f"{SERVER_URL}/api/client/commands",
-        json={
-            "machine_id": MACHINE_ID,
-            "heartbeat": {
-                "cpu_usage": psutil.cpu_percent(interval=0.1),
-                "ram_usage_percent": psutil.virtual_memory().percent,
-                "ip_address": get_ip_address()
-            }
-        },
-        timeout=5
-    )
-    
-    if response.status_code == 200:
-        data = response.json()
-        
-        # 새 API 응답 형식 처리
-        if data.get('status') == 'success':
-            response_data = data.get('data', {})
-            
-            # IP 변경 알림
-            if response_data.get('ip_changed'):
-                logger.info(f"IP 주소 변경됨: {get_ip_address()}")
-            
-            # 명령 처리
-            if response_data.get('has_command'):
-                cmd = response_data.get('command', {})
-                execute_command(cmd['id'], cmd['type'], cmd['parameters'])
-    
-    # 5분마다 전체 하트비트 (프로세스 목록 포함)
-    if time.time() - last_full_heartbeat > FULL_HEARTBEAT_INTERVAL:
-        send_full_heartbeat()
-        last_full_heartbeat = time.time()
-    
 ---
 
-### 5. 명령 결과 보고
+### POST /api/client/commands/<id>/result
 
-**엔드포인트:**
-```http
-POST /api/client/commands/{command_id}/result
-Content-Type: application/json
+```json
+// Request
+{
+  "status": "success",   // "success" | "error" | "timeout"
+  "output": "명령 실행 완료",
+  "error_message": null,
+  "exit_code": 0
+}
+
+// Response 200
+{ "status": "success", "data": { "command_id": 42, "final_status": "success" } }
 ```
 
-**요청:**
+---
+
+### POST /api/client/offline / POST /api/client/shutdown
+
 ```json
+// Request
+{ "machine_id": "DESKTOP-ABCDEF" }
+
+// Response 200
+{ "status": "success" }
+```
+
+`offline`: 네트워크 오류로 연결이 끊길 때 호출 (`reason = "network_error"`).
+`shutdown`: 시스템 종료 전 호출 (`reason = "shutdown"`).
+
+---
+
+### GET /api/client/version
+
+```json
+// Response 200
 {
   "status": "success",
-  "output": "종료 명령 실행됨"
-}
-```
-
-**상태 값:**
-- `success`: 성공적으로 완료
-- `error`: 실행 중 오류 발생
-- `timeout`: 타임아웃 발생
-
-**에러 시 요청:**
-```json
-{
-  "status": "error",
-  "output": "Permission denied",
-  "error_message": "관리자 권한 필요",
-  "exit_code": 1
-}
-```
-
-**응답:**
-```json
-{
-  "status": "success",
-  "data": {
-    "message": "Result recorded",
-    "command_id": 456,
-    "final_status": "success"
-  }
+  "version": "0.9.2",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.9.2/WCMS-Client.exe",
+  "changelog": "v0.9.2 변경사항",
+  "released_at": "2026-02-27T00:00:00"
 }
 ```
 
 ---
 
-### 6. 종료 신호
+### GET /api/pcs
 
-**엔드포인트:**
-```http
-POST /api/client/shutdown
-Content-Type: application/json
+응답: PC 객체 배열 직접 반환 (래퍼 없음).
+
+```
+GET /api/pcs
+GET /api/pcs?room=1실습실
 ```
 
-**요청:**
+---
+
+### GET /api/pc/<id>
+
+응답: PC 객체 직접 반환. 없으면 `{ "error": "PC not found" }`, 404.
+
+---
+
+### GET /api/pc/<id>/history
+
+```
+GET /api/pc/1/history
+GET /api/pc/1/history?limit=50   # 기본 100
+```
+
+응답: 프로세스 기록 배열 (`updated_at`, `current_user`, `processes` 포함).
+
+---
+
+### POST /api/pc/<id>/command
+
+범용 명령. 명령 타입은 [명령 타입 참조](#명령-타입) 참고.
+
 ```json
 {
-  "machine_id": "A1B2C3D4E5F6"
+  "type": "shutdown",
+  "data": { "delay": 0, "message": "" },
+  "priority": 5,
+  "timeout_seconds": 300
+}
+// Response: { "status": "success", "command_id": 42 }
+```
+
+---
+
+### POST /api/pc/<id>/shutdown / restart
+
+```json
+// Request (모두 선택 필드)
+{ "delay": 60, "message": "종료합니다." }
+```
+
+---
+
+### POST /api/pc/<id>/message
+
+```json
+{ "message": "수업이 시작됩니다.", "duration": 10 }
+```
+
+---
+
+### POST /api/pc/<id>/kill-process
+
+```json
+{ "process_name": "chrome.exe" }
+```
+
+---
+
+### POST /api/pc/<id>/install / uninstall
+
+```json
+{ "app_id": "googlechrome" }   // Chocolatey 패키지 ID
+```
+
+---
+
+### POST /api/pc/<id>/account/create
+
+```json
+{
+  "username": "student01",
+  "password": "Pass1234!",
+  "full_name": "학생01",     // 선택
+  "comment": "실습 계정"     // 선택
+}
+```
+
+### POST /api/pc/<id>/account/delete
+
+```json
+{ "username": "student01" }
+```
+
+### POST /api/pc/<id>/account/password
+
+```json
+{ "username": "student01", "new_password": "NewPass5678!" }
+```
+
+---
+
+### POST /api/pcs/bulk-command
+
+```json
+// Request
+{
+  "pc_ids": [1, 2, 3],
+  "command_type": "shutdown",
+  "command_data": { "delay": 30 }
+}
+
+// Response
+{ "total": 3, "success": 3, "failed": 0, "results": [...] }
+```
+
+---
+
+### DELETE /api/pcs/commands/clear
+
+```json
+// Request
+{ "pc_ids": [1, 2, 3] }
+
+// Response
+{ "total": 3, "success": 3, "failed": 0, "total_deleted": 5, "results": [...] }
+```
+
+---
+
+### GET /api/rooms
+
+```json
+{
+  "total": 2,
+  "rooms": [
+    {
+      "id": 1,
+      "room_name": "1실습실",
+      "rows": 5,
+      "cols": 8,
+      "description": "",
+      "is_active": 1,
+      "pc_count": 20,
+      "created_at": "2026-01-01T00:00:00"
+    }
+  ]
+}
+```
+
+### POST /api/rooms
+
+```json
+// Request
+{ "room_name": "2실습실", "rows": 6, "cols": 10, "description": "" }
+
+// Response
+{ "status": "success", "room_id": 2 }
+```
+
+### PUT /api/rooms/<id>
+
+변경할 필드만 포함. `room_name` 변경 시 `pc_info`, `seat_map` 연동 자동 갱신.
+
+### DELETE /api/rooms/<id>
+
+PC가 배치된 실습실은 삭제 불가 (400 반환).
+
+---
+
+### GET /api/layout/map/<room_name>
+
+```json
+{
+  "rows": 5,
+  "cols": 8,
+  "seats": [
+    { "id": 1, "room_name": "1실습실", "row": 0, "col": 0, "pc_id": 1 }
+  ]
+}
+```
+
+### POST /api/layout/map/<room_name>
+
+기존 배치를 완전히 교체.
+
+```json
+{
+  "rows": 5,
+  "cols": 8,
+  "seats": [
+    { "row": 0, "col": 0, "pc_id": 1 },
+    { "row": 0, "col": 1, "pc_id": 2 }
+  ]
 }
 ```
 
 ---
 
-## 관리자 API
+### POST /api/admin/registration-token
 
-### 등록 토큰 관리
-
-#### 1. 토큰 생성
-
-**엔드포인트:**
-```http
-POST /api/admin/registration-token
-Content-Type: application/json
-Authorization: Session Required
-```
-
-**요청:**
 ```json
+// Request
 {
-  "usage_type": "multi",
-  "expires_in": 600
+  "usage_type": "single",   // "single" (1회용) | "multi" (다회용)
+  "expires_in": 600         // 60 ~ 86400 초
 }
-```
 
-**필드:**
-- `usage_type`: `single` (기본값, 1회용) 또는 `multi` (재사용)
-- `expires_in`: 만료 시간 (초, 기본값 600)
-
-**응답:**
-```json
+// Response 200
 {
   "status": "success",
+  "id": 1,
   "token": "123456",
-  "usage_type": "multi",
-  "expires_at": "2026-02-10T15:30:00Z",
+  "usage_type": "single",
+  "expires_at": "2026-02-27T10:10:00",
   "created_by": "admin"
 }
 ```
 
----
+### GET /api/admin/registration-tokens
 
-#### 2. 토큰 목록
-
-**엔드포인트:**
-```http
-GET /api/admin/registration-tokens
-Authorization: Session Required
+```
+GET /api/admin/registration-tokens            # 활성 토큰만
+GET /api/admin/registration-tokens?all=true   # 전체 (만료/사용 포함)
 ```
 
-**응답:**
+---
+
+### POST /api/client/version (관리자)
+
 ```json
 {
-  "status": "success",
-  "tokens": [
-    {
-      "token": "123456",
-      "usage_type": "multi",
-      "used_count": 5,
-      "expires_at": "2026-02-10T15:30:00Z",
-      "created_by": "admin"
-    }
-  ]
+  "version": "0.9.2",
+  "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.9.2/WCMS-Client.exe",
+  "changelog": "v0.9.2 변경사항"
 }
 ```
 
 ---
 
-#### 3. 토큰 삭제
+## 공통 응답
 
-**엔드포인트:**
-```http
-DELETE /api/admin/registration-token/{token}
-Authorization: Session Required
-```
-
-**응답:**
 ```json
-{
-  "status": "success",
-  "message": "Token expired successfully"
-}
+// 성공
+{ "status": "success", ... }
+
+// 실패
+{ "status": "error", "message": "오류 설명" }
 ```
+
+일부 엔드포인트는 하위 호환성을 위해 래퍼 없이 배열/객체를 직접 반환함 (`GET /api/pcs`, `GET /api/pc/<id>` 등).
+
+| 코드 | 의미 |
+|------|------|
+| 200 | 성공 |
+| 400 | 필수 필드 누락 또는 잘못된 값 |
+| 401 | 관리자 세션 없음 |
+| 403 | PIN 검증 실패 |
+| 404 | 리소스 없음 |
+| 500 | 서버 오류 |
 
 ---
 
-### PC 관리
+## 명령 타입
 
-#### 1. 미검증 PC 목록
+`/api/pc/<id>/command`의 `type` 및 Long-poll 응답의 `command.type` 값.
 
-**엔드포인트:**
-```http
-GET /api/admin/pcs/unverified
-Authorization: Session Required
-```
-
-**응답:**
-```json
-{
-  "status": "success",
-  "pcs": [
-    {
-      "id": 10,
-      "hostname": "OLD-PC-01",
-      "machine_id": "LEGACY001",
-      "is_verified": false
-    }
-  ]
-}
-```
+| 타입 | 설명 | parameters |
+|------|------|------------|
+| `shutdown` | PC 종료 | `delay` (초), `message` |
+| `restart` | PC 재시작 | `delay` (초), `message` |
+| `reboot` | PC 재시작 (별칭) | — |
+| `message` | 메시지 표시 (`msg *`) | `message`, `duration` |
+| `kill_process` | 프로세스 강제 종료 | `process_name` |
+| `install` | 프로그램 설치 (Chocolatey) | `app_id` |
+| `uninstall` | 프로그램 삭제 (Chocolatey) | `app_id` |
+| `create_user` | Windows 계정 생성 | `username`, `password`, `full_name` |
+| `delete_user` | Windows 계정 삭제 | `username` |
+| `change_password` | 비밀번호 변경 | `username`, `new_password` |
+| `execute` | CMD 명령 실행 | `command` |
 
 ---
 
-#### 2. PC 삭제
+## 오프라인 판정
 
-**엔드포인트:**
-```http
-DELETE /api/admin/pc/{pc_id}
-Authorization: Session Required
-```
+클라이언트는 30초 Long-poll로 연결을 유지한다. 서버는 40초 이상 `last_seen`이 갱신되지 않으면 `is_online=0`으로 처리한다 (백그라운드 체커, 기본 10초 주기).
 
-**응답:**
-```json
-{
-  "status": "success",
-  "message": "PC deleted successfully"
-}
-```
-
-**주의:** 연관 데이터 모두 삭제 (Cascade)
-
----
-
-### 프로세스 관리
-
-#### 1. 수집된 프로세스 목록 조회
-
-**엔드포인트:**
-```http
-GET /api/admin/processes
-Authorization: Session Required
-```
-
-**응답:**
-```json
-{
-  "status": "success",
-  "total": 50,
-  "processes": [
-    "chrome.exe",
-    "notepad.exe",
-    "python.exe"
-  ]
-}
-```
-
----
-
-### 명령 전송
-
-#### PC 종료
-
-**엔드포인트:**
-```http
-POST /api/admin/pc/{pc_id}/shutdown
-Authorization: Session Required
-```
-
-**응답:**
-```json
-{
-  "status": "success",
-  "command_id": 456
-}
-```
-
-#### PC 재시작
-
-**엔드포인트:**
-```http
-POST /api/admin/pc/{pc_id}/reboot
-```
-
-#### CMD 명령 실행
-
-**엔드포인트:**
-```http
-POST /api/admin/pc/{pc_id}/execute
-Content-Type: application/json
-```
-
-**요청:**
-```json
-{
-  "command": "ipconfig /all"
-}
-```
-
-#### 프로그램 삭제 (v0.8.7 추가)
-
-**엔드포인트:**
-```http
-POST /api/admin/pc/{pc_id}/uninstall
-Content-Type: application/json
-```
-
-**요청:**
-```json
-{
-  "app_id": "googlechrome"
-}
-```
-
-#### 계정 생성 (v0.8.7 추가)
-
-**엔드포인트:**
-```http
-POST /api/admin/pc/{pc_id}/account/create
-Content-Type: application/json
-```
-
-**요청:**
-```json
-{
-  "username": "student",
-  "password": "password123",
-  "full_name": "Student Account",
-  "comment": "Created by WCMS",
-  "language": "ko-KR"
-}
-```
-
----
-
-## 오류 코드
-
-| 코드 | 의미 | 설명 |
-|------|------|------|
-| 200 | OK | 성공 |
-| 302 | Found | 리다이렉트 |
-| 400 | Bad Request | 필수 필드 누락 |
-| 401 | Unauthorized | 세션 없음 |
-| 403 | Forbidden | PIN 검증 실패 |
-| 404 | Not Found | 리소스 없음 |
-| 500 | Internal Server Error | 서버 오류 |
-
-**에러 응답 형식:**
-```json
-{
-  "status": "error",
-  "message": "Error description"
-}
-```
-
----
-
-## 변경 이력
-
-### v0.8.7 (2026-02-11)
-
-**주요 변경:**
-
-1. **자동 업데이트**
-   - 클라이언트가 서버에서 새 버전을 감지하고 자동으로 업데이트합니다.
-   - `install.cmd` 또는 별도의 업데이트 스크립트를 다운로드하여 실행합니다.
-
-2. **프로그램 삭제**
-   - `chocolatey`를 사용하여 프로그램을 삭제할 수 있습니다.
-   - `/api/admin/pc/{pc_id}/uninstall` 엔드포인트가 추가되었습니다.
-
-3. **계정 생성 옵션**
-   - 윈도우 계정 생성 시 언어 및 키보드 설정 파라미터가 추가되었습니다.
-   - `/api/admin/pc/{pc_id}/account/create` 엔드포인트에 `language` 파라미터가 추가되었습니다.
-
-### v0.8.6 (2026-02-11)
-
-**주요 변경:**
-
-1. **Chocolatey 지원**
-   - `winget` 대신 `chocolatey`를 사용하여 프로그램 설치
-   - 서비스 환경(`LocalSystem`)에서도 안정적인 설치 지원
-   - Chocolatey 미설치 시 자동 설치 기능 추가
-
-2. **서비스 설치 개선**
-   - `install.cmd`의 서비스 등록 로직을 `sc create`로 변경하여 안정성 확보
-   - 서비스 시작 시 인자 없이 실행되도록 수정하여 `StartServiceCtrlDispatcher` 호출 보장
-   - `delayed-auto` 시작 유형 적용으로 부팅 시 안정성 향상
-
-3. **UI 개선**
-   - 계정 관리 및 전원 관리 모달을 클릭 기반 UI로 변경
-   - 프로세스 종료 시 목록에서 선택 가능하도록 개선
-   - RAM 사용량 도넛 차트 추가
-
----
-
-## 참고 자료
-
-- [Architecture](./ARCHITECTURE.md)
-- [Getting Started](./GETTING_STARTED.md)
-- [Changelog](./CHANGELOG.md)
-- [GitHub](https://github.com/Nekonic/WCMS)
+단절 이유(`reason`)는 `network_error` (명시적 offline 신호) 또는 `shutdown` (종료 신호)으로 기록되며, 재연결 시 `network_events` 테이블에 `online_at`과 `duration_sec`이 기록된다.

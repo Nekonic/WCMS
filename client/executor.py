@@ -6,6 +6,7 @@ import subprocess
 import logging
 import os
 import glob
+import tempfile
 from typing import Dict, Any
 
 logger = logging.getLogger('wcms')
@@ -257,39 +258,136 @@ class CommandExecutor:
 
     @staticmethod
     def _install_language_pack(language_code: str) -> bool:
-        """언어 팩 설치 (PowerShell)"""
+        """LXP(Language Experience Pack) 설치 - Windows 표시 언어에 필요"""
         try:
-            # 1. 이미 설치되어 있는지 확인
-            check_cmd = f"Get-InstalledLanguage -Language {language_code}"
-            result = subprocess.run(
-                f'powershell -NoProfile -Command "{check_cmd}"',
-                shell=True, capture_output=True, text=True
+            # 이미 설치됐는지 확인
+            check = subprocess.run(
+                ['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                 f'(Get-InstalledLanguage | Where-Object {{ $_.LanguageId -like "{language_code}*" }}).Count -gt 0'],
+                capture_output=True, text=True, timeout=30
             )
-            
-            if result.returncode == 0 and language_code in result.stdout:
+            if check.returncode == 0 and check.stdout.strip().lower() == 'true':
                 logger.info(f"언어 팩 이미 설치됨: {language_code}")
                 return True
-                
-            # 2. 설치 시도 (Install-Language)
-            # -CopyToSettings: 시스템 설정 복사 (선택 사항, 여기선 생략)
+
             logger.info(f"언어 팩 설치 시작: {language_code}")
-            install_cmd = f"Install-Language -Language {language_code}"
-            
             result = subprocess.run(
-                f'powershell -NoProfile -Command "{install_cmd}"',
-                shell=True, capture_output=True, text=True, timeout=1800 # 설치 시간 고려 (30분)
+                ['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                 f'Install-Language -Language {language_code}'],
+                capture_output=True, text=True, timeout=1800
             )
-            
             if result.returncode == 0:
-                logger.info(f"언어 팩 설치 성공: {language_code}")
+                logger.info(f"언어 팩 설치 완료: {language_code}")
                 return True
             else:
                 logger.error(f"언어 팩 설치 실패: {result.stderr}")
                 return False
-                
-        except Exception as e:
-            logger.error(f"언어 팩 설치 중 오류: {e}")
+        except subprocess.TimeoutExpired:
+            logger.error(f"언어 팩 설치 타임아웃 (30분): {language_code}")
             return False
+        except Exception as e:
+            logger.error(f"언어 팩 설치 오류: {e}")
+            return False
+
+    @staticmethod
+    def _setup_user_language(username: str, password: str, language: str) -> bool:
+        """계정 프로필 강제 생성 후 NTUSER.DAT에 언어 레지스트리 직접 설정.
+        lang_test.ps1 에서 검증된 방식: LogonUser + LoadUserProfile + reg load/add/unload
+        """
+        ps_script = r"""param($Username, $Password, $Language)
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WcmsUserEnv {
+    [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool LogonUser(string user, string domain, string pass, int type, int provider, out IntPtr token);
+
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)]
+    public struct PROFILEINFO {
+        public int    dwSize;
+        public int    dwFlags;
+        public string lpUserName;
+        public string lpProfilePath;
+        public string lpDefaultPath;
+        public string lpServerName;
+        public string lpPolicyPath;
+        public IntPtr hProfile;
+    }
+    [DllImport("userenv.dll", CharSet=CharSet.Auto, SetLastError=true)]
+    public static extern bool LoadUserProfile(IntPtr hToken, ref PROFILEINFO lpPI);
+    [DllImport("userenv.dll", CharSet=CharSet.Auto, SetLastError=true)]
+    public static extern bool UnloadUserProfile(IntPtr hToken, IntPtr hProfile);
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr h);
+}
+'@
+
+$token = [IntPtr]::Zero
+$ok = [WcmsUserEnv]::LogonUser($Username, '.', $Password, 2, 0, [ref]$token)
+if ($ok -and $token -ne [IntPtr]::Zero) {
+    $pi = New-Object WcmsUserEnv+PROFILEINFO
+    $pi.dwSize     = [System.Runtime.InteropServices.Marshal]::SizeOf($pi)
+    $pi.dwFlags    = 1
+    $pi.lpUserName = $Username
+    $loaded = [WcmsUserEnv]::LoadUserProfile($token, [ref]$pi)
+    if ($loaded) { [WcmsUserEnv]::UnloadUserProfile($token, $pi.hProfile) | Out-Null }
+    [WcmsUserEnv]::CloseHandle($token) | Out-Null
+}
+
+Start-Sleep -Seconds 2
+
+$ntuser = "C:\Users\$Username\NTUSER.DAT"
+if (-not (Test-Path $ntuser)) { exit 1 }
+
+$hive = "HKU\WCMS_$Username"
+reg load $hive $ntuser | Out-Null
+
+$sets = @(
+    @("$hive\Control Panel\International",                            "LocaleName",                        "REG_SZ",       $Language),
+    @("$hive\Control Panel\Desktop",                                  "PreferredUILanguages",               "REG_MULTI_SZ", $Language),
+    @("$hive\Control Panel\Desktop",                                  "PreferredUILanguagesPending",        "REG_MULTI_SZ", $Language),
+    @("$hive\Control Panel\Desktop",                                  "MultilingualUserInterfaceLanguages", "REG_MULTI_SZ", $Language),
+    @("$hive\Control Panel\International\User Profile",               "Languages",                         "REG_MULTI_SZ", $Language),
+    @("$hive\Control Panel\International\User Profile System Backup", "Languages",                         "REG_MULTI_SZ", $Language)
+)
+foreach ($s in $sets) {
+    reg add $s[0] /v $s[1] /t $s[2] /d $s[3] /f | Out-Null
+}
+
+[GC]::Collect()
+Start-Sleep -Seconds 2
+reg unload $hive | Out-Null
+"""
+        script_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.ps1', delete=False, encoding='utf-8'
+            ) as f:
+                f.write(ps_script)
+                script_path = f.name
+
+            result = subprocess.run(
+                ['powershell', '-NoProfile', '-NonInteractive',
+                 '-ExecutionPolicy', 'Bypass', '-File', script_path,
+                 username, password, language],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode == 0:
+                logger.info(f"언어 레지스트리 설정 완료: {username} -> {language}")
+                return True
+            else:
+                logger.error(f"언어 레지스트리 설정 실패 (rc={result.returncode}): {result.stderr}")
+                return False
+        except Exception as e:
+            logger.error(f"언어 레지스트리 설정 오류: {e}")
+            return False
+        finally:
+            if script_path and os.path.exists(script_path):
+                try:
+                    os.unlink(script_path)
+                except Exception:
+                    pass
 
     @staticmethod
     def create_user(username, password, full_name=None, comment=None, language=None):
@@ -335,62 +433,13 @@ class CommandExecutor:
                             capture_output=True
                         )
                     
-                    # 3. 언어 설정 (RunOnce 레지스트리 활용)
+                    # 3. 언어 설정 (프로필 강제 생성 + NTUSER.DAT 레지스트리 직접 설정)
                     if language:
-                        try:
-                            # RunOnce 키에 등록할 명령어 생성
-                            # 로그 기록 추가: >> C:\Temp\lang_log.txt
-                            log_path = r"C:\ProgramData\WCMS\logs\lang_setup.log"
-                            
-                            # PowerShell 명령어 구성
-                            # 1. 로그 기록
-                            # 2. 언어 목록 설정 (입력기)
-                            # 3. 표시 언어(UI) 강제 설정 (Set-WinUILanguageOverride)
-                            # 4. 지역/문화권 설정 (Set-Culture)
-                            ps_script = f"""
-                            $log = '{log_path}';
-                            $lang = '{language}';
-                            Add-Content -Path $log -Value ('[' + (Get-Date) + '] Starting language setup for {username} to ' + $lang);
-                            try {{
-                                # 1. 언어 목록 및 입력기 설정
-                                Set-WinUserLanguageList -LanguageList $lang -Force -ErrorAction Stop;
-                                Add-Content -Path $log -Value 'Success: Set-WinUserLanguageList';
-                                
-                                # 2. Windows 표시 언어(UI) 설정
-                                Set-WinUILanguageOverride -Language $lang -ErrorAction Stop;
-                                Add-Content -Path $log -Value 'Success: Set-WinUILanguageOverride';
-                                
-                                # 3. 지역/문화권 설정 (날짜, 시간 형식 등)
-                                Set-Culture -CultureInfo $lang -ErrorAction Stop;
-                                Add-Content -Path $log -Value 'Success: Set-Culture';
+                        if CommandExecutor._setup_user_language(username, password, language):
+                            msg += f" (언어: {language})"
+                        else:
+                            msg += f" (언어 설정 실패: {language})"
 
-                            }} catch {{
-                                Add-Content -Path $log -Value ('Error: ' + $_.Exception.Message);
-                            }}
-                            """
-                            
-                            # 한 줄로 변환 (공백 제거)
-                            ps_cmd = ps_script.replace('\n', ' ').replace('    ', '')
-                            
-                            # cmd에서 실행할 전체 명령
-                            reg_cmd = f'cmd /c if /i "%USERNAME%"=="{username}" powershell -WindowStyle Hidden -Command "{ps_cmd}"'
-                            
-                            # reg add 명령 실행
-                            reg_key = r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
-                            reg_value = f"SetLang_{username}"
-                            
-                            subprocess.run(
-                                ['reg', 'add', reg_key, '/v', reg_value, '/t', 'REG_SZ', '/d', reg_cmd, '/f'],
-                                check=True, capture_output=True
-                            )
-                            
-                            msg += f" (언어 설정 예약됨: {language})"
-                            logger.info(f"RunOnce 등록 성공: {reg_value} -> {language}")
-                            
-                        except Exception as e:
-                            logger.error(f"RunOnce 등록 실패: {e}")
-                            msg += " (언어 설정 예약 실패)"
-                        
                     return msg
                 else:
                     return f"사용자 생성 실패: {result.stderr}"
@@ -431,7 +480,10 @@ class CommandExecutor:
     def show_message(message: str, duration: int = 10) -> str:
         """사용자에게 메시지 표시"""
         try:
-            result = subprocess.run(['msg', '*', message], capture_output=True, text=True, timeout=5)
+            msg_exe = r'C:\Windows\System32\msg.exe'
+            if not os.path.exists(msg_exe):
+                msg_exe = 'msg'
+            result = subprocess.run([msg_exe, '*', message], capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:
                 return f"메시지 표시됨: {message}"
