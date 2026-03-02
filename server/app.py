@@ -133,8 +133,12 @@ def create_app(config_name='development'):
         app.teardown_appcontext(close_db)
         
         # 백그라운드 오프라인 체크 시작
+        # Flask debug 모드는 use_reloader=True로 부모+자식 2개 프로세스가 실행됨
+        # WERKZEUG_RUN_MAIN은 자식 프로세스(실제 서버)에서만 'true'로 설정됨
         if not app.config['TESTING']:
-            PCService.start_background_checker(app, app.config['BACKGROUND_CHECK_INTERVAL'])
+            is_reloader_child = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+            if config_name == 'production' or is_reloader_child:
+                PCService.start_background_checker(app, app.config['BACKGROUND_CHECK_INTERVAL'])
 
     # Blueprint 등록
     app.register_blueprint(client_bp)

@@ -239,6 +239,20 @@ def poll_commands():
     # 재연결 감지: 오프라인이었으면 온라인으로 복원 + network_events 닫기
     was_offline = not pc['is_online']
     if was_offline:
+        # shutdown 신호 직후 Long-poll이 도달하는 경쟁 조건 방지
+        # shutdown 신호 후 5초 이내에 폴링이 오면 실제 재연결이 아닌 것으로 처리
+        recent_shutdown = db.execute('''
+            SELECT id FROM network_events
+            WHERE pc_id=? AND online_at IS NULL AND reason='shutdown'
+              AND (julianday('now') - julianday(offline_at)) * 86400 < 5
+            ORDER BY offline_at DESC LIMIT 1
+        ''', (pc_id,)).fetchone()
+
+        if recent_shutdown:
+            # 종료 직후 폴링 → 무시하고 명령 없음으로 반환
+            logger.debug(f"[폴링무시] PC {pc_id} shutdown 직후 폴링 무시 (경쟁 조건)")
+            return jsonify({'status': 'success', 'data': {'has_command': False, 'command': None}}), 200
+
         db.execute('UPDATE pc_info SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE id=?', (pc_id,))
         open_event = db.execute(
             'SELECT id, offline_at FROM network_events WHERE pc_id=? AND online_at IS NULL ORDER BY offline_at DESC LIMIT 1',

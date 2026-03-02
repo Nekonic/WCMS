@@ -2,11 +2,6 @@
 // 의존 전역변수: room, allPCs, selectedPCs, selectionMode, isDragging, dragStartPos
 // (index.html 인라인 스크립트에서 Jinja2로 초기화됨)
 
-// PC 상세 모달 대신 history 페이지로 이동 (index.html 전용 동작)
-function openModal(pcId) {
-    window.location.href = `/pc/${pcId}`;
-}
-
 // 선택 모드 토글
 function toggleSelectionMode() {
     selectionMode = !selectionMode;
