@@ -7,6 +7,7 @@ import json
 import logging
 from models import PCModel, CommandModel, AdminModel
 from utils import require_admin, get_db, execute_query
+from utils.validators import validate_username
 
 logger = logging.getLogger('wcms.admin_api')
 
@@ -41,8 +42,9 @@ def _queue_command(pc_id: int, cmd_type: str, cmd_data=None):
 
 
 @admin_bp.route('/pcs', methods=['GET'])
+@require_admin
 def list_pcs():
-    """모든 PC 목록 조회 (app.py 호환: 인증 불필요, 리스트 반환)"""
+    """모든 PC 목록 조회"""
     room = request.args.get('room')
 
     if room:
@@ -62,8 +64,9 @@ def list_pcs():
 
 
 @admin_bp.route('/pc/<int:pc_id>', methods=['GET'])
+@require_admin
 def get_pc(pc_id):
-    """PC 상세 정보 조회 (app.py 호환: 인증 불필요, 객체 직접 반환)"""
+    """PC 상세 정보 조회"""
     pc = PCModel.get_with_status(pc_id)
 
     if not pc:
@@ -151,6 +154,8 @@ def create_account(pc_id):
     data = request.json
     if not data or not all(k in data for k in ['username', 'password']):
         return jsonify({'status': 'error', 'message': 'username과 password 필드가 필요합니다'}), 400
+    if not validate_username(data['username']):
+        return jsonify({'status': 'error', 'message': '유효하지 않은 username입니다 (1-20자, 특수문자 제한)'}), 400
     return _queue_command(pc_id, 'create_user', {
         'username': data['username'], 'password': data['password'],
         'full_name': data.get('full_name'), 'comment': data.get('comment'),
@@ -165,6 +170,8 @@ def delete_account(pc_id):
     data = request.json
     if not data or 'username' not in data:
         return jsonify({'status': 'error', 'message': 'username 필드가 필요합니다'}), 400
+    if not validate_username(data['username']):
+        return jsonify({'status': 'error', 'message': '유효하지 않은 username입니다'}), 400
     return _queue_command(pc_id, 'delete_user', {'username': data['username']})
 
 
@@ -175,6 +182,8 @@ def change_password(pc_id):
     data = request.json
     if not data or not all(k in data for k in ['username', 'new_password']):
         return jsonify({'status': 'error', 'message': 'username과 new_password 필드가 필요합니다'}), 400
+    if not validate_username(data['username']):
+        return jsonify({'status': 'error', 'message': '유효하지 않은 username입니다'}), 400
     return _queue_command(pc_id, 'change_password', {
         'username': data['username'], 'new_password': data['new_password']
     })

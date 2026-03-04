@@ -35,7 +35,7 @@ def register():
 
     is_valid, error_msg = RegistrationTokenModel.validate(pin)
     if not is_valid:
-        logger.warning(f"등록 실패: PIN 검증 실패 (machine_id={machine_id}, pin={pin}, error={error_msg})")
+        logger.warning(f"등록 실패: PIN 검증 실패 (machine_id={machine_id}, pin=***, error={error_msg})")
         return jsonify({
             'status': 'error',
             'message': error_msg
@@ -83,7 +83,7 @@ def register():
         except Exception as e:
             logger.warning(f"등록 시 동적 정보 저장 실패: {e}")
 
-    logger.info(f"PC 등록 성공: {hostname} (machine_id={machine_id}, pin={pin})")
+    logger.info(f"PC 등록 성공: {hostname} (machine_id={machine_id})")
 
     return jsonify({
         'status': 'success',

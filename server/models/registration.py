@@ -2,7 +2,7 @@
 등록 토큰 모델 (v0.8.0 PIN 인증)
 PC 등록 시 사용하는 PIN 토큰 관리
 """
-import random
+import secrets
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from utils.database import get_db
@@ -31,7 +31,7 @@ class RegistrationTokenModel:
         token = None
 
         for _ in range(max_retries):
-            token = f"{random.randint(0, 999999):06d}"
+            token = f"{secrets.randbelow(1000000):06d}"
 
             # 중복 확인
             existing = db.execute(

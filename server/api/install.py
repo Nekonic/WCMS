@@ -5,11 +5,28 @@ WCMS 설치 API
 실제 EXE는 GitHub Releases에서 다운로드
 """
 from flask import Blueprint, Response, current_app, jsonify, request
+from urllib.parse import urlparse
 import logging
 
 logger = logging.getLogger('wcms.install')
 
 install_bp = Blueprint('install', __name__, url_prefix='/install')
+
+
+def _sanitize_server_url(url: str) -> str:
+    """서버 URL 정규화 및 검증 (스크립트 인젝션 방지)
+
+    scheme과 host:port만 허용하여 Batch/PowerShell 인젝션 차단.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"허용되지 않는 scheme: {parsed.scheme}")
+    if not parsed.hostname:
+        raise ValueError("hostname이 없습니다")
+    if parsed.port:
+        return f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
+    return f"{parsed.scheme}://{parsed.hostname}"
+
 
 # GitHub Repository 정보
 GITHUB_REPO = "Nekonic/WCMS"
@@ -579,11 +596,14 @@ def download_install_cmd():
     Returns:
         install.cmd 파일 (text/plain)
     """
-    # 서버 URL 결정
+    # 서버 URL 결정 및 검증 (인젝션 방지)
     server_url = request.args.get('server')
     if not server_url:
-        # 기본값: 현재 요청의 호스트 사용
         server_url = f"{request.scheme}://{request.host}"
+    try:
+        server_url = _sanitize_server_url(server_url)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     logger.info(f"Generating install.cmd for server: {server_url}")
 
@@ -613,11 +633,14 @@ def download_install_ps1():
     Returns:
         install.ps1 파일 (text/plain)
     """
-    # 서버 URL 결정
+    # 서버 URL 결정 및 검증 (인젝션 방지)
     server_url = request.args.get('server')
     if not server_url:
-        # 기본값: 현재 요청의 호스트 사용
         server_url = f"{request.scheme}://{request.host}"
+    try:
+        server_url = _sanitize_server_url(server_url)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     logger.info(f"Generating install.ps1 for server: {server_url}")
 

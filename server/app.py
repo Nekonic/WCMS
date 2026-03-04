@@ -147,12 +147,23 @@ def create_app(config_name='development'):
     app.register_blueprint(admin_bp)
     app.register_blueprint(install_bp)
 
-    # 클라이언트/관리자 API는 Rate Limit 제외
-    # - client_bp: 2초 폴링 = 시간당 1,800회로 전역 제한(50회/시간)에 걸림
-    # - admin_bp: 명령 결과 폴링(get_command_results)이 2초 주기 = 동일 문제
-    #             admin_bp는 세션 인증으로 이미 보호되므로 IP 기반 제한 불필요
-    limiter.exempt(client_bp)
+    # Rate Limit 면제 설정
+    # - admin_bp: 세션 인증으로 보호되므로 IP 기반 제한 불필요
     limiter.exempt(admin_bp)
+
+    # client_bp: register는 PIN 브루트포스 방어를 위해 면제하지 않음
+    # 폴링 엔드포인트만 개별 면제 (2초 주기 = 시간당 1,800회)
+    _polling_views = [
+        'client.heartbeat',
+        'client.poll_commands',
+        'client.shutdown_signal',
+        'client.report_offline',
+        'client.submit_command_result',
+        'client.get_version',
+    ]
+    for view_name in _polling_views:
+        if view_name in app.view_functions:
+            limiter.exempt(app.view_functions[view_name])
 
     # API Blueprint는 CSRF 제외 (Z-03: 토큰/세션 인증으로 대체)
     # - client_bp: 클라이언트 토큰 인증

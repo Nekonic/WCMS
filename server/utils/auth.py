@@ -3,7 +3,7 @@
 """
 import bcrypt
 from functools import wraps
-from flask import session, jsonify
+from flask import session, jsonify, current_app
 from typing import Callable
 
 
@@ -50,6 +50,18 @@ def require_admin(f: Callable) -> Callable:
     def decorated_function(*args, **kwargs):
         if not session.get('admin'):
             return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+        # 세션의 관리자가 DB에 여전히 존재하는지 확인 (삭제/비활성화 즉시 차단)
+        from utils.database import get_db
+        username = session.get('username')
+        db = get_db()
+        admin = db.execute(
+            'SELECT id FROM admins WHERE username=? AND is_active=1', (username,)
+        ).fetchone()
+        if not admin:
+            session.clear()
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
         return f(*args, **kwargs)
 
     return decorated_function
