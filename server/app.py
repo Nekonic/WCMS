@@ -11,6 +11,7 @@ WCMS 서버 메인 애플리케이션
 import logging
 import sys
 import os
+import time
 from pathlib import Path
 
 from flask import Flask, render_template, redirect, url_for, session, request
@@ -20,6 +21,7 @@ from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 import cachelib
 
 # 프로젝트 루트 경로
@@ -93,20 +95,20 @@ def create_app(config_name='development'):
 
     # 보안 헤더 설정 (Flask-Talisman) - 개발 환경에서는 선택적 활성화
     if config_name == 'production':
-        # 프로덕션: HTTPS 강제, 보안 헤더 전체 적용
-        # Z-01: style-src에서 unsafe-inline 제거 (인라인 CSS 외부화 완료)
+        # 프로덕션: 보안 헤더 전체 적용
+        # HTTPS 강제는 SSL 인증서 설정 시에만 활성화 (리다이렉트 루프 방지)
+        ssl_configured = bool(os.getenv('WCMS_SSL_CERT') and os.getenv('WCMS_SSL_KEY'))
         csp = {
             'default-src': "'self'",
             'script-src': ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
-            'style-src': ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
+            'style-src': ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
             'img-src': ["'self'", "data:"],
             'font-src': ["'self'", "cdnjs.cloudflare.com"],
         }
         Talisman(app,
-                 force_https=True,
-                 strict_transport_security=True,
-                 content_security_policy=csp,
-                 content_security_policy_nonce_in=['script-src'])
+                 force_https=ssl_configured,
+                 strict_transport_security=ssl_configured,
+                 content_security_policy=csp)
     elif config_name == 'development':
         # 개발 환경: HTTPS 강제 없이 보안 헤더만 적용
         Talisman(app,
@@ -335,12 +337,18 @@ def create_app(config_name='development'):
             pass
         return {'all_rooms': room_list, 'server_version': server_version, 'server_version_date': server_version_date}
 
+    # 404 중복 로그 억제 (같은 경로는 1분에 1번만 기록)
+    _404_log_cache: dict = {}
+
     # 에러 핸들러
     @app.errorhandler(404)
     def not_found(error):
-        # API 경로 404는 로깅
         if request.path.startswith('/api/'):
-            logger.warning(f"404 Not Found: {request.method} {request.path} from {request.remote_addr}")
+            now = time.time()
+            cache_key = f"{request.method} {request.path}"
+            if now - _404_log_cache.get(cache_key, 0) > 60:
+                _404_log_cache[cache_key] = now
+                logger.warning(f"404 Not Found: {request.method} {request.path} from {request.remote_addr}")
         return render_template('error.html', error='페이지를 찾을 수 없습니다 (404)'), 404
 
     @app.errorhandler(500)
@@ -392,6 +400,11 @@ Disallow: /
     def about():
         """WCMS 소개 페이지"""
         return render_template('about.html', username=session.get('username'))
+
+    # 리버스 프록시(nginx 등) 뒤에서 실행 시 실제 클라이언트 IP 복원
+    # 없으면 모든 요청이 127.0.0.1로 보여 Rate Limit, 로깅 무력화
+    if config_name == 'production':
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     logger.info(f"앱 생성: {config_name} 모드")
     return app

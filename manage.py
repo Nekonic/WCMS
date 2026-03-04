@@ -75,11 +75,13 @@ def install_dependencies():
     else:
         print_step("클라이언트 의존성 설치 건너뛰기 (Windows 전용)")
 
-def init_db(force=False):
+def init_db(force=False, username='admin', password='admin'):
     """데이터베이스 초기화
 
     Args:
         force: True면 기존 DB를 묻지 않고 삭제
+        username: 관리자 계정 이름
+        password: 관리자 비밀번호
     """
     print_step("데이터베이스 초기화 중...")
     
@@ -125,13 +127,13 @@ def init_db(force=False):
         return
 
     # 관리자 생성
-    print_step("관리자 계정 생성 중 (기본값: admin / admin)...")
+    print_step(f"관리자 계정 생성 중 ({username} / {password})...")
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
-    
+
     try:
         # uv run을 통해 create_admin.py 실행 (의존성 문제 해결)
-        subprocess.run(["uv", "run", "--project", "server", "python", "server/create_admin.py"], env=env, check=True)
+        subprocess.run(["uv", "run", "--project", "server", "python", "server/create_admin.py", username, password], env=env, check=True)
     except subprocess.CalledProcessError:
         print("[!] 관리자 계정 생성 스크립트 실행 실패.")
         print("    'python manage.py install'을 실행하여 의존성을 먼저 설치해주세요.")
@@ -178,8 +180,8 @@ def init_db(force=False):
         print(f"[!] 클라이언트 버전 삽입 실패: {e}")
 
     print("\n✅ 초기화 완료.")
-    print("    관리자 ID: admin")
-    print("    비밀번호 : admin")
+    print(f"    관리자 ID: {username}")
+    print(f"    비밀번호 : {password}")
     print(f"    클라이언트 버전: {client_ver}")
 
 def migrate_db(migration_file=None):
@@ -285,7 +287,7 @@ def run_server(host="0.0.0.0", port=5050, mode="development", use_gunicorn=False
             "-w", "1", 
             "--worker-connections", "1000",
             "-b", f"{host}:{port}",
-            "server.app:app"
+            "app:app"
         ]
     else:
         cmd = ["uv", "run", "--project", "server", "python", "server/app.py"]
@@ -345,13 +347,13 @@ def run_docker_test(skip_setup: bool = False):
     cmd = [venv_python, "tests/docker_test.py"]
 
     # 추가 옵션 전달
-    if "--rebuild" in sys.argv:
+    if "--rebuild" in sys.argv or "-r" in sys.argv:
         cmd.append("--rebuild")
-    if "--no-cache" in sys.argv:
+    if "--no-cache" in sys.argv or "-n" in sys.argv:
         cmd.append("--no-cache")
-    if "--cleanup" in sys.argv:
+    if "--cleanup" in sys.argv or "-c" in sys.argv:
         cmd.append("--cleanup")
-    if "--skip-boot" in sys.argv:
+    if "--skip-boot" in sys.argv or "-s" in sys.argv:
         cmd.append("--skip-boot")
 
     try:
@@ -409,17 +411,21 @@ def main():
 
     check_uv()
     
+    args = sys.argv[2:]
+
     if command == "install":
         install_dependencies()
     elif command == "init-db":
-        force = "--force" in sys.argv
-        init_db(force=force)
+        force = "--force" in args or "-f" in args
+        pos_args = [a for a in args if not a.startswith('-')]
+        username = pos_args[0] if len(pos_args) > 0 else 'admin'
+        password = pos_args[1] if len(pos_args) > 1 else 'admin'
+        init_db(force=force, username=username, password=password)
     elif command == "migrate":
-        migration_file = sys.argv[2] if len(sys.argv) > 2 else None
+        migration_file = args[0] if args else None
         migrate_db(migration_file)
     elif command == "run":
-        # 옵션 파싱 (간단하게)
-        use_gunicorn = "--prod" in sys.argv
+        use_gunicorn = "--prod" in args or "-p" in args
         mode = "production" if use_gunicorn else "development"
         run_server(mode=mode, use_gunicorn=use_gunicorn)
     elif command == "test":
@@ -432,18 +438,19 @@ def main():
     elif command == "help":
         print("사용법: python manage.py [command] [options]")
         print("Commands:")
-        print("  run              : 서버 실행 (기본값)")
-        print("    --prod         : Gunicorn으로 프로덕션 모드 실행")
-        print("  test [target]    : 테스트 실행 (target: all, server, client, archive)")
-        print("  docker-test      : Docker Compose 통합 테스트 (dockurr/windows + VNC)")
-        print("    --rebuild      : 서버 이미지 강제 재빌드")
-        print("    --no-cache     : Docker 빌드 캐시 사용 안 함")
-        print("    --cleanup      : 테스트 후 컨테이너 정리")
-        print("    --skip-boot    : Windows 부팅 대기 스킵")
-        print("  init-db          : 데이터베이스 초기화")
-        print("  migrate [file]   : 마이그레이션 실행 (file 생략 시 모든 마이그레이션)")
-        print("  install          : 의존성 설치")
-        print("  build            : 클라이언트 EXE 빌드 (Windows 전용)")
+        print("  run                    : 서버 실행 (기본값)")
+        print("    --prod,    -p        : Gunicorn으로 프로덕션 모드 실행")
+        print("  test [target]          : 테스트 실행 (target: all, server, client, archive)")
+        print("  docker-test            : Docker Compose 통합 테스트 (dockurr/windows + VNC)")
+        print("    --rebuild, -r        : 서버 이미지 강제 재빌드")
+        print("    --no-cache,-n        : Docker 빌드 캐시 사용 안 함")
+        print("    --cleanup, -c        : 테스트 후 컨테이너 정리")
+        print("    --skip-boot,-s       : Windows 부팅 대기 스킵")
+        print("  init-db [id] [pw]      : 데이터베이스 초기화 (기본값: admin / admin)")
+        print("    --force,   -f        : 기존 DB를 묻지 않고 삭제 후 재초기화")
+        print("  migrate [file]         : 마이그레이션 실행 (file 생략 시 모든 마이그레이션)")
+        print("  install                : 의존성 설치")
+        print("  build                  : 클라이언트 EXE 빌드 (Windows 전용)")
     else:
         print(f"알 수 없는 명령: {command}")
         print("사용 가능한 명령: run, test, docker-test, init-db, migrate, install, build")

@@ -1,7 +1,7 @@
 # WCMS 보안 가이드
 
-> **버전**: v0.9.5
-> **최종 업데이트**: 2026-03-03
+> **버전**: v0.9.6
+> **최종 업데이트**: 2026-03-04
 
 ---
 
@@ -100,7 +100,7 @@ WCMS_SSL_KEY=/etc/ssl/private/wcms.key
 
 ```http
 Strict-Transport-Security: max-age=31536000; includeSubDomains
-Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' cdnjs.cloudflare.com
 X-Frame-Options: DENY
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
@@ -142,6 +142,48 @@ db.execute('SELECT * FROM pcs WHERE id=?', (pc_id,))
 
 ---
 
+## 리버스 프록시 설정
+
+Apache/nginx 뒤에서 실행 시 실제 클라이언트 IP를 복원해야 Rate Limiting과 로그가 정상 작동합니다.
+
+### Apache (`mod_proxy`)
+
+```apache
+<VirtualHost *:80>
+    ServerName your-domain.com
+
+    ProxyPreserveHost On
+
+    # 클라이언트 X-Forwarded-For 위조 차단 후 실제 IP로 덮어씀
+    RequestHeader unset X-Forwarded-For
+
+    ProxyPass / http://127.0.0.1:5050/
+    ProxyPassReverse / http://127.0.0.1:5050/
+
+    RequestHeader set X-Forwarded-Proto "http"
+</VirtualHost>
+```
+
+```bash
+sudo a2enmod headers proxy proxy_http
+sudo systemctl restart apache2
+```
+
+### nginx
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:5050;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+> 리버스 프록시 없이 직접 실행 시 ProxyFix는 자동으로 비활성화됩니다.
+
+---
+
 ## 보안 체크리스트
 
 ### 프로덕션 배포 전
@@ -153,6 +195,7 @@ db.execute('SELECT * FROM pcs WHERE id=?', (pc_id,))
 - [ ] 데이터베이스 파일 권한 제한 (`chmod 600`)
 - [ ] 방화벽 설정 (5050 포트)
 - [ ] 정기 백업 설정
+- [ ] 리버스 프록시 사용 시 `X-Forwarded-For` 헤더 설정 확인
 
 ---
 

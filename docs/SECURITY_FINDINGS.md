@@ -24,7 +24,7 @@
 
 | # | 항목 | 심각도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| Z-01 | Content Security Policy: `unsafe-inline` 허용 | Medium | `[-]` | `style-src` unsafe-inline 제거, progress bar → data-width+JS |
+| Z-01 | Content Security Policy: `unsafe-inline` 허용 | Medium | `[~]` | `script-src` nonce 제거(인라인 스크립트 차단 부작용). `style-src` unsafe-inline 재추가(인라인 CSS 외부화 미완료). 완전 제거는 인라인 CSS 전면 외부화 후 가능 |
 | Z-02 | CORS: `/api/*` 전체 오리진 허용 (`origins: "*"`) | Medium | `[-]` | `WCMS_ALLOWED_ORIGINS` 환경변수로 제어 |
 | Z-03 | Anti-CSRF 토큰 없음 (로그인 폼) | Low | `[-]` | Flask-WTF CSRFProtect 적용, API Blueprint 제외 |
 | Z-04 | X-Content-Type-Options 헤더 | Low | `[-]` | Talisman이 자동 적용 |
@@ -74,10 +74,11 @@ subprocess.run(['shutdown', '/s', '/t', str(delay)], shell=False)
 
 **문제**: `style-src: unsafe-inline` 허용으로 XSS 공격 시 스타일 인젝션 가능.
 
-**계획**:
-- 인라인 CSS 제거 완료 후 (plan.md 인라인 CSS 항목) `unsafe-inline` 삭제 가능
-- `script-src`는 이미 nonce 적용 중 (`content_security_policy_nonce_in=['script-src']`)
-- `style-src`도 nonce 또는 hash 방식으로 전환
+**현황**:
+- `script-src` nonce 제거됨 — nonce 존재 시 `unsafe-inline`이 CSP 스펙상 무시되어 인라인 스크립트 전체 차단되는 부작용 발생
+- `style-src` unsafe-inline 재추가됨 — 템플릿 인라인 CSS 외부화가 미완료 상태
+
+**완전 해결 조건**: 모든 템플릿의 인라인 `style=""` 및 `<style>` 블록을 `components.css`로 이전 완료 후 제거 가능
 
 ---
 

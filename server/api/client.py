@@ -208,6 +208,7 @@ def shutdown_signal():
     return jsonify({'status': 'success', 'message': 'Shutdown signal received'}), 200
 
 
+@client_bp.route('/command', methods=['GET'])  # 구버전 클라이언트 호환
 @client_bp.route('/commands', methods=['GET'])
 def poll_commands():
     """명령 대기 (Long-polling, GET)

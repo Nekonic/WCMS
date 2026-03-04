@@ -4,7 +4,7 @@
 
 [project]
 name = "wcms"
-version = "0.8.6"
+version = "0.9.6"
 description = "WCMS - 실습실 PC 원격 관리 및 모니터링 시스템"
 readme = "README.md"
 license = "MIT"

@@ -7,20 +7,49 @@
 
 ---
 
-## [0.9.6] - 2026-03-03
+## [0.9.6] - 2026-03-04
 
-> **상태**: In Progress
-> **테마**: 버그 수정
+> **상태**: Released
+> **테마**: 버그 수정, 보안 강화
 
 ### Fixed - 버그 수정
 - **메시지 전송 오류 (WOW64)** (`client/executor.py`)
   - 32비트 서비스 프로세스에서 WOW64 파일시스템 리디렉션으로 `System32\msg.exe` 접근 불가
   - `Sysnative` 별칭을 폴백으로 추가: `System32` 미존재 시 `Sysnative` 경로 시도
+- **프로덕션 UI 깨짐** (`server/app.py`)
+  - CSP `style-src`에 `'unsafe-inline'` 누락으로 인라인 스타일 전체 차단
+  - `content_security_policy_nonce_in=['script-src']` 설정이 `'unsafe-inline'`을 무효화해 인라인 스크립트 차단
+  - `force_https=True` 고정으로 SSL 미설정 환경에서 리다이렉트 루프 발생
+- **Gunicorn 모듈 경로 오류** (`manage.py`)
+  - `server.app:app` → `app:app` (PYTHONPATH가 server/ 이므로 올바른 경로)
+- **리버스 프록시 뒤에서 IP 127.0.0.1로 고정** (`server/app.py`)
+  - ProxyFix 미적용으로 모든 요청이 127.0.0.1로 보여 Rate Limiting, 로그 무력화
+- **구버전 클라이언트 404 반복** (`server/api/client.py`)
+  - `/api/client/command` (단수) → `/api/client/commands` (복수) 호환 라우트 추가
+- **404 로그 스팸** (`server/app.py`)
+  - 같은 경로는 1분에 1회만 기록하도록 중복 억제
 
 ### Changed - 변경
 - **서버 버전 자동 주입** (`server/VERSION`, `server/app.py`, `server/templates/about.html`)
   - `server/VERSION` 파일(버전, 날짜 2줄)을 컨텍스트 프로세서로 모든 템플릿에 주입
   - `about.html` 버전/날짜 하드코딩 → `{{ server_version }}` / `{{ server_version_date }}`
+- **`manage.py init-db` 인수 지원**
+  - `python manage.py init-db [id] [pw]` 형식으로 관리자 계정 지정 가능 (기본값: admin/admin)
+  - `--force` / `-f`: 기존 DB 무조건 삭제 후 재초기화
+- **`manage.py` 단축 옵션 추가**
+  - `--prod`/`-p`, `--force`/`-f`, `--rebuild`/`-r`, `--no-cache`/`-n`, `--cleanup`/`-c`, `--skip-boot`/`-s`
+
+### Security - 보안
+- **ProxyFix 적용** (`server/app.py`)
+  - 리버스 프록시 환경에서 `X-Forwarded-For` 헤더로 실제 클라이언트 IP 복원
+  - Rate Limiting 및 로그인 Brute-force 방어 정상화
+- **`force_https` 조건부 적용** (`server/app.py`)
+  - `WCMS_SSL_CERT` / `WCMS_SSL_KEY` 환경변수 설정 시에만 HTTPS 강제
+
+### Docs - 문서
+- `docs/SECURITY.md` v0.9.6 갱신: 리버스 프록시(Apache/nginx) 설정 가이드 추가, CSP 예시 수정
+- `docs/GETTING_STARTED.md`: `init-db` 인수 설명 추가
+- `docs/SECURITY_FINDINGS.md`: Z-01 상태 수정 (`[-]` → `[~]`, 인라인 CSS 외부화 미완료 명시)
 
 ---
 

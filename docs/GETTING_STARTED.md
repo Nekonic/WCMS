@@ -70,7 +70,7 @@ iwr -Uri "http://서버주소:5050/install/install.ps1" -OutFile install.ps1; .\
 | `python manage.py run --prod` | 서버 실행 (Gunicorn, 프로덕션) |
 | `python manage.py test` | 단위 테스트 실행 |
 | `python manage.py build` | 클라이언트 EXE 빌드 (Windows 전용) |
-| `python manage.py init-db` | DB 초기화 |
+| `python manage.py init-db [id] [pw]` | DB 초기화 (기본값: admin / admin) |
 | `python manage.py install` | 의존성 설치 |
 
 ---
