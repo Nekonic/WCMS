@@ -67,7 +67,7 @@ if %errorLevel% neq 0 (
     echo [ERROR] Administrator privileges required.
     echo Please run Command Prompt as Administrator.
     echo.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 echo [OK] Administrator privileges verified
@@ -109,7 +109,7 @@ if "%VERSION%"=="ERROR" (
     echo [ERROR] Cannot connect to server: %SERVER_URL%
     echo Please check if the server is running.
     echo.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 echo [OK] Latest version: %VERSION%
@@ -119,7 +119,7 @@ for /f "delims=" %%i in ('powershell -Command "try {{ $r = Invoke-RestMethod -Ur
 
 if "%DOWNLOAD_URL%"=="ERROR" (
     echo [ERROR] Failed to get download URL.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 
@@ -138,7 +138,7 @@ powershell -Command "Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%EXE_PATH
 if %errorLevel% neq 0 (
     echo [ERROR] Download failed
     echo.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 echo [OK] Download complete
@@ -161,7 +161,7 @@ copy /Y "%EXE_PATH%" "%INSTALL_DIR%\\WCMS-Client.exe" >nul
 if %errorLevel% neq 0 (
     echo [ERROR] File copy failed
     echo.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 echo [OK] File copy complete
@@ -186,7 +186,7 @@ SET "CONFIG_URL=%SERVER_URL%/"
 
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to create config.json
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 echo [OK] Configuration file created with PIN
@@ -223,7 +223,7 @@ echo [INFO] Installing Windows service using PowerShell...
 powershell -Command "New-Service -Name 'WCMS-Client' -BinaryPathName '\"%INSTALL_DIR%\\WCMS-Client.exe\"' -DisplayName 'WCMS Client Service' -Description 'WCMS Remote Management Client' -StartupType Automatic"
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to create service using PowerShell.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 
@@ -242,7 +242,7 @@ if %errorLevel% neq 0 (
     echo The executable ran but service was not registered.
     echo Check logs at: %CONFIG_DIR%\\logs\\
     echo.
-    timeout /t 5 /nobreak >nul
+    pause
     exit /b 1
 )
 echo [OK] Service installed and configured for delayed auto-start and failure recovery.
@@ -310,6 +310,7 @@ if exist "%CONFIG_DIR%\\logs\\client.log" (
 )
 echo ==============================
 echo.
+pause
 
 '''
 
@@ -352,7 +353,7 @@ if (-not $isAdmin) {{
     Write-Host "[ERROR] 관리자 권한이 필요합니다." -ForegroundColor $ErrorColor
     Write-Host "PowerShell을 관리자로 실행하고 다시 시도하세요." -ForegroundColor $ErrorColor
     Write-Host ""
-    Start-Sleep -Seconds 5
+    Read-Host "종료하려면 Enter 키를 누르세요"
     exit 1
 }}
 Write-Host "[OK] 관리자 권한 확인" -ForegroundColor $SuccessColor
@@ -392,7 +393,7 @@ try {{
     Write-Host "서버가 실행 중인지 확인하세요." -ForegroundColor $ErrorColor
     Write-Host "오류 상세: $_" -ForegroundColor $ErrorColor
     Write-Host ""
-    Start-Sleep -Seconds 5
+    Read-Host "종료하려면 Enter 키를 누르세요"
     exit 1
 }}
 
@@ -415,7 +416,7 @@ try {{
     Write-Host "[ERROR] 다운로드 실패" -ForegroundColor $ErrorColor
     Write-Host "오류 상세: $_" -ForegroundColor $ErrorColor
     Write-Host ""
-    Start-Sleep -Seconds 5
+    Read-Host "종료하려면 Enter 키를 누르세요"
     exit 1
 }}
 
@@ -440,7 +441,7 @@ try {{
     Write-Host "[ERROR] 파일 복사 실패" -ForegroundColor $ErrorColor
     Write-Host "오류 상세: $_" -ForegroundColor $ErrorColor
     Write-Host ""
-    Start-Sleep -Seconds 5
+    Read-Host "종료하려면 Enter 키를 누르세요"
     exit 1
 }}
 
@@ -469,7 +470,7 @@ try {{
     Write-Host "[ERROR] 설정 파일 생성 실패" -ForegroundColor $ErrorColor
     Write-Host "오류 상세: $_" -ForegroundColor $ErrorColor
     Write-Host ""
-    Start-Sleep -Seconds 5
+    Read-Host "종료하려면 Enter 키를 누르세요"
     exit 1
 }}
 
@@ -505,7 +506,7 @@ try {{
     Write-Host "[ERROR] 서비스 설치 실패" -ForegroundColor $ErrorColor
     Write-Host "오류 상세: $_" -ForegroundColor $ErrorColor
     Write-Host ""
-    Start-Sleep -Seconds 5
+    Read-Host "종료하려면 Enter 키를 누르세요"
     exit 1
 }}
 
