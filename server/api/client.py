@@ -460,14 +460,15 @@ def register_version():
     GitHub Actions build_client.yml에서 빌드 완료 후 호출.
     Authorization: Bearer <UPDATE_TOKEN> 헤더로 인증.
     """
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
-        return jsonify({'status': 'error', 'message': '인증 필요'}), 401
-
-    token = auth_header[len('Bearer '):]
-    expected = current_app.config.get('UPDATE_TOKEN', '')
-    if not expected or token != expected:
-        return jsonify({'status': 'error', 'message': '유효하지 않은 토큰'}), 403
+    from flask import session
+    if not session.get('admin'):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'status': 'error', 'message': '인증 필요'}), 401
+        token = auth_header[len('Bearer '):]
+        expected = current_app.config.get('UPDATE_TOKEN', '')
+        if not expected or token != expected:
+            return jsonify({'status': 'error', 'message': '유효하지 않은 토큰'}), 403
 
     data = request.json
     if not data or 'version' not in data or 'download_url' not in data:
