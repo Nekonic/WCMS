@@ -11,10 +11,11 @@
 3. [환경변수 설정](#3-환경변수-설정)
 4. [DB 초기화 및 첫 실행 확인](#4-db-초기화-및-첫-실행-확인)
 5. [systemd 서비스 등록](#5-systemd-서비스-등록)
-6. [리버스 프록시 연결](#6-리버스-프록시-연결)
-7. [운영 관리](#7-운영-관리)
-8. [업데이트](#8-업데이트)
-9. [문제 해결](#9-문제-해결)
+6. [클라이언트 설치 스크립트 설정](#6-클라이언트-설치-스크립트-설정)
+7. [리버스 프록시 연결](#7-리버스-프록시-연결)
+8. [운영 관리](#8-운영-관리)
+9. [업데이트](#9-업데이트)
+10. [문제 해결](#10-문제-해결)
 
 ---
 
@@ -47,7 +48,7 @@ sudo chown -R wcms:wcms /opt/wcms
 
 # 의존성 설치
 cd /opt/wcms
-sudo -u wcms python manage.py install
+sudo -u wcms python3 manage.py install
 ```
 
 ---
@@ -84,11 +85,11 @@ WCMS_DB_PATH=/var/lib/wcms/db.sqlite3
 UPDATE_TOKEN=<랜덤 값>
 ```
 
-파일 권한을 제한합니다:
+파일 권한을 제한합니다 (`wcms` 그룹이 읽을 수 있도록 640):
 
 ```bash
-sudo chmod 600 /etc/wcms/env
-sudo chown root:root /etc/wcms/env
+sudo chmod 640 /etc/wcms/env
+sudo chown root:wcms /etc/wcms/env
 ```
 
 > `WCMS_SECRET_KEY` 생성:
@@ -105,12 +106,13 @@ sudo chown root:root /etc/wcms/env
 sudo mkdir -p /var/lib/wcms
 sudo chown wcms:wcms /var/lib/wcms
 
-# 환경변수 적용 후 DB 초기화 (관리자 계정 생성)
+# DB 초기화 (관리자 계정 생성)
 cd /opt/wcms
-sudo -u wcms env $(cat /etc/wcms/env | xargs) python manage.py init-db <관리자ID> <비밀번호>
+export $(sudo cat /etc/wcms/env | xargs)
+python3 manage.py init-db <관리자ID> <비밀번호>
 
 # 프로덕션 모드 단발 실행으로 정상 동작 확인
-sudo -u wcms env $(cat /etc/wcms/env | xargs) python manage.py run --prod
+python3 manage.py run --prod
 # → http://서버IP:5050 에서 응답 확인 후 Ctrl+C
 ```
 
@@ -134,8 +136,12 @@ User=wcms
 Group=wcms
 WorkingDirectory=/opt/wcms
 EnvironmentFile=/etc/wcms/env
+Environment=PYTHONPATH=/opt/wcms/server
 
-ExecStart=/usr/local/bin/python manage.py run --prod
+ExecStart=/opt/wcms/server/.venv/bin/gunicorn \
+    -k gevent -w 1 --worker-connections 1000 \
+    -b 0.0.0.0:5050 --timeout 120 \
+    app:app
 ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=on-failure
@@ -173,7 +179,73 @@ sudo systemctl status wcms
 
 ---
 
-## 6. 리버스 프록시 연결
+## 6. 클라이언트 설치 스크립트 설정
+
+Windows 클라이언트 설치 스크립트(`install.cmd`, `install.ps1`)는 서버에서 동적으로 생성되며, 설치 시 서버 DB에 등록된 클라이언트 버전의 다운로드 URL을 참조합니다. 서버 시작 후 반드시 클라이언트 버전을 등록해야 합니다.
+
+### 클라이언트 버전 등록
+
+#### 방법 1: UPDATE_TOKEN으로 등록 (권장)
+
+`/etc/wcms/env`에 `UPDATE_TOKEN`을 설정한 뒤 서비스를 재시작하고, 아래 명령으로 버전을 등록합니다:
+
+```bash
+curl -X POST http://localhost:5050/api/client/version \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <UPDATE_TOKEN 값>" \
+  -d '{
+    "version": "0.9.7",
+    "download_url": "https://github.com/Nekonic/WCMS/releases/download/client-v0.9.7/WCMS-Client.exe",
+    "changelog": "v0.9.7 릴리스"
+  }'
+```
+
+#### 방법 2: 관리자 웹 UI
+
+브라우저에서 `http://서버주소:5050` 로그인 → **클라이언트 버전 관리** 페이지에서 직접 등록.
+
+#### 방법 3: GitHub Actions 자동 등록
+
+`client-v*` 태그를 push하면 `build_client.yml`이 빌드 완료 후 서버에 자동 등록합니다. `UPDATE_TOKEN`이 환경변수에 설정되어 있어야 합니다.
+
+```bash
+# /etc/wcms/env에 추가
+UPDATE_TOKEN=<랜덤 생성값>
+```
+
+GitHub Repository → Settings → Secrets → `UPDATE_TOKEN`, `SERVER_URL` 시크릿 등록 필요.
+
+### 버전 등록 확인
+
+```bash
+curl http://localhost:5050/api/client/version
+# {"version":"0.9.7","download_url":"https://...","status":"success"}
+```
+
+### 설치 스크립트 배포
+
+서버가 실행 중이면 아래 URL에서 설치 스크립트를 즉시 다운로드할 수 있습니다:
+
+| 스크립트 | URL |
+|---------|-----|
+| Windows CMD | `http://서버주소:5050/install/install.cmd` |
+| PowerShell | `http://서버주소:5050/install/install.ps1` |
+
+서버 URL을 명시적으로 지정하려면 `?server=` 파라미터를 사용합니다:
+
+```
+http://서버주소:5050/install/install.cmd?server=http://서버주소:5050
+```
+
+**Windows 클라이언트 설치 명령 (CMD, 관리자 권한):**
+
+```cmd
+curl -fsSL http://서버주소:5050/install/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+---
+
+## 7. 리버스 프록시 연결
 
 > 상세 설정은 [SECURITY.md — 리버스 프록시 설정](SECURITY.md#리버스-프록시-설정) 참고.
 
@@ -187,7 +259,7 @@ sudo systemctl status wcms
 
 ---
 
-## 7. 운영 관리
+## 8. 운영 관리
 
 ### 서비스 제어
 
@@ -246,7 +318,7 @@ sudo crontab -e
 
 ---
 
-## 8. 업데이트
+## 9. 업데이트
 
 ```bash
 # 1. 저장소 업데이트
@@ -254,7 +326,7 @@ cd /opt/wcms
 sudo -u wcms git pull
 
 # 2. 의존성 업데이트
-sudo -u wcms python manage.py install
+sudo -u wcms python3 manage.py install
 
 # 3. DB 마이그레이션 필요 시 (스키마 변경)
 # schema.sql 변경 내역을 CHANGELOG.md에서 확인 후 수동 적용
@@ -269,7 +341,7 @@ sudo systemctl status wcms
 
 ---
 
-## 9. 문제 해결
+## 10. 문제 해결
 
 ### 서비스가 시작되지 않는 경우
 

@@ -2,7 +2,7 @@
 클라이언트 API Blueprint
 클라이언트가 호출하는 API 엔드포인트
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 import json
 import time
 import logging
@@ -451,4 +451,42 @@ def get_version():
             'changelog': 'Initial version',
             'released_at': None
         })
+
+
+@client_bp.route('/version', methods=['POST'])
+def register_version():
+    """클라이언트 버전 등록 (GitHub Actions / UPDATE_TOKEN 인증)
+
+    GitHub Actions build_client.yml에서 빌드 완료 후 호출.
+    Authorization: Bearer <UPDATE_TOKEN> 헤더로 인증.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return jsonify({'status': 'error', 'message': '인증 필요'}), 401
+
+    token = auth_header[len('Bearer '):]
+    expected = current_app.config.get('UPDATE_TOKEN', '')
+    if not expected or token != expected:
+        return jsonify({'status': 'error', 'message': '유효하지 않은 토큰'}), 403
+
+    data = request.json
+    if not data or 'version' not in data or 'download_url' not in data:
+        return jsonify({'status': 'error', 'message': 'version과 download_url이 필요합니다'}), 400
+
+    db = get_db()
+    try:
+        db.execute('''
+            INSERT INTO client_versions (version, download_url, changelog, released_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            data.get('version'),
+            data.get('download_url'),
+            data.get('changelog', '')
+        ))
+        db.commit()
+        logger.info(f"클라이언트 버전 등록 (token): {data.get('version')}")
+        return jsonify({'status': 'success', 'message': f"버전 {data.get('version')} 등록 완료"}), 200
+    except Exception as e:
+        logger.error(f"버전 등록 실패: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
