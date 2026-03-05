@@ -7,6 +7,41 @@
 
 ---
 
+## [0.9.8] - 2026-03-06
+
+> **상태**: Released
+> **테마**: 프로덕션 배포 검증 및 핵심 버그 수정
+
+### Added - 추가
+- **`POST /api/client/version`** 엔드포인트 추가 (`server/api/admin.py`)
+  - 기존 `GET` 전용이라 GitHub Actions 자동 등록이 불가능했던 문제 해결
+  - `Authorization: Bearer <UPDATE_TOKEN>` 인증
+
+### Fixed - 버그 수정
+- **gunicorn 진입점이 항상 development 모드로 시작** (`server/app.py`)
+  - `FLASK_ENV` 환경변수를 읽고 있었으나 systemd 환경파일에는 `WCMS_ENV` 설정 → `WCMS_ENV`로 수정
+- **HTTP 환경에서 로그인 후 CSRF 오류** (`server/app.py`, `server/config.py`)
+  - `Flask-Talisman` `session_cookie_secure` 기본값 True → Set-Cookie에 `Secure` 플래그 → HTTP 브라우저가 쿠키 무시
+  - `session_cookie_secure=ssl_configured` 로 SSL 유무에 따라 동적 설정
+  - `ProductionConfig.SESSION_COOKIE_SECURE` 미설정(부모 `True` 상속) → `WCMS_SSL_CERT` 환경변수 유무로 판단하도록 추가
+- **`download_url`에 개행이 포함되어 클라이언트 설치 중단** (`manage.py`)
+  - `VERSION` 파일을 `f.read().strip()`으로 읽어 2번째 줄(날짜)까지 포함 → `f.readline().strip()`으로 첫 줄만 읽도록 수정
+- **`msg.exe` 없을 때 `WinError 2` 발생** (`client/executor.py`)
+  - `Sysnative` 경로에도 없을 경우 `FileNotFoundError` 발생 → 존재 확인 후 명확한 오류 문자열 반환
+- **신규 계정 첫 로그인 시 언어가 Korean으로 표시되는 문제** (`client/executor.py`)
+  - `Install-Language -Language mn-MN` 등이 `ko-KR`, `und-Kore`를 의존 패키지로 함께 설치
+  - NTUSER.DAT 레지스트리 설정에 `PreferredUILanguageOverride` 키 누락 → 첫 로그인 시 ko-KR fallback 발생
+  - `Set-WinUILanguageOverride`와 동등한 `Control Panel\Desktop\PreferredUILanguageOverride` (REG_MULTI_SZ) 추가
+
+### Changed - 변경
+- **`python` → `python3`** (모든 스크립트, 문서, `docker-entrypoint.sh`)
+- **`server/pyproject.toml`** `[tool.uv] dev-dependencies` → `[dependency-groups] dev` (uv 권장 방식, deprecation 경고 제거)
+
+### Client - 클라이언트
+- **버전**: `client-v0.9.8` (태그 push)
+
+---
+
 ## [0.9.7] - 2026-03-05
 
 > **상태**: Released

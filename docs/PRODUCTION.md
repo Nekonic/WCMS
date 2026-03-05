@@ -46,9 +46,9 @@ sudo mkdir -p /opt/wcms
 sudo git clone https://github.com/Nekonic/WCMS.git /opt/wcms
 sudo chown -R wcms:wcms /opt/wcms
 
-# 의존성 설치
+# 의존성 설치 (프로덕션: dev 패키지 제외)
 cd /opt/wcms
-sudo -u wcms python3 manage.py install
+uv sync --project server --no-dev
 ```
 
 ---
@@ -106,10 +106,14 @@ sudo chown root:wcms /etc/wcms/env
 sudo mkdir -p /var/lib/wcms
 sudo chown wcms:wcms /var/lib/wcms
 
-# DB 초기화 (관리자 계정 생성)
+# DB 초기화 (관리자 계정 생성) — root로 실행됨
 cd /opt/wcms
 export $(sudo cat /etc/wcms/env | xargs)
-python3 manage.py init-db <관리자ID> <비밀번호>
+sudo python3 manage.py init-db <관리자ID> <비밀번호>
+
+# init-db는 root로 실행되므로 반드시 권한 수정
+sudo chown -R wcms:wcms /opt/wcms /var/lib/wcms
+sudo chown wcms:wcms /var/log/wcms
 
 # 프로덕션 모드 단발 실행으로 정상 동작 확인
 python3 manage.py run --prod
