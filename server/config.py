@@ -62,9 +62,8 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """프로덕션 환경 설정"""
     DEBUG = False
-    # 프로덕션에서는 SECRET_KEY 환경변수 필수
-    # 클래스 정의 시점에 검사하지 않고, 인스턴스화 또는 속성 접근 시점에 검사하도록 변경
-    # 또는 기본값을 제거하고 런타임에 확인
+    # HTTPS 직접 종료 시 True, 리버스 프록시 없이 HTTP 운영 시 False
+    SESSION_COOKIE_SECURE = os.getenv('WCMS_SSL_CERT') is not None
 
 
 class TestConfig(Config):

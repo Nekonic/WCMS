@@ -66,7 +66,7 @@ sudo nano /etc/wcms/env
 # /etc/wcms/env
 
 # [필수] Flask 세션 서명 키 — 랜덤 생성값 사용
-WCMS_SECRET_KEY=<python -c 'import secrets; print(secrets.token_hex(32))' 실행 후 붙여넣기>
+WCMS_SECRET_KEY=<python3 -c 'import secrets; print(secrets.token_hex(32))' 실행 후 붙여넣기>
 
 # [필수] 프로덕션 모드
 WCMS_ENV=production
@@ -330,7 +330,7 @@ sudo -u wcms python3 manage.py install
 
 # 3. DB 마이그레이션 필요 시 (스키마 변경)
 # schema.sql 변경 내역을 CHANGELOG.md에서 확인 후 수동 적용
-# sudo -u wcms env $(cat /etc/wcms/env | xargs) python manage.py init-db --force  ← DB 초기화 (데이터 삭제)
+# sudo -u wcms env $(cat /etc/wcms/env | xargs) python3 manage.py init-db --force  ← DB 초기화 (데이터 삭제)
 
 # 4. 서비스 재시작
 sudo systemctl restart wcms
@@ -350,7 +350,7 @@ sudo systemctl status wcms
 sudo journalctl -u wcms -n 50 --no-pager
 
 # 환경변수 누락 확인 (WCMS_SECRET_KEY 필수)
-sudo -u wcms env $(cat /etc/wcms/env | xargs) python -c "from server.config import get_config; get_config('production')"
+sudo -u wcms env $(cat /etc/wcms/env | xargs) python3 -c "from server.config import get_config; get_config('production')"
 ```
 
 ### 포트가 이미 사용 중

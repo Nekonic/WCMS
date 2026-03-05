@@ -24,13 +24,13 @@
 
 ```bash
 # 1. 의존성 설치
-python manage.py install
+python3 manage.py install
 
 # 2. 데이터베이스 초기화
-python manage.py init-db
+python3 manage.py init-db
 
 # 3. 서버 실행
-python manage.py run
+python3 manage.py run
 ```
 
 접속 주소: `http://localhost:5050` | 기본 계정: `admin` / `admin`

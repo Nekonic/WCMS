@@ -59,7 +59,7 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 ```bash
 export WCMS_SSL_CERT="/etc/letsencrypt/live/your-domain.com/fullchain.pem"
 export WCMS_SSL_KEY="/etc/letsencrypt/live/your-domain.com/privkey.pem"
-python manage.py run
+python3 manage.py run
 ```
 
 ---

@@ -108,6 +108,7 @@ def create_app(config_name='development'):
         Talisman(app,
                  force_https=ssl_configured,
                  strict_transport_security=ssl_configured,
+                 session_cookie_secure=ssl_configured,
                  content_security_policy=csp)
     elif config_name == 'development':
         # 개발 환경: HTTPS 강제 없이 보안 헤더만 적용
@@ -422,7 +423,7 @@ Disallow: /
 
 # Gunicorn 진입점 (전역 app 객체 생성)
 import os
-mode = os.getenv('FLASK_ENV', 'development')
+mode = os.getenv('WCMS_ENV', 'development')
 app = create_app(mode)
 
 if __name__ == '__main__':

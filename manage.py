@@ -32,7 +32,7 @@ def get_client_version() -> str:
     version_file = 'VERSION'
     try:
         with open(version_file, encoding='utf-8') as f:
-            return f.read().strip()
+            return f.readline().strip()
     except Exception:
         pass
 
@@ -436,7 +436,7 @@ def main():
     elif command == "build":
         build_client()
     elif command == "help":
-        print("사용법: python manage.py [command] [options]")
+        print("사용법: python3 manage.py [command] [options]")
         print("Commands:")
         print("  run                    : 서버 실행 (기본값)")
         print("    --prod,    -p        : Gunicorn으로 프로덕션 모드 실행")
