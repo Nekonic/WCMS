@@ -340,7 +340,7 @@ def create_app(config_name='development'):
         server_version = ''
         server_version_date = ''
         try:
-            version_path = os.path.join(os.path.dirname(__file__), 'VERSION')
+            version_path = os.path.join(os.path.dirname(__file__), '..', 'VERSION')
             lines = open(version_path, encoding='utf-8').read().splitlines()
             server_version = lines[0] if lines else ''
             server_version_date = lines[1] if len(lines) > 1 else ''

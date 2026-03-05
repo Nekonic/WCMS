@@ -145,6 +145,59 @@ class TestAdminAPI:
         assert 'command_id' in data
 
 
+    def test_admin_clear_pc_commands(self, client, test_pin):
+        """PC 대기 명령 삭제 API (commands 테이블 사용 확인)"""
+        reg_response = client.post('/api/client/register', json={
+            'machine_id': 'TEST-CLEAR-CMD-001',
+            'pin': test_pin,
+            'hostname': 'test-clear-cmd',
+            'mac_address': '12:34:56:78:90:AE'
+        })
+        pc_id = reg_response.get_json()['pc_id']
+
+        # 명령 하나 추가
+        client.post(f'/api/pc/{pc_id}/shutdown', json={})
+
+        # 대기 명령 삭제
+        response = client.delete(f'/api/pc/{pc_id}/commands/clear')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert 'deleted_count' in data
+
+
+class TestPublicAPI:
+    """인증 불필요 공개 API 테스트"""
+
+    def test_public_pcs_no_auth(self, client):
+        """공개 PC 목록 — 미로그인 상태에서 접근 가능"""
+        response = client.get('/api/pcs/public')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert isinstance(data, list)
+
+    def test_public_pcs_excludes_sensitive_fields(self, client, test_pin):
+        """공개 PC 목록 — current_user, processes 필드 제외 확인"""
+        client.post('/api/client/register', json={
+            'machine_id': 'TEST-PUBLIC-001',
+            'pin': test_pin,
+            'hostname': 'test-public',
+            'mac_address': '12:34:56:78:90:AF'
+        })
+
+        response = client.get('/api/pcs/public')
+        assert response.status_code == 200
+        data = response.get_json()
+        for pc in data:
+            assert 'current_user' not in pc
+            assert 'processes' not in pc
+
+    def test_private_pcs_requires_auth(self, client):
+        """인증 없이 /api/pcs 접근 시 401"""
+        response = client.get('/api/pcs')
+        assert response.status_code == 401
+
+
 class TestHealthCheck:
     """헬스 체크 테스트"""
 

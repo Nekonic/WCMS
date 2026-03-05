@@ -1,7 +1,7 @@
 # WCMS 보안 가이드
 
-> **버전**: v0.9.6
-> **최종 업데이트**: 2026-03-04
+> **버전**: v0.9.7
+> **최종 업데이트**: 2026-03-05
 
 ---
 
@@ -11,8 +11,9 @@
 2. [HTTPS 설정](#https-설정)
 3. [환경변수 설정](#환경변수-설정)
 4. [보안 기능](#보안-기능)
-5. [보안 체크리스트](#보안-체크리스트)
-6. [취약점 신고](#취약점-신고)
+5. [리버스 프록시 설정](#리버스-프록시-설정)
+6. [보안 체크리스트](#보안-체크리스트)
+7. [취약점 신고](#취약점-신고)
 
 ---
 
@@ -65,31 +66,20 @@ python manage.py run
 
 ## 환경변수 설정
 
-### 필수 (프로덕션)
+보안에 직접 관련된 변수만 기술합니다. 전체 환경변수 목록은 [PRODUCTION.md — 환경변수 설정](PRODUCTION.md#3-환경변수-설정) 참고.
+
+| 변수 | 필수 | 설명 |
+|------|------|------|
+| `WCMS_SECRET_KEY` | ✅ | Flask 세션 서명 키. 랜덤 생성값 필수. |
+| `WCMS_ENV` | ✅ | `production` 설정 시 SECRET_KEY 미설정이면 서버 시작 거부 |
+| `WCMS_SSL_CERT` | — | SSL 인증서 경로. 리버스 프록시 사용 시 불필요 |
+| `WCMS_SSL_KEY` | — | SSL 키 경로. 리버스 프록시 사용 시 불필요 |
+| `WCMS_ALLOWED_ORIGINS` | — | CORS 허용 오리진. 기본값 `*` (쉼표 구분) |
+| `UPDATE_TOKEN` | — | GitHub Actions → 서버 버전 자동 등록 토큰 |
 
 ```bash
-export WCMS_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
-export WCMS_ENV="production"
-export WCMS_SSL_CERT="/path/to/cert.pem"
-export WCMS_SSL_KEY="/path/to/key.pem"
-```
-
-### 선택
-
-```bash
-export WCMS_DB_PATH="/var/lib/wcms/db.sqlite3"
-export WCMS_LOG_LEVEL="INFO"
-export WCMS_PORT="5050"
-```
-
-### Docker
-
-`.env.docker` 파일:
-```env
-WCMS_ENV=production
-WCMS_SECRET_KEY=your-random-secret-key-here
-WCMS_SSL_CERT=/etc/ssl/certs/wcms.crt
-WCMS_SSL_KEY=/etc/ssl/private/wcms.key
+# SECRET_KEY 생성
+python3 -c 'import secrets; print(secrets.token_hex(32))'
 ```
 
 ---
@@ -108,11 +98,16 @@ Referrer-Policy: strict-origin-when-cross-origin
 
 ### Rate Limiting
 
-| 엔드포인트 | 제한 | 설명 |
+전역 제한: **200회/일, 50회/시간** (IP 기준)
+
+| 엔드포인트 | 제한 | 비고 |
 |-----------|------|------|
-| `/login` | 5회/분 | Brute-force 방어 |
-| `/api/client/*` | 제한 없음 | 토큰 인증으로 보호 |
-| `/api/admin/*` | 제한 없음 | 세션 인증으로 보호 |
+| `POST /login` | 5회/분 | Brute-force 방어 (별도 제한) |
+| `POST /api/client/register` | 전역 제한 적용 | PIN 브루트포스 방어 |
+| `/api/client/heartbeat` 등 폴링 엔드포인트 | 면제 | 상시 연결 특성상 제외 |
+| `/api/admin/*` | 면제 | 세션 인증으로 보호 |
+
+> 면제된 클라이언트 폴링 엔드포인트: `heartbeat`, `commands`, `shutdown`, `offline`, `commands/<id>/result`, `version`
 
 ### 세션 보안
 
@@ -186,16 +181,17 @@ location / {
 
 ## 보안 체크리스트
 
-### 프로덕션 배포 전
+> 운영 배포 전 전체 체크리스트는 [PRODUCTION.md — 배포 전 최종 체크리스트](PRODUCTION.md#배포-전-최종-체크리스트) 참고.
 
-- [ ] `WCMS_SECRET_KEY` 환경변수 설정 (랜덤 생성)
-- [ ] HTTPS 인증서 설정
-- [ ] `WCMS_ENV=production` 설정
+### 보안 항목만
+
+- [ ] `WCMS_SECRET_KEY` 랜덤 생성값으로 설정 (추측 불가능한 32바이트 이상)
+- [ ] `WCMS_ENV=production` 설정 (미설정 시 디버그 모드로 동작)
 - [ ] 기본 관리자 비밀번호 변경 (`admin`/`admin`)
-- [ ] 데이터베이스 파일 권한 제한 (`chmod 600`)
-- [ ] 방화벽 설정 (5050 포트)
-- [ ] 정기 백업 설정
-- [ ] 리버스 프록시 사용 시 `X-Forwarded-For` 헤더 설정 확인
+- [ ] HTTPS 적용 (Let's Encrypt 또는 리버스 프록시 SSL 종료)
+- [ ] 리버스 프록시 사용 시 `X-Forwarded-For` 위조 차단 설정 확인
+- [ ] `WCMS_ALLOWED_ORIGINS` 실제 오리진으로 제한 (현재 `*`)
+- [ ] DB 파일 권한 `600`, 소유자 전용 접근
 
 ---
 

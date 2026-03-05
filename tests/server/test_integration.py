@@ -70,15 +70,15 @@ class TestClientServerIntegration:
         })
         assert hb_response.status_code == 200
 
-        # 3. API를 통해 PC 상태 확인
+        # 3. API를 통해 PC 상태 확인 (관리자 인증 필요)
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
         pc_detail = client.get(f'/api/pc/{pc_id}').get_json()
         assert pc_detail['cpu_usage'] == 25.5
         assert pc_detail['current_user'] == 'student01'
 
         # 4. 관리자가 명령 전송
-        with client.session_transaction() as sess:
-            sess['admin'] = True
-            sess['username'] = 'admin'
 
         cmd_response = client.post(f'/api/pc/{pc_id}/shutdown', json={
             'delay': 60,
@@ -129,7 +129,10 @@ class TestClientServerIntegration:
             })
             assert hb_response.status_code == 200
 
-        # API를 통해 모든 PC의 상태 확인
+        # API를 통해 모든 PC의 상태 확인 (관리자 인증 필요)
+        with client.session_transaction() as sess:
+            sess['admin'] = True
+            sess['username'] = 'admin'
         for i, pc_id in enumerate(pc_ids):
             pc_detail = client.get(f'/api/pc/{pc_id}').get_json()
             assert pc_detail['cpu_usage'] == 10.0 + i * 10

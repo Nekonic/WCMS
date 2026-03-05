@@ -163,6 +163,15 @@ USE_EXPONENTIAL_BACKOFF = os.getenv('WCMS_USE_EXPONENTIAL_BACKOFF', 'true').lowe
 # 클라이언트 버전 (GitHub Actions에서 자동 교체)
 __version__ = "0.0.0-dev"
 
+# 개발 환경: 루트 VERSION 파일에서 읽기 (GA 빌드 시에는 위 값이 이미 교체됨)
+if __version__ == "0.0.0-dev":
+    try:
+        _ver_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'VERSION')
+        with open(_ver_path, encoding='utf-8') as _f:
+            __version__ = _f.read().splitlines()[0].strip()
+    except Exception:
+        pass
+
 
 # ==================== 시스템 프로세스 필터 ====================
 

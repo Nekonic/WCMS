@@ -1,6 +1,6 @@
 # WCMS API 레퍼런스
 
-> **버전**: v0.9.5
+> **버전**: v0.9.7
 > **Base URL**: `http://<server>:5050`
 
 ---
@@ -35,8 +35,9 @@
 
 | 메서드 | 경로 | 인증 | 설명 |
 |--------|------|------|------|
-| GET | `/api/pcs` | 없음 | PC 목록 (`?room=<name>` 필터) |
-| GET | `/api/pc/<id>` | 없음 | PC 상세 정보 |
+| GET | `/api/pcs/public` | 없음 | PC 기본 정보 목록 (`current_user`, `processes` 제외) |
+| GET | `/api/pcs` | 관리자 | PC 전체 정보 목록 (`?room=<name>` 필터) |
+| GET | `/api/pc/<id>` | 관리자 | PC 상세 정보 |
 | GET | `/api/pc/<id>/history` | 관리자 | 프로세스 기록 |
 | DELETE | `/api/pc/<id>` | 관리자 | PC 삭제 |
 | GET | `/api/pcs/duplicates` | 관리자 | 중복 호스트명 PC 목록 |
@@ -51,6 +52,7 @@
 | POST | `/api/pc/<id>/command` | 범용 명령 전송 |
 | POST | `/api/pc/<id>/shutdown` | 종료 |
 | POST | `/api/pc/<id>/restart` | 재시작 |
+| POST | `/api/pc/<id>/reboot` | 재시작 (`reboot` 타입 전송) |
 | POST | `/api/pc/<id>/message` | 메시지 전송 |
 | POST | `/api/pc/<id>/kill-process` | 프로세스 강제 종료 |
 | POST | `/api/pc/<id>/install` | 프로그램 설치 (Chocolatey) |
@@ -87,6 +89,14 @@
 | GET | `/api/client/versions` | 버전 목록 |
 | POST | `/api/client/version` | 버전 등록 |
 | DELETE | `/api/client/version/<id>` | 버전 삭제 |
+
+### 관리자 API - 프로세스
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/admin/processes` | 최근 1시간 내 모든 PC의 프로세스 목록 (중복 제거) |
+
+---
 
 ### 관리자 API - 등록 토큰
 
@@ -472,6 +482,25 @@ GET /api/admin/registration-tokens            # 활성 토큰만
 GET /api/admin/registration-tokens?all=true   # 전체 (만료/사용 포함)
 ```
 
+```json
+// Response 200
+{
+  "status": "success",
+  "tokens": [
+    {
+      "id": 1,
+      "token": "123456",
+      "usage_type": "single",
+      "used_count": 0,
+      "expires_at": "2026-02-27T10:10:00",
+      "is_expired": 0,
+      "created_by": "admin",
+      "created_at": "2026-02-27T10:00:00"
+    }
+  ]
+}
+```
+
 ---
 
 ### POST /api/client/version (관리자)
@@ -531,6 +560,6 @@ GET /api/admin/registration-tokens?all=true   # 전체 (만료/사용 포함)
 
 ## 오프라인 판정
 
-클라이언트는 30초 Long-poll로 연결을 유지한다. 서버는 40초 이상 `last_seen`이 갱신되지 않으면 `is_online=0`으로 처리한다 (백그라운드 체커, 기본 10초 주기).
+클라이언트는 30초 Long-poll로 연결을 유지한다. 서버는 40초 이상 `last_seen`이 갱신되지 않으면 `is_online=0`으로 처리한다 (백그라운드 체커, 기본 30초 주기, `WCMS_BG_CHECK_INTERVAL` 환경변수로 조정 가능).
 
 단절 이유(`reason`)는 `network_error` (명시적 offline 신호) 또는 `shutdown` (종료 신호)으로 기록되며, 재연결 시 `network_events` 테이블에 `online_at`과 `duration_sec`이 기록된다.

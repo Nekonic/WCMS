@@ -41,6 +41,27 @@ def _queue_command(pc_id: int, cmd_type: str, cmd_data=None):
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+_PUBLIC_PC_FIELDS = {
+    'id', 'hostname', 'ip_address', 'is_online', 'last_seen', 'room',
+    'cpu_usage', 'ram_used', 'ram_usage_percent', 'disk_usage',
+    'cpu_model', 'cpu_cores', 'cpu_threads', 'ram_total',
+    'disk_info', 'disk_info_parsed', 'os_edition', 'os_version',
+}
+
+
+@admin_bp.route('/pcs/public', methods=['GET'])
+def list_pcs_public():
+    """PC 기본 정보 공개 조회 (인증 불필요 — current_user, processes 제외)"""
+    room = request.args.get('room')
+    pcs = PCModel.get_all_by_room(room) if room else PCModel.get_all()
+    result = []
+    for pc in pcs:
+        pc_full = PCModel.get_with_status(pc['id'])
+        if pc_full:
+            result.append({k: v for k, v in pc_full.items() if k in _PUBLIC_PC_FIELDS})
+    return jsonify(result), 200
+
+
 @admin_bp.route('/pcs', methods=['GET'])
 @require_admin
 def list_pcs():
@@ -239,7 +260,7 @@ def clear_pc_commands(pc_id):
     try:
         db = get_db()
         cursor = db.execute(
-            "DELETE FROM pc_command WHERE pc_id = ? AND status = 'pending'",
+            "DELETE FROM commands WHERE pc_id = ? AND status = 'pending'",
             (pc_id,)
         )
         db.commit()
@@ -267,7 +288,7 @@ def clear_all_commands():
     for pc_id in pc_ids:
         try:
             cursor = db.execute(
-                "DELETE FROM pc_command WHERE pc_id = ? AND status = 'pending'",
+                "DELETE FROM commands WHERE pc_id = ? AND status = 'pending'",
                 (pc_id,)
             )
             deleted = cursor.rowcount
@@ -528,45 +549,46 @@ def delete_room(room_id):
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@admin_bp.route('/layout/map/<room_name>', methods=['GET', 'POST'])
-def manage_layout_map(room_name):
-    """좌석 배치 관리"""
+@admin_bp.route('/layout/map/<room_name>', methods=['GET'])
+def get_layout_map(room_name):
+    """좌석 배치 조회 (공개)"""
     db = get_db()
+    layout = db.execute('SELECT * FROM seat_layout WHERE room_name=?', (room_name,)).fetchone()
+    seats = db.execute('SELECT * FROM seat_map WHERE room_name=?', (room_name,)).fetchall()
 
-    if request.method == 'POST':
-        if not session.get('admin'):
-            return jsonify({'error': 'Unauthorized'}), 401
-
-        data = request.json
-        db.execute('DELETE FROM seat_map WHERE room_name=?', (room_name,))
-        db.execute('UPDATE pc_info SET room_name=NULL WHERE room_name=?', (room_name,))
-
-        for seat in data.get('seats', []):
-            if seat.get('pc_id'):
-                db.execute('INSERT INTO seat_map (room_name, row, col, pc_id) VALUES (?, ?, ?, ?)',
-                           (room_name, seat['row'], seat['col'], seat['pc_id']))
-                seat_number = f"{seat['col'] + 1}, {seat['row'] + 1}"
-                db.execute('UPDATE pc_info SET room_name=?, seat_number=? WHERE id = ?',
-                           (room_name, seat_number, seat['pc_id']))
-
-        db.execute('INSERT OR REPLACE INTO seat_layout (room_name, cols, rows) VALUES (?, ?, ?)',
-                   (room_name, data.get('cols', 8), data.get('rows', 5)))
+    if not layout:
+        db.execute('INSERT INTO seat_layout (room_name, rows, cols) VALUES (?, 5, 8)', (room_name,))
         db.commit()
-        return jsonify({'status': 'success'})
-    else:
-        layout = db.execute('SELECT * FROM seat_layout WHERE room_name=?', (room_name,)).fetchone()
-        seats = db.execute('SELECT * FROM seat_map WHERE room_name=?', (room_name,)).fetchall()
+        layout = {'rows': 5, 'cols': 8}
 
-        if not layout:
-            db.execute('INSERT INTO seat_layout (room_name, rows, cols) VALUES (?, 5, 8)', (room_name,))
-            db.commit()
-            layout = {'rows': 5, 'cols': 8}
+    return jsonify({
+        'rows': layout['rows'],
+        'cols': layout['cols'],
+        'seats': [dict(s) for s in seats]
+    })
 
-        return jsonify({
-            'rows': layout['rows'],
-            'cols': layout['cols'],
-            'seats': [dict(s) for s in seats]
-        })
+
+@admin_bp.route('/layout/map/<room_name>', methods=['POST'])
+@require_admin
+def save_layout_map(room_name):
+    """좌석 배치 저장 (관리자)"""
+    db = get_db()
+    data = request.json
+    db.execute('DELETE FROM seat_map WHERE room_name=?', (room_name,))
+    db.execute('UPDATE pc_info SET room_name=NULL WHERE room_name=?', (room_name,))
+
+    for seat in data.get('seats', []):
+        if seat.get('pc_id'):
+            db.execute('INSERT INTO seat_map (room_name, row, col, pc_id) VALUES (?, ?, ?, ?)',
+                       (room_name, seat['row'], seat['col'], seat['pc_id']))
+            seat_number = f"{seat['col'] + 1}, {seat['row'] + 1}"
+            db.execute('UPDATE pc_info SET room_name=?, seat_number=? WHERE id = ?',
+                       (room_name, seat_number, seat['pc_id']))
+
+    db.execute('INSERT OR REPLACE INTO seat_layout (room_name, cols, rows) VALUES (?, ?, ?)',
+               (room_name, data.get('cols', 8), data.get('rows', 5)))
+    db.commit()
+    return jsonify({'status': 'success'})
 
 
 @admin_bp.route('/debug/pc-status', methods=['GET'])

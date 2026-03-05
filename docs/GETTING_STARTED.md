@@ -109,6 +109,7 @@ python manage.py test
 
 ## 다음 단계
 
+- [프로덕션 배포](PRODUCTION.md) — systemd 서비스, 백업, 운영 관리
 - [API 명세](API.md) — REST API 상세 설명
 - [아키텍처](ARCHITECTURE.md) — 시스템 구조 이해
 - [보안](SECURITY.md) — HTTPS 설정 및 보안 정책

@@ -7,6 +7,46 @@
 
 ---
 
+## [0.9.7] - 2026-03-05
+
+> **상태**: Released
+> **테마**: API 정확도 개선, 문서 정비, 버그 수정
+
+### Added - 추가
+- **`GET /api/pcs/public`** — 인증 없이 PC 기본 정보 조회 (`current_user`, `processes` 제외)
+- **`docs/PRODUCTION.md`** — 프로덕션 배포 가이드 신규 작성 (systemd 서비스, 환경변수, 백업, 업데이트, 문제 해결)
+- **루트 `VERSION` 파일 통합** — `server/VERSION` + `client/VERSION` → 단일 `VERSION` 파일로 서버·클라이언트 버전 동기화
+  - `client/config.py`: 개발 환경에서 루트 `VERSION` 자동 읽기, GA 빌드 시 기존 방식 유지
+  - `server/app.py`, `manage.py`: 경로 업데이트
+
+### Fixed - 버그 수정
+- **명령 삭제 API 동작 안 함** (`server/api/admin.py`)
+  - `DELETE /api/pc/<id>/commands/clear`, `DELETE /api/pcs/commands/clear`
+  - 존재하지 않는 테이블 `pc_command` 참조 → 실제 테이블명 `commands`로 수정
+- **좌석 배치 POST 인증 우회 가능** (`server/api/admin.py`)
+  - `POST /api/layout/map/<room_name>`: 세션 수동 체크 → 라우트 분리 후 `@require_admin` 적용 (DB 검증 포함)
+
+### Changed - 변경
+- **Rate Limiting 정책 명시화** (`server/app.py`)
+  - `POST /api/client/register`: 전역 제한 적용 유지 (PIN 브루트포스 방어)
+  - 폴링 엔드포인트(`heartbeat`, `commands`, `shutdown`, `offline`, `result`, `version`): 개별 면제
+
+### Fixed - 버그 수정 (계속)
+- **PC 클릭 시 새 페이지로 이동하던 버그** (`static/js/pc-grid.js`)
+  - `openModal` 함수 덮어쓰기로 인해 모달 대신 페이지 이동이 발생하던 문제 수정
+
+### Tests - 테스트
+- `TestPublicAPI` 클래스 추가: 공개 엔드포인트 인증 없음 확인, 민감 필드 제외 확인, 인증 필요 엔드포인트 401 확인
+- `test_admin_clear_pc_commands`: 명령 삭제 버그 수정 회귀 방지
+- `test_integration.py`: `GET /api/pc/<id>` 관리자 인증 세션 누락 수정
+
+### Docs - 문서
+- **API.md**: 엔드포인트 인증 정보 수정, 누락 엔드포인트 추가 (`/api/pcs/public`, `/api/pc/<id>/reboot`, `/api/admin/processes`), 백그라운드 체커 주기 오류 수정 (10초→30초), 등록 토큰 응답 형식 추가
+- **SECURITY.md**: 환경변수 섹션 보안 변수만 유지 (PRODUCTION.md 링크), Rate Limiting 표 실제 동작 반영, 체크리스트 보안 특화 항목만 유지
+- **GETTING_STARTED.md**: PRODUCTION.md 링크 추가
+
+---
+
 ## [0.9.6] - 2026-03-04
 
 > **상태**: Released
