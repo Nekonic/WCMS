@@ -395,6 +395,7 @@ $sets = @(
     @("$hive\Control Panel\International",                            "LocaleName",                        "REG_SZ",       $Language),
     @("$hive\Control Panel\Desktop",                                  "PreferredUILanguages",               "REG_MULTI_SZ", $Language),
     @("$hive\Control Panel\Desktop",                                  "PreferredUILanguagesPending",        "REG_MULTI_SZ", $Language),
+    @("$hive\Control Panel\Desktop",                                  "PreferredUILanguageOverride",        "REG_MULTI_SZ", $Language),
     @("$hive\Control Panel\Desktop",                                  "MultilingualUserInterfaceLanguages", "REG_MULTI_SZ", $Language),
     @("$hive\Control Panel\International\User Profile",               "Languages",                         "REG_MULTI_SZ", $Language),
     @("$hive\Control Panel\International\User Profile System Backup", "Languages",                         "REG_MULTI_SZ", $Language)
