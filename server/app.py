@@ -118,10 +118,11 @@ def create_app(config_name='development'):
                  content_security_policy=False)
 
     # Rate Limiting 설정
+    # 기본 한도: LAN 환경에서 여러 PC가 프록시 IP를 공유하므로 넉넉하게 설정
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
+        default_limits=["2000 per day", "500 per hour"],
         storage_uri="memory://"
     )
 
@@ -152,8 +153,7 @@ def create_app(config_name='development'):
     # - admin_bp: 세션 인증으로 보호되므로 IP 기반 제한 불필요
     limiter.exempt(admin_bp)
 
-    # client_bp: register는 PIN 브루트포스 방어를 위해 면제하지 않음
-    # 폴링 엔드포인트만 개별 면제 (2초 주기 = 시간당 1,800회)
+    # client_bp: 폴링 엔드포인트만 개별 면제 (2초 주기 = 시간당 1,800회)
     _polling_views = [
         'client.heartbeat',
         'client.poll_commands',
