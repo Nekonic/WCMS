@@ -217,6 +217,7 @@ def create_app(config_name='development'):
         return render_template('index.html', pcs=pcs_with_status, room=room_name, username=admin_user, admin=admin_user)
 
     @app.route('/login', methods=['GET', 'POST'])
+    @csrf.exempt  # 프록시 환경에서 세션 기반 CSRF 미작동, rate limit(5/min)으로 보호
     @limiter.limit("5 per minute")  # Brute-force 방어
     def login():
         """관리자 로그인"""
