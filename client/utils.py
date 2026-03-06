@@ -85,7 +85,16 @@ def safe_request(
     @retry_on_network_error(max_retries=max_retries)
     def _request():
         method_func = getattr(requests, method.lower())
-        response = method_func(url, timeout=timeout, **kwargs)
+        if method.upper() == 'GET':
+            response = method_func(url, timeout=timeout, **kwargs)
+        else:
+            # POST/PUT/DELETE: 리다이렉트 시 메서드 유지 (requests 기본 동작은 GET으로 변환)
+            response = method_func(url, timeout=timeout, allow_redirects=False, **kwargs)
+            redirect_count = 0
+            while response.is_redirect and redirect_count < 5:
+                location = response.headers.get('Location', '')
+                response = method_func(location, timeout=timeout, allow_redirects=False, **kwargs)
+                redirect_count += 1
         response.raise_for_status()
         return response
 
