@@ -5,7 +5,8 @@ function openModal(pcId) {
     const modal = document.getElementById('pcModal');
     modal.classList.add('show');
 
-    fetch(`/api/pc/${pcId}`)
+    const apiUrl = window.WCMS_IS_ADMIN ? `/api/pc/${pcId}` : `/api/pcs/public/${pcId}`;
+    fetch(apiUrl)
         .then(res => res.json())
         .then(data => {
             document.getElementById('modalTitle').textContent = `${data.hostname} 상세 정보`;

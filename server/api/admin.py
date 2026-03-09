@@ -43,6 +43,7 @@ def _queue_command(pc_id: int, cmd_type: str, cmd_data=None):
 
 _PUBLIC_PC_FIELDS = {
     'id', 'hostname', 'ip_address', 'is_online', 'last_seen', 'room',
+    'room_name', 'seat_number', 'mac_address',
     'cpu_usage', 'ram_used', 'ram_usage_percent', 'disk_usage',
     'cpu_model', 'cpu_cores', 'cpu_threads', 'ram_total',
     'disk_info', 'disk_info_parsed', 'os_edition', 'os_version',
@@ -60,6 +61,15 @@ def list_pcs_public():
         if pc_full:
             result.append({k: v for k, v in pc_full.items() if k in _PUBLIC_PC_FIELDS})
     return jsonify(result), 200
+
+
+@admin_bp.route('/pcs/public/<int:pc_id>', methods=['GET'])
+def get_pc_public(pc_id):
+    """단일 PC 기본 정보 공개 조회 (인증 불필요 — current_user, processes 제외)"""
+    pc = PCModel.get_with_status(pc_id)
+    if not pc:
+        return jsonify({'error': 'PC not found'}), 404
+    return jsonify({k: v for k, v in pc.items() if k in _PUBLIC_PC_FIELDS}), 200
 
 
 @admin_bp.route('/pcs', methods=['GET'])
