@@ -5,7 +5,7 @@ import { eq, desc, and, gte } from 'drizzle-orm'
 import { compareSync } from 'bcryptjs'
 import { randomInt } from 'crypto'
 import type { DB } from '../db/index.js'
-import { admins, pcRegistrationTokens, pcDynamicInfo, pcInfo } from '../db/schema.js'
+import { admins, pcRegistrationTokens, pcDynamicInfo, pcInfo, clientVersions } from '../db/schema.js'
 import { requireAdmin, setSession, clearSession } from '../middleware/auth.js'
 
 const LoginSchema = z.object({
@@ -107,6 +107,24 @@ export function createAdminRouter(db: DB) {
       processes: r.processes ? JSON.parse(r.processes) : [],
       updated_at: r.updatedAt,
     })))
+  })
+
+  // ==================== 클라이언트 버전 ====================
+
+  router.get('/versions', requireAdmin, async (c) => {
+    const versions = db.select().from(clientVersions)
+      .orderBy(desc(clientVersions.releasedAt))
+      .all()
+    return c.json(versions)
+  })
+
+  router.delete('/versions/:id', requireAdmin, async (c) => {
+    const id = Number(c.req.param('id'))
+    const existing = db.select({ id: clientVersions.id }).from(clientVersions)
+      .where(eq(clientVersions.id, id)).get()
+    if (!existing) return c.json({ error: 'Version not found' }, 404)
+    db.delete(clientVersions).where(eq(clientVersions.id, id)).run()
+    return c.json({ status: 'ok' })
   })
 
   return router

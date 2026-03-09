@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
@@ -35,12 +36,16 @@ app.route('/install',      installRouter)
 // 헬스 체크
 app.get('/health', (c) => c.json({ status: 'ok', ts: new Date().toISOString() }))
 
+// 프론트엔드 정적 파일 (../frontend/build — npm run build 후 생성)
+app.use('/*', serveStatic({ root: '../frontend/build' }))
+app.use('/*', serveStatic({ path: '../frontend/build/index.html' }))
+
 // 404
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 
 // ==================== 서버 시작 ====================
 
-const PORT = Number(process.env.PORT ?? 3000)
+const PORT = Number(process.env.PORT ?? 5050)
 const HOST = process.env.HOST ?? '0.0.0.0'
 
 if (process.env.WCMS_SECRET_KEY === 'dev-secret-change-in-production' || !process.env.WCMS_SECRET_KEY) {

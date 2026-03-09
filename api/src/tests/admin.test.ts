@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { Hono } from 'hono'
 import { createAdminRouter } from '../routes/admin.js'
 import { createTestDb, insertToken } from './setup.js'
+import { clientVersions } from '../db/schema.js'
 
 function makeApp() {
   const { db } = createTestDb()
@@ -132,5 +133,45 @@ describe('DELETE /admin/tokens/:id', () => {
       headers: { cookie },
     })
     expect(res.status).toBe(200)
+  })
+})
+
+describe('GET /admin/versions', () => {
+  it('returns empty list when no versions', async () => {
+    const { app } = makeApp()
+    const cookie = await loginCookie(app)
+    const res = await app.request('/admin/versions', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json() as any[]
+    expect(body).toEqual([])
+  })
+
+  it('returns versions list', async () => {
+    const { app, db } = makeApp()
+    db.insert(clientVersions).values({ version: '1.0.0', downloadUrl: 'http://example.com', changelog: 'init' }).run()
+    const cookie = await loginCookie(app)
+    const res = await app.request('/admin/versions', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json() as any[]
+    expect(body[0].version).toBe('1.0.0')
+  })
+})
+
+describe('DELETE /admin/versions/:id', () => {
+  it('deletes a version', async () => {
+    const { app, db } = makeApp()
+    db.insert(clientVersions).values({ version: '1.0.0' }).run()
+    const cookie = await loginCookie(app)
+    const list = await (await app.request('/admin/versions', { headers: { cookie } })).json() as any[]
+    const id = list[0].id
+    const res = await app.request(`/admin/versions/${id}`, { method: 'DELETE', headers: { cookie } })
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 404 for unknown id', async () => {
+    const { app } = makeApp()
+    const cookie = await loginCookie(app)
+    const res = await app.request('/admin/versions/9999', { method: 'DELETE', headers: { cookie } })
+    expect(res.status).toBe(404)
   })
 })

@@ -76,7 +76,7 @@ def install_dependencies():
         print_step("클라이언트 의존성 설치 건너뛰기 (Windows 전용)")
 
 def init_db(force=False, username='admin', password='admin'):
-    """데이터베이스 초기화
+    """데이터베이스 초기화 (npm run db:init 호출)
 
     Args:
         force: True면 기존 DB를 묻지 않고 삭제
@@ -84,16 +84,8 @@ def init_db(force=False, username='admin', password='admin'):
         password: 관리자 비밀번호
     """
     print_step("데이터베이스 초기화 중...")
-    
-    # 환경변수 또는 기본 경로 사용
-    db_path = os.getenv('WCMS_DB_PATH', os.path.join("server", "db.sqlite3"))
-    schema_path = os.path.join("server", "migrations", "schema.sql")
-    
-    # DB 디렉토리 생성
-    db_dir = os.path.dirname(db_path)
-    if db_dir and not os.path.exists(db_dir):
-        os.makedirs(db_dir, exist_ok=True)
-        print(f"DB 디렉토리 생성: {db_dir}")
+
+    db_path = os.getenv('WCMS_DB_PATH', os.path.join("db", "wcms.sqlite3"))
 
     if os.path.exists(db_path):
         if force:
@@ -108,81 +100,30 @@ def init_db(force=False, username='admin', password='admin'):
                 print("초기화 취소.")
                 return
 
-    # 스키마 적용
-    if not os.path.exists(schema_path):
-        print(f"오류: 스키마 파일({schema_path})을 찾을 수 없습니다.")
-        return
+    # DB 디렉토리 생성
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+        print(f"DB 디렉토리 생성: {db_dir}")
 
-    import sqlite3
-    
-    try:
-        conn = sqlite3.connect(db_path)
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            schema = f.read()
-        conn.executescript(schema)
-        conn.close()
-        print(f"[✓] {schema_path} 적용 완료.")
-    except Exception as e:
-        print(f"오류: DB 생성 실패 - {e}")
-        return
-
-    # 관리자 생성
-    print_step(f"관리자 계정 생성 중 ({username} / {password})...")
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
+    if db_path:
+        env["WCMS_DB_PATH"] = os.path.abspath(db_path)
 
     try:
-        # uv run을 통해 create_admin.py 실행 (의존성 문제 해결)
-        subprocess.run(["uv", "run", "--project", "server", "python", "server/create_admin.py", username, password], env=env, check=True)
+        subprocess.run(
+            ["npm", "run", "db:init", "--", username, password],
+            cwd="api",
+            env=env,
+            check=True
+        )
     except subprocess.CalledProcessError:
-        print("[!] 관리자 계정 생성 스크립트 실행 실패.")
-        print("    'python manage.py install'을 실행하여 의존성을 먼저 설치해주세요.")
-        return
+        print("[!] DB 초기화 실패.")
+        sys.exit(1)
 
-    # 관리자 생성 확인
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT count(*) FROM admins")
-        count = cursor.fetchone()[0]
-        conn.close()
-        if count > 0:
-            print(f"[✓] 관리자 계정 생성 확인됨 (총 {count}명).")
-        else:
-            print("[!] 경고: 관리자 계정이 DB에 생성되지 않았습니다.")
-    except Exception as e:
-        print(f"[!] 관리자 계정 확인 중 오류: {e}")
-
-    # 좌석 생성
-    print_step("좌석 배치 생성 중...")
-    try:
-        subprocess.run(["uv", "run", "--project", "server", "python", "server/create_seats.py"], env=env, check=True)
-    except subprocess.CalledProcessError:
-        print("[!] 좌석 배치 생성 실패.")
-
-    # 클라이언트 버전 초기 데이터 삽입
-    print_step("클라이언트 버전 초기 데이터 삽입 중...")
-    client_ver = get_client_version()
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.execute('''
-            INSERT INTO client_versions (version, download_url, changelog)
-            VALUES (?, ?, ?)
-        ''', (
-            client_ver,
-            f'https://github.com/Nekonic/WCMS/releases/download/client-v{client_ver}/WCMS-Client.exe',
-            f'v{client_ver}'
-        ))
-        conn.commit()
-        conn.close()
-        print(f"[✓] 클라이언트 버전 {client_ver} 등록 완료.")
-    except Exception as e:
-        print(f"[!] 클라이언트 버전 삽입 실패: {e}")
-
-    print("\n✅ 초기화 완료.")
+    print("\n초기화 완료.")
     print(f"    관리자 ID: {username}")
     print(f"    비밀번호 : {password}")
-    print(f"    클라이언트 버전: {client_ver}")
 
 def migrate_db(migration_file=None):
     """데이터베이스 마이그레이션 실행
@@ -265,36 +206,42 @@ def migrate_db(migration_file=None):
         print(f"오류: {e}")
         sys.exit(1)
 
-def run_server(host="0.0.0.0", port=5050, mode="development", use_gunicorn=False):
-    """서버 실행"""
-    print_step(f"서버 시작 ({mode} 모드)...")
-    
-    env = os.environ.copy()
-    env["FLASK_ENV"] = mode
-    # PYTHONPATH에 server 디렉토리 추가
-    env["PYTHONPATH"] = os.path.join(os.getcwd(), "server")
-    
-    if use_gunicorn:
-        print_step("Gunicorn으로 서버 실행 중...")
-        # Gunicorn 실행 명령
-        # -k gevent: 비동기 워커 사용 (SocketIO 지원)
-        # -w 1: 워커 수 (SocketIO 사용 시 1개 권장, 여러 개 사용 시 Redis 등 메시지 큐 필요)
-        # --worker-connections 1000: 동시 접속 수
-        # -b host:port: 바인딩 주소
-        cmd = [
-            "uv", "run", "--project", "server", "gunicorn",
-            "-k", "gevent",
-            "-w", "1", 
-            "--worker-connections", "1000",
-            "-b", f"{host}:{port}",
-            "app:app"
-        ]
+def _ensure_frontend(prod=False):
+    """프론트엔드 의존성 설치 및 빌드 확인"""
+    frontend_dir = os.path.join(os.getcwd(), "frontend")
+    if not os.path.exists(frontend_dir):
+        return
+
+    node_modules = os.path.join(frontend_dir, "node_modules")
+    if not os.path.exists(node_modules):
+        print_step("프론트엔드 의존성 설치 중 (npm install)...")
+        subprocess.run(["npm", "install"], cwd=frontend_dir, check=True)
+
+    if prod:
+        print_step("프론트엔드 빌드 중 (npm run build)...")
+        subprocess.run(["npm", "run", "build"], cwd=frontend_dir, check=True)
+
+def run_server(prod=False):
+    """API 서버 실행 (Hono, api/ 디렉토리)"""
+    _ensure_frontend(prod=prod)
+
+    if prod:
+        print_step("API 서버 시작 (프로덕션)...")
+        cmd = ["npm", "start"]
     else:
-        cmd = ["uv", "run", "--project", "server", "python", "server/app.py"]
-    
-    print(f"접속 주소: http://{host}:{port}")
+        print_step("API 서버 시작 (개발)...")
+        # Vite 개발 서버를 백그라운드로 실행
+        frontend_dir = os.path.join(os.getcwd(), "frontend")
+        if os.path.exists(frontend_dir):
+            print_step("프론트엔드 개발 서버 시작 중 (Vite :5173)...")
+            subprocess.Popen(["npm", "run", "dev"], cwd=frontend_dir)
+        cmd = ["npm", "run", "dev"]
+
+    print("접속 주소: http://0.0.0.0:5050")
+    if not prod:
+        print("프론트엔드: http://localhost:5173 (Vite dev server)")
     try:
-        subprocess.run(cmd, env=env, check=True)
+        subprocess.run(cmd, cwd="api", check=True)
     except KeyboardInterrupt:
         print("\n서버가 종료되었습니다.")
 
@@ -312,6 +259,15 @@ def run_tests(target="all"):
             print("아카이브 서버 테스트 실패")
             sys.exit(1)
         return
+
+    if target in ["all", "api"]:
+        print_step("API 서버 테스트 실행 (vitest)...")
+        try:
+            subprocess.run(["npm", "test"], cwd="api", check=True)
+        except subprocess.CalledProcessError:
+            print("API 테스트 실패")
+            if target == "api":
+                sys.exit(1)
 
     if target in ["all", "server"]:
         print_step("서버 테스트 실행...")
@@ -409,8 +365,15 @@ def main():
     else:
         command = sys.argv[1]
 
-    check_uv()
-    
+    # uv는 Python 의존성 명령에서만 필요
+    uv_commands = {"install", "docker-test", "build"}
+    uv_test_targets = {"server", "client", "all"}
+    needs_uv = command in uv_commands or (
+        command == "test" and (len(sys.argv) < 3 or sys.argv[2] in uv_test_targets)
+    )
+    if needs_uv:
+        check_uv()
+
     args = sys.argv[2:]
 
     if command == "install":
@@ -425,9 +388,7 @@ def main():
         migration_file = args[0] if args else None
         migrate_db(migration_file)
     elif command == "run":
-        use_gunicorn = "--prod" in args or "-p" in args
-        mode = "production" if use_gunicorn else "development"
-        run_server(mode=mode, use_gunicorn=use_gunicorn)
+        run_server(prod="--prod" in args or "-p" in args)
     elif command == "test":
         target = sys.argv[2] if len(sys.argv) > 2 else "all"
         run_tests(target)
@@ -438,9 +399,9 @@ def main():
     elif command == "help":
         print("사용법: python3 manage.py [command] [options]")
         print("Commands:")
-        print("  run                    : 서버 실행 (기본값)")
-        print("    --prod,    -p        : Gunicorn으로 프로덕션 모드 실행")
-        print("  test [target]          : 테스트 실행 (target: all, server, client, archive)")
+        print("  run                    : API 서버 + 프론트엔드 개발 서버 실행")
+        print("    --prod,    -p        : 프론트엔드 빌드 후 프로덕션 모드 실행")
+        print("  test [target]          : 테스트 실행 (target: all, api, server, client, archive)")
         print("  docker-test            : Docker Compose 통합 테스트 (dockurr/windows + VNC)")
         print("    --rebuild, -r        : 서버 이미지 강제 재빌드")
         print("    --no-cache,-n        : Docker 빌드 캐시 사용 안 함")

@@ -6,53 +6,76 @@ on:
     paths:
       - '**/pyproject.toml'
       - '**/uv.lock'
+      - 'api/package*.json'
       - '.github/workflows/security_scan.yml'
   pull_request:
     branches: [ "main" ]
     paths:
       - '**/pyproject.toml'
       - '**/uv.lock'
+      - 'api/package*.json'
   schedule:
     # 매주 월요일 오전 4시 (UTC) 정기 스캔
     - cron: '0 4 * * 1'
   workflow_dispatch:
 
 jobs:
-  pip-audit:
-    name: pip-audit Dependency Scan
+  npm-audit:
+    name: npm audit (API)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v5
+    - uses: actions/setup-node@v4
       with:
-        python-version: '3.9'
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: api/package-lock.json
+
+    - name: Install API dependencies
+      run: npm ci
+      working-directory: api
+
+    - name: Run npm audit
+      working-directory: api
+      continue-on-error: true
+      run: |
+        echo "=== API 의존성 취약점 스캔 ==="
+        npm audit --json > ../npm-audit.json || true
+        npm audit
+
+    - name: Upload npm audit report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: npm-audit-report-${{ github.run_number }}
+        path: npm-audit.json
+        retention-days: 90
+
+  pip-audit:
+    name: pip-audit (Client)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
 
-    - name: Install server dependencies
-      working-directory: ./server
-      run: uv sync
-
-    - name: Run pip-audit on server dependencies
-      working-directory: ./server
-      continue-on-error: true  # 취약점 발견 시 exit 1 → 워크플로우 실패 방지 (보고 목적)
-      run: |
-        echo "=== 서버 의존성 취약점 스캔 ==="
-        uvx pip-audit --format=json --output=../pip-audit-server.json || true
-        uvx pip-audit --format=cyclonedx-json --output=../pip-audit-server-sbom.json || true
-        uvx pip-audit
-
     - name: Install client dependencies
       working-directory: ./client
-      run: uv sync || true  # 일부 Windows 전용 패키지는 Linux에서 설치 불가
+      run: uv sync || true
 
     - name: Run pip-audit on client dependencies
       working-directory: ./client
@@ -60,15 +83,12 @@ jobs:
       run: |
         echo "=== 클라이언트 의존성 취약점 스캔 ==="
         uvx pip-audit --format=json --output=../pip-audit-client.json || true
-        uvx pip-audit || true  # Windows 전용 패키지 오류 무시
+        uvx pip-audit || true
 
     - name: Upload pip-audit reports
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: pip-audit-reports-${{ github.run_number }}
-        path: |
-          pip-audit-server.json
-          pip-audit-client.json
-          pip-audit-server-sbom.json
+        path: pip-audit-client.json
         retention-days: 90
