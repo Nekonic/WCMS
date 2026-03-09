@@ -1,82 +1,159 @@
 # WCMS 개발 계획
 
-> **진행 중**: v0.9.9
 > 완료된 버전 이력: `docs/CHANGELOG.md`
 
 ---
 
-## [v0.9.9] - 기능 점검 및 안정화
+## [v0.10.0] - 전체 재작성 (TypeScript + Svelte)
 
-### 기능 점검 (코드 → VM 순서)
+### 배경
 
-> 점검 방법: 코드 확인 → 서버 로컬 실행 → VM 클라이언트 연결 순서로 진행
-> 상태: `[ ]` 미점검 / `[o]` 코드 확인 완료 / `[-]` VM 검증 완료 / `[x]` 버그 발견
+v0.9.x Flask 스택의 한계:
+- 데코레이터 중첩(`@csrf.exempt`, `@limiter.limit`, `@require_admin`)으로 보안 동작 예측 어려움
+- Jinja2 서버 렌더링 → 프론트/백 혼재로 AI 유지보수 어려움
+- 프록시 환경(nginx → Apache2 → Flask)에서 세션/CSRF 버그 반복 발생
 
-#### 인증
-- [ ] 로그인 / 로그아웃
-- [ ] 미로그인 시 관리자 페이지 접근 차단
+### 새 스택
 
-#### 메인 화면 (index)
-- [ ] 실습실 선택 및 사이드바 표시
-- [ ] PC 그리드 렌더링 (좌석 배치)
-- [ ] PC 클릭 → 모달 표시 (페이지 이동 없이)
-- [ ] 모달: PC 정보 표시 (상태, CPU, RAM, 디스크, IP)
-- [ ] 선택 모드 (토글, 체크박스, 드래그)
-- [ ] 일괄 명령 전송 (선택된 PC)
+| 역할 | 기술 |
+|------|------|
+| API 서버 | TypeScript + Hono |
+| 요청 검증 | Zod |
+| DB | SQLite (기존 스키마 그대로) + Drizzle ORM |
+| 프론트엔드 | Svelte |
+| 클라이언트 | Python + PyInstaller (변경 없음) |
 
-#### PC 명령 (클라이언트 실행 확인)
-- [ ] 종료 / 재시작 (delay, message 포함)
-- [ ] 메시지 전송 (`msg *`)
-- [ ] 프로세스 강제 종료 (`taskkill`)
-- [ ] 계정 생성 / 삭제 / 비밀번호 변경 (`net user`)
-- [ ] 프로그램 설치 / 삭제 (Chocolatey)
-- [ ] CMD 명령 실행 (`execute`)
+### DB 스키마
 
-#### 클라이언트 통신
-- [ ] Long-poll 연결 유지 (30초 주기)
-- [ ] 명령 수신 후 즉시 실행
-- [ ] 오프라인 판정 (40초 threshold)
-- [ ] 네트워크 단절 → offline 신호 → 재연결 흐름
-- [ ] 재연결 시 network_events 기록
+기존 스키마 그대로 사용. Drizzle로 타입 생성만 추가.
 
-#### 관리자 페이지
-- [ ] 시스템 상태 (`/system/status`)
-- [ ] 실습실 관리 - 생성 / 수정 / 삭제
-- [ ] 좌석 배치 편집기 - 드래그 배치 / 저장
-- [ ] 등록 토큰 - 생성 / 삭제 / 사용 여부
-- [ ] 클라이언트 버전 관리 페이지
-- [ ] 서버 로그 페이지 (로그 tail + 단절 이력)
-- [ ] 프로세스 기록 (`/pc/<id>/history`)
-
-#### PC 등록 흐름
-- [ ] 토큰 생성 → 클라이언트 등록 → 그리드 표시
-- [ ] 미검증 PC 처리
-
-### 보안 (ZAP 보고서 기반)
-
-- [ ] SRI: CDN 링크에 `integrity` 속성 추가 (Font Awesome, Chart.js)
-- [ ] Cross-Origin 헤더 추가 (COEP / COOP / CORP) — Talisman 설정
-- [ ] `Permissions-Policy` 헤더 추가 — Talisman 설정
-- [ ] `Server` 헤더 버전 노출 제거 (`Werkzeug/3.1.6 Python/3.9.25`)
-- [ ] 로그인 POST 500 에러 재현 여부 확인 (CSRF 수정 후)
-
-### 테스트 커버리지 개선
-
-- [ ] 웹 페이지 라우트 테스트 추가 (`/`, `/login`, `/system/status` 등)
-- [ ] 기능 점검 결과 기반으로 누락된 시나리오 테스트 작성
+```
+admins
+pc_registration_tokens
+pc_info
+pc_specs
+pc_dynamic_info
+commands
+seat_layout
+seat_map
+network_events
+client_versions
+```
 
 ---
 
-## [v0.10.x ~] - 기능 추가
+### Phase 1 - API 서버 (Hono)
 
-> v0.9.x 안정화 완료 후 진행.
+> 클라이언트(Windows 서비스)가 바라보는 엔드포인트 URL 호환 유지
 
-### 인증 강화
-- [ ] 관리자 2FA (OTP 기반)
+#### 클라이언트 API `/api/client`
 
-### 기능 확장
-- [ ] 원격 데스크톱 (VNC 또는 RDP 통합)
+- [ ] `POST   /api/client/register` — PC 등록 (PIN 인증)
+- [ ] `POST   /api/client/heartbeat` — 상태 업데이트
+- [ ] `GET    /api/client/commands` — 명령 대기 (Long-poll)
+- [ ] `POST   /api/client/commands/:id/result` — 명령 결과 제출
+- [ ] `POST   /api/client/offline` — 네트워크 오프라인 신호
+- [ ] `POST   /api/client/shutdown` — 종료 신호
+- [ ] `GET    /api/client/version` — 최신 클라이언트 버전 조회
+- [ ] `POST   /api/client/version` — 버전 등록 (GitHub Actions 토큰 인증)
 
-### 모니터링
-- [ ] 대시보드 개선 (실시간 리소스 그래프)
-- [ ] 알림 시스템 (디스코드/슬랙)
+#### 관리자 API - 인증
+
+- [ ] `POST   /api/admin/login` — 로그인 (세션 발급)
+- [ ] `POST   /api/admin/logout` — 로그아웃
+
+#### 관리자 API - PC 조회
+
+- [ ] `GET    /api/pcs` — PC 전체 목록 (필터 지원)
+- [ ] `GET    /api/pcs/public` — PC 기본 정보 (인증 불필요)
+- [ ] `GET    /api/pcs/duplicates` — 중복 호스트명 PC
+- [ ] `GET    /api/pcs/unverified` — 미검증 PC
+- [ ] `GET    /api/pcs/:id` — PC 상세 정보
+- [ ] `GET    /api/pcs/:id/history` — 프로세스 기록
+- [ ] `DELETE /api/pcs/:id` — PC 삭제
+
+#### 관리자 API - PC 명령
+
+- [ ] `POST   /api/pcs/:id/command` — 범용 명령 전송
+- [ ] `POST   /api/pcs/:id/shutdown` — 종료
+- [ ] `POST   /api/pcs/:id/restart` — 재시작 (reboot 통합)
+- [ ] `POST   /api/pcs/:id/message` — 메시지 전송
+- [ ] `POST   /api/pcs/:id/kill-process` — 프로세스 종료
+- [ ] `POST   /api/pcs/:id/install` — 프로그램 설치
+- [ ] `POST   /api/pcs/:id/uninstall` — 프로그램 삭제
+- [ ] `POST   /api/pcs/:id/account/create` — Windows 계정 생성
+- [ ] `POST   /api/pcs/:id/account/delete` — Windows 계정 삭제
+- [ ] `POST   /api/pcs/:id/account/password` — 비밀번호 변경
+- [ ] `DELETE /api/pcs/:id/commands` — 명령 큐 삭제
+
+#### 관리자 API - 일괄 명령
+
+- [ ] `POST   /api/pcs/bulk-command` — 여러 PC 동시 명령
+- [ ] `DELETE /api/pcs/commands` — 여러 PC 명령 큐 삭제
+- [ ] `GET    /api/commands/pending` — 대기 명령 목록
+- [ ] `POST   /api/commands/results` — 명령 결과 조회 (폴링)
+
+#### 관리자 API - 실습실
+
+- [ ] `GET    /api/rooms` — 실습실 목록
+- [ ] `POST   /api/rooms` — 실습실 생성
+- [ ] `PUT    /api/rooms/:id` — 실습실 수정
+- [ ] `DELETE /api/rooms/:id` — 실습실 삭제
+- [ ] `GET    /api/rooms/:room/layout` — 좌석 배치 조회
+- [ ] `POST   /api/rooms/:room/layout` — 좌석 배치 저장
+
+#### 관리자 API - 버전 관리
+
+- [ ] `GET    /api/client/versions` — 버전 목록
+- [ ] `DELETE /api/client/versions/:id` — 버전 삭제
+
+#### 관리자 API - 등록 토큰
+
+- [ ] `GET    /api/admin/tokens` — 토큰 목록
+- [ ] `POST   /api/admin/tokens` — 토큰 생성
+- [ ] `DELETE /api/admin/tokens/:id` — 토큰 삭제
+
+#### 관리자 API - 기타
+
+- [ ] `GET    /api/admin/processes` — 모든 PC 프로세스 목록
+
+#### 설치 API `/install`
+
+- [ ] `GET    /install/install.cmd` — Windows Batch 스크립트
+- [ ] `GET    /install/install.ps1` — PowerShell 스크립트
+- [ ] `GET    /install/version` — 버전 조회
+
+---
+
+### Phase 2 - 프론트엔드 (Svelte)
+
+> API 명세 완성 후 진행
+
+#### 페이지 목록
+
+- [ ] 로그인
+- [ ] 메인 (실습실 선택 + PC 그리드)
+- [ ] PC 모달 (정보 + 명령)
+- [ ] 실습실 관리
+- [ ] 좌석 배치 편집기
+- [ ] 등록 토큰 관리
+- [ ] 클라이언트 버전 관리
+- [ ] 서버 로그 / 네트워크 이벤트
+
+---
+
+### Phase 3 - 클라이언트 정리 (Python)
+
+> Phase 1, 2 완료 후 진행
+
+- [ ] `executor.py` 분리: `commands/` 디렉토리로 명령별 파일 분리
+- [ ] 언어 설정 안정성 개선 (레지스트리 직접 패치 → 검증된 방식)
+- [ ] 에러 리포팅 구조화 (서버로 에러 내용 전송)
+
+---
+
+### 공통 - 인프라
+
+- [ ] `CLAUDE.md` 작성 (아키텍처, 배포 환경, 주요 결정 사항)
+- [ ] `docs/API.md` Zod 스키마 기반으로 자동 생성
+- [ ] GitHub Actions: 서버 빌드 + 배포 워크플로우

@@ -590,41 +590,6 @@ def save_layout_map(room_name):
     db.commit()
     return jsonify({'status': 'success'})
 
-
-@admin_bp.route('/debug/pc-status', methods=['GET'])
-@require_admin
-def debug_pc_dynamic_info():
-    """PC 상태 디버깅 정보"""
-    # 오프라인 상태 업데이트 (PCService 활용)
-    from services import PCService
-    PCService.update_offline_status()
-
-    db = get_db()
-    try:
-        pcs = db.execute("""
-            SELECT 
-                id,
-                hostname,
-                machine_id,
-                is_online,
-                last_seen,
-                created_at,
-                datetime('now') as server_time,
-                (julianday('now') - julianday(last_seen)) * 24 * 60 as minutes_since_last_seen
-            FROM pc_info
-            ORDER BY is_online DESC, last_seen DESC
-        """).fetchall()
-
-        return jsonify({
-            'total': len(pcs),
-            'online_count': len([p for p in pcs if p['is_online']]),
-            'offline_count': len([p for p in pcs if not p['is_online']]),
-            'pcs': [dict(pc) for pc in pcs]
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
 # ==================== 클라이언트 버전 관리 ====================
 
 @admin_bp.route('/client/versions', methods=['GET'])
