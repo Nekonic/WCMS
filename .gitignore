@@ -85,3 +85,6 @@ shared/
 .DS_Store
 Thumbs.db
 
+api/.env
+api/node_modules
+api/dist

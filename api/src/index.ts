@@ -1,0 +1,53 @@
+import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
+import { secureHeaders } from 'hono/secure-headers'
+
+import { clientRouter }   from './routes/client.js'
+import { adminRouter }    from './routes/admin.js'
+import { pcsRouter }      from './routes/pcs.js'
+import { roomsRouter }    from './routes/rooms.js'
+import { commandsRouter } from './routes/commands.js'
+import { installRouter }  from './routes/install.js'
+
+const app = new Hono()
+
+// ==================== 미들웨어 ====================
+
+app.use(logger())
+app.use(secureHeaders())
+app.use('/api/*', cors({
+  origin:      process.env.WCMS_ALLOWED_ORIGINS?.split(',') ?? '*',
+  credentials: true,
+}))
+
+// ==================== 라우트 ====================
+
+app.route('/api/client',   clientRouter)
+app.route('/api/admin',    adminRouter)
+app.route('/api/pcs',      pcsRouter)
+app.route('/api/rooms',    roomsRouter)
+app.route('/api/commands', commandsRouter)
+app.route('/install',      installRouter)
+
+// 헬스 체크
+app.get('/health', (c) => c.json({ status: 'ok', ts: new Date().toISOString() }))
+
+// 404
+app.notFound((c) => c.json({ error: 'Not found' }, 404))
+
+// ==================== 서버 시작 ====================
+
+const PORT = Number(process.env.PORT ?? 3000)
+const HOST = process.env.HOST ?? '0.0.0.0'
+
+if (process.env.WCMS_SECRET_KEY === 'dev-secret-change-in-production' || !process.env.WCMS_SECRET_KEY) {
+  console.warn('[WARN] WCMS_SECRET_KEY가 설정되지 않았습니다. 프로덕션에서는 반드시 설정하세요.')
+}
+
+serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
+  console.log(`WCMS API server running on http://${HOST}:${info.port}`)
+})
+
+export default app
