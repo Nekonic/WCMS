@@ -7,6 +7,19 @@
 
 ---
 
+## [0.9.9] - 2026-03-09
+
+> **상태**: Released
+> **테마**: 프록시 환경 CSRF 로그인 버그 수정
+
+### Fixed - 버그 수정
+- **프록시 환경에서 로그인 버튼 클릭 시 CSRF 오류** (`server/templates/login.html`, `server/config.py`)
+  - `login.html`에 `{{ csrf_token() }}` 포함 → 세션이 깨진 프록시 환경에서 토큰 생성 실패 → 400/500 오류
+  - `/login` 라우트는 이미 `@csrf.exempt` 처리 → 불필요한 CSRF 필드 제거
+  - `WTF_CSRF_SSL_STRICT = False` 추가 → nginx/Apache2 프록시 체인에서 Referer 헤더 불일치로 `protect()` 내부 차단 방지
+
+---
+
 ## [0.9.8] - 2026-03-06
 
 > **상태**: Released

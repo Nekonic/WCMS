@@ -23,6 +23,10 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF 보호
     PERMANENT_SESSION_LIFETIME = 3600  # 세션 만료 시간 (1시간)
 
+    # CSRF 설정 — 모든 라우트는 csrf.exempt 처리됨.
+    # 프록시 환경(nginx→Apache2→Flask)에서 Referer 불일치 오류 방지
+    WTF_CSRF_SSL_STRICT = False
+
     # 데이터베이스 설정
     DB_PATH = os.getenv('WCMS_DB_PATH', str(BASE_DIR / 'db.sqlite3'))
     DB_TIMEOUT = int(os.getenv('WCMS_DB_TIMEOUT', '10'))
