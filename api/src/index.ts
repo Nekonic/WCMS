@@ -4,12 +4,13 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 
-import { clientRouter }   from './routes/client.js'
-import { adminRouter }    from './routes/admin.js'
-import { pcsRouter }      from './routes/pcs.js'
-import { roomsRouter }    from './routes/rooms.js'
-import { commandsRouter } from './routes/commands.js'
-import { installRouter }  from './routes/install.js'
+import { db } from './db/index.js'
+import { createClientRouter }   from './routes/client.js'
+import { createAdminRouter }    from './routes/admin.js'
+import { createPcsRouter }      from './routes/pcs.js'
+import { createRoomsRouter }    from './routes/rooms.js'
+import { createCommandsRouter } from './routes/commands.js'
+import { installRouter }        from './routes/install.js'
 
 const app = new Hono()
 
@@ -24,11 +25,11 @@ app.use('/api/*', cors({
 
 // ==================== 라우트 ====================
 
-app.route('/api/client',   clientRouter)
-app.route('/api/admin',    adminRouter)
-app.route('/api/pcs',      pcsRouter)
-app.route('/api/rooms',    roomsRouter)
-app.route('/api/commands', commandsRouter)
+app.route('/api/client',   createClientRouter(db))
+app.route('/api/admin',    createAdminRouter(db))
+app.route('/api/pcs',      createPcsRouter(db))
+app.route('/api/rooms',    createRoomsRouter(db))
+app.route('/api/commands', createCommandsRouter(db))
 app.route('/install',      installRouter)
 
 // 헬스 체크
