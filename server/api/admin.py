@@ -288,7 +288,7 @@ def clear_pc_commands(pc_id):
 @require_admin
 def clear_all_commands():
     """여러 PC의 대기 중인 명령 일괄 삭제"""
-    pc_ids = request.json.get('pc_ids', [])
+    pc_ids = (request.get_json(silent=True) or {}).get('pc_ids', [])
     if not pc_ids:
         return jsonify({'error': 'pc_ids는 필수입니다'}), 400
 
@@ -688,7 +688,7 @@ def create_registration_token():
     """등록 토큰 생성 (PIN 인증)"""
     from models import RegistrationTokenModel
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     usage_type = data.get('usage_type', 'single')  # 기본값: 1회용
     expires_in = data.get('expires_in', 600)  # 기본값: 10분
 
@@ -836,7 +836,7 @@ def list_unverified_pcs():
 @require_admin
 def send_shutdown_command(pc_id: int):
     """PC 종료 명령"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     return _queue_command(pc_id, 'shutdown', {'delay': data.get('delay', 0), 'message': data.get('message', '')})
 
 
@@ -844,7 +844,7 @@ def send_shutdown_command(pc_id: int):
 @require_admin
 def send_restart_command(pc_id: int):
     """PC 재시작 명령"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     return _queue_command(pc_id, 'restart', {'delay': data.get('delay', 0), 'message': data.get('message', '')})
 
 
@@ -852,7 +852,7 @@ def send_restart_command(pc_id: int):
 @require_admin
 def send_message_command(pc_id: int):
     """PC에 메시지 전송"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     if not data.get('message'):
         return jsonify({'status': 'error', 'message': 'Message is required'}), 400
     return _queue_command(pc_id, 'message', {'message': data['message'], 'duration': data.get('duration', 10)})
@@ -862,7 +862,7 @@ def send_message_command(pc_id: int):
 @require_admin
 def send_kill_process_command(pc_id: int):
     """프로세스 종료 명령"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     if not data.get('process_name'):
         return jsonify({'status': 'error', 'message': 'process_name is required'}), 400
     return _queue_command(pc_id, 'kill_process', {'process_name': data['process_name']})
@@ -872,7 +872,7 @@ def send_kill_process_command(pc_id: int):
 @require_admin
 def send_install_command(pc_id: int):
     """프로그램 설치 명령"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     if not data.get('app_id'):
         return jsonify({'status': 'error', 'message': 'app_id is required'}), 400
     return _queue_command(pc_id, 'install', {'app_id': data['app_id']})
@@ -882,7 +882,7 @@ def send_install_command(pc_id: int):
 @require_admin
 def send_uninstall_command(pc_id: int):
     """프로그램 삭제 명령"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     if not data.get('app_id'):
         return jsonify({'status': 'error', 'message': 'app_id is required'}), 400
     return _queue_command(pc_id, 'uninstall', {'app_id': data['app_id']})
@@ -924,3 +924,34 @@ def get_all_processes():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+# ==================== 시스템 상태 API ====================
+
+@admin_bp.route('/debug/pc-status', methods=['GET'])
+@require_admin
+def get_pc_status():
+    """PC 온라인/오프라인 현황 조회 (시스템 상태 페이지용)"""
+    db = get_db()
+    try:
+        rows = db.execute('''
+            SELECT id, hostname, machine_id, is_online, last_seen,
+                   ROUND((JULIANDAY('now') - JULIANDAY(last_seen)) * 1440, 2) AS minutes_since_last_seen,
+                   DATETIME('now') AS server_time
+            FROM pc_info
+            ORDER BY is_online DESC, hostname
+        ''').fetchall()
+
+        pcs = [dict(r) for r in rows]
+        online_count = sum(1 for p in pcs if p['is_online'])
+
+        return jsonify({
+            'pcs': pcs,
+            'online_count': online_count,
+            'offline_count': len(pcs) - online_count,
+            'total': len(pcs),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"시스템 상태 조회 실패: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500

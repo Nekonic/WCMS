@@ -7,6 +7,31 @@
 
 ---
 
+## [0.9.10] - 2026-03-10
+
+> **상태**: Released
+> **테마**: 관리자 기능 버그 수정
+
+### Added - 추가
+- **비관리자 PC 상세 정보 열람** (`server/api/admin.py`, `server/static/js/modal.js`)
+  - `GET /api/pcs/public/<pc_id>` 엔드포인트 추가 (인증 불필요, current_user/processes 제외)
+  - 비관리자는 공개 엔드포인트로 기본 정보(호스트명, CPU/RAM/디스크, OS, IP 등) 열람 가능
+  - 기록 보기·종료·재시작 버튼은 관리자에게만 표시 (기존 동작 유지)
+
+### Fixed - 버그 수정
+- **종료 버튼 클릭 시 JSON 파싱 오류** (`server/api/admin.py`)
+  - Flask 2.3+에서 `request.json`은 `Content-Type: application/json` 없이 호출 시 HTML 415 반환
+  - 재시작은 body를 읽지 않아 정상 동작, 종료는 `request.json or {}`에서 오류 발생
+  - shutdown, restart, message, kill-process, install, uninstall 엔드포인트 전체를 `get_json(silent=True)`로 교체
+- **관리자 종료 명령이 네트워크 이벤트에 "타임아웃"으로 기록되는 오류** (`server/services/pc_service.py`)
+  - 웹에서 종료 명령 후 PC가 꺼지면 백그라운드 체커가 heartbeat 없음 감지 → `reason='timeout'` 기록
+  - 오프라인 전환 시 1시간 내 shutdown/reboot/restart 명령 이력 확인 후 해당 사유로 기록
+- **시스템 상태 페이지 오류** (`server/api/admin.py`)
+  - `GET /api/debug/pc-status` 엔드포인트 누락 → "상태 정보를 불러오는 중 오류" 발생
+  - PC별 온라인 현황, 마지막 heartbeat 시간, 경과 시간 반환하는 엔드포인트 추가
+
+---
+
 ## [0.9.9] - 2026-03-09
 
 > **상태**: Released

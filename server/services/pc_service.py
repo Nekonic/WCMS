@@ -43,9 +43,17 @@ class PCService:
                     (pc_id,)
                 ).fetchone()
                 if not existing:
+                    # 최근 1시간 내 관리자 종료/재시작 명령이 있었으면 해당 이유로 기록
+                    cmd = db.execute("""
+                        SELECT command_type FROM commands
+                        WHERE pc_id=? AND command_type IN ('shutdown', 'reboot', 'restart')
+                        AND created_at > datetime('now', '-1 hour')
+                        ORDER BY created_at DESC LIMIT 1
+                    """, (pc_id,)).fetchone()
+                    reason = cmd['command_type'] if cmd else 'timeout'
                     db.execute(
                         'INSERT INTO network_events (pc_id, offline_at, reason) VALUES (?, CURRENT_TIMESTAMP, ?)',
-                        (pc_id, 'timeout')
+                        (pc_id, reason)
                     )
 
             db.commit()
