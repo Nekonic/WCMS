@@ -1,0 +1,21 @@
+[project]
+name = "wcms-backend"
+version = "0.10.0"
+description = "WCMS 관리 백엔드 (Django + DRF)"
+requires-python = ">=3.11"
+dependencies = [
+    "django>=5.0,<6.0",
+    "djangorestframework>=3.15",
+    "psycopg[binary]>=3.1",
+    "django-environ>=0.11",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-django>=4.8",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py", "tests.py"]

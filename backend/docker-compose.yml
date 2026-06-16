@@ -1,0 +1,21 @@
+# 개발용 PostgreSQL. `docker compose up -d` 후 .env 의 DATABASE_URL 로 연결한다.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: wcms-postgres
+    environment:
+      POSTGRES_DB: wcms
+      POSTGRES_USER: wcms
+      POSTGRES_PASSWORD: wcms
+    ports:
+      - "5432:5432"
+    volumes:
+      - wcms-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wcms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  wcms-pgdata:

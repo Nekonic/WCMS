@@ -33,7 +33,7 @@
 
 - [-] 현재 클라이언트<->서버 동작을 계약으로 고정 (재연결, long-poll 형식, 명령 결과 스키마 등 엣지케이스 포함) — `tests/contract/` (45개, HTTP 레벨/재작성 재사용 가능). admin 계약은 재설계 대상이라 제외.
 - [ ] protobuf 스키마 정의 (PC<->게이트웨이 메시지, 공유 타입)
-- [ ] PostgreSQL 구축 + Django 프로젝트 스캐폴드 + ORM 스키마/마이그레이션
+- [-] PostgreSQL + Django 스캐폴드 + ORM 스키마/마이그레이션 — `backend/` (fleet/enrollment/commands/clientlogs, Django auth, env-driven DB + dev compose). Postgres 미기동 시 SQLite 폴백.
 - [ ] SQLite -> PostgreSQL 데이터 이관 스크립트
 
 ### Phase 1 - Django 관리 백엔드
