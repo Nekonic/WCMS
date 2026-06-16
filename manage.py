@@ -337,33 +337,6 @@ def run_tests(target="all"):
             if target == "client":
                 sys.exit(1)
 
-def run_docker_test(skip_setup: bool = False):
-    """Docker Compose 기반 통합 테스트 실행"""
-    venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe") if platform.system() == "Windows" else os.path.join(os.getcwd(), ".venv", "bin", "python")
-
-    print_step("Docker Compose 통합 테스트 실행")
-
-    # 새 테스트 스크립트 실행 (Docker Compose 기반)
-    cmd = [venv_python, "tests/docker_test.py"]
-
-    # 추가 옵션 전달
-    if "--rebuild" in sys.argv or "-r" in sys.argv:
-        cmd.append("--rebuild")
-    if "--no-cache" in sys.argv or "-n" in sys.argv:
-        cmd.append("--no-cache")
-    if "--cleanup" in sys.argv or "-c" in sys.argv:
-        cmd.append("--cleanup")
-    if "--skip-boot" in sys.argv or "-s" in sys.argv:
-        cmd.append("--skip-boot")
-
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError:
-        print("Docker 통합 테스트 실패")
-        sys.exit(1)
-    except KeyboardInterrupt:
-        print("\n테스트 중단됨")
-
 def build_client():
     """클라이언트 EXE 빌드"""
     if platform.system() != "Windows":
@@ -431,8 +404,6 @@ def main():
     elif command == "test":
         target = sys.argv[2] if len(sys.argv) > 2 else "all"
         run_tests(target)
-    elif command == "docker-test":
-        run_docker_test()
     elif command == "build":
         build_client()
     elif command == "help":
@@ -441,11 +412,6 @@ def main():
         print("  run                    : 서버 실행 (기본값)")
         print("    --prod,    -p        : Gunicorn으로 프로덕션 모드 실행")
         print("  test [target]          : 테스트 실행 (target: all, server, client, archive)")
-        print("  docker-test            : Docker Compose 통합 테스트 (dockurr/windows + VNC)")
-        print("    --rebuild, -r        : 서버 이미지 강제 재빌드")
-        print("    --no-cache,-n        : Docker 빌드 캐시 사용 안 함")
-        print("    --cleanup, -c        : 테스트 후 컨테이너 정리")
-        print("    --skip-boot,-s       : Windows 부팅 대기 스킵")
         print("  init-db [id] [pw]      : 데이터베이스 초기화 (기본값: admin / admin)")
         print("    --force,   -f        : 기존 DB를 묻지 않고 삭제 후 재초기화")
         print("  migrate [file]         : 마이그레이션 실행 (file 생략 시 모든 마이그레이션)")
@@ -453,7 +419,7 @@ def main():
         print("  build                  : 클라이언트 EXE 빌드 (Windows 전용)")
     else:
         print(f"알 수 없는 명령: {command}")
-        print("사용 가능한 명령: run, test, docker-test, init-db, migrate, install, build")
+        print("사용 가능한 명령: run, test, init-db, migrate, install, build")
 
 if __name__ == "__main__":
     main()
