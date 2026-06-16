@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package wcms.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "wcms/v1/common.proto";
+
+// PC(C# 클라이언트) <-> Rust 실시간 게이트웨이 WebSocket 와이어 계약.
+//
+// - 연결 = online, 끊김 = offline (이벤트 기반 presence, 설계 4.1).
+// - liveness(ping/pong)는 WebSocket 제어 프레임으로 처리하며 여기서 모델링하지 않는다.
+// - 인증은 mTLS(클라이언트 인증서, 설계 4.2)로 연결 시점에 완료된다.
+// - enrollment / 바이너리 다운로드 / 로그 배치 업로드는 REST(하이브리드, 설계 4.3).
+// - WS 프레임 1개 = ClientEnvelope 또는 ServerEnvelope 1개(바이너리 protobuf).
+
+// PC -> 게이트웨이.
+message ClientEnvelope {
+  oneof payload {
+    Hello hello = 1;
+    Heartbeat heartbeat = 2;
+    CommandAck command_ack = 3;
+    CommandResult command_result = 4;
+    LogEvent log_event = 5;
+  }
+}
+
+// 게이트웨이 -> PC.
+message ServerEnvelope {
+  oneof payload {
+    Welcome welcome = 1;
+    Command command = 2;
+  }
+}
+
+// 연결 직후 PC 가 보내는 식별 메시지(인증은 mTLS 로 이미 완료).
+message Hello {
+  string client_id = 1;       // server 발급 UUID
+  string client_version = 2;
+}
+
+// 게이트웨이의 연결 수락 응답.
+message Welcome {
+  google.protobuf.Timestamp server_time = 1;
+  uint32 ping_interval_sec = 2;   // 권장 liveness 주기(실제 전송은 WS ping/pong 프레임)
+}
+
+// 주기적 텔레메트리. full=false 면 cpu_usage, ram_usage_percent 만 유효(경량).
+message Heartbeat {
+  bool full = 1;
+  double cpu_usage = 2;
+  double ram_usage_percent = 3;
+  double ram_used_gb = 4;
+  google.protobuf.Struct disk_usage = 5;   // {"C:\\": {"used_gb": .., "percent": ..}}
+  string current_user = 6;
+  uint64 uptime_sec = 7;
+  repeated string processes = 8;
+  string ip_address = 9;
+}
+
+// 게이트웨이가 PC 로 push 하는 명령.
+message Command {
+  string id = 1;                            // 명령 UUID
+  CommandType type = 2;
+  google.protobuf.Struct parameters = 3;    // 타입별 가변 파라미터(레거시 command_data)
+  uint32 timeout_sec = 4;
+  uint32 priority = 5;
+  google.protobuf.Timestamp created_at = 6;
+  DeliveryMode delivery_mode = 7;
+}
+
+// 명령 수신 확인(sent -> ack; 실행 결과와 분리, 설계 4.4).
+message CommandAck {
+  string command_id = 1;
+}
+
+// 명령 실행 결과.
+message CommandResult {
+  string command_id = 1;
+  CommandResultStatus status = 2;
+  string output = 3;
+  string error_message = 4;
+  int32 exit_code = 5;
+}
+
+// 실시간 로그(critical 만 WS push; 일반 로그는 REST 배치, 설계 4.3/9).
+message LogEvent {
+  LogLevel level = 1;
+  string message = 2;
+  google.protobuf.Struct detail = 3;
+  string source = 4;
+  google.protobuf.Timestamp client_ts = 5;
+}

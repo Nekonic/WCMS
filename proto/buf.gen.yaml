@@ -1,0 +1,10 @@
+# `cd proto && buf generate` 로 각 언어 타입을 생성한다(buf 설치 필요).
+# buf.build 원격 플러그인 사용 - 로컬 플러그인 설치 불필요. 출력(../gen)은 빌드 산출물.
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/csharp       # C# 클라이언트
+    out: ../gen/csharp
+  - remote: buf.build/community/neoeinstein-prost   # Rust 게이트웨이 (prost)
+    out: ../gen/rust
+  - remote: buf.build/protocolbuffers/python        # 도구/부하 시뮬레이터
+    out: ../gen/python

@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package wcms.v1;
+
+// 공용 enum. 새 값은 항상 끝에 추가하고 기존 번호는 바꾸지 않는다(와이어 호환).
+
+// 명령 종류 (레거시 command_type 문자열과 1:1 대응).
+enum CommandType {
+  COMMAND_TYPE_UNSPECIFIED = 0;
+  COMMAND_TYPE_SHUTDOWN = 1;
+  COMMAND_TYPE_RESTART = 2;
+  COMMAND_TYPE_MESSAGE = 3;
+  COMMAND_TYPE_KILL_PROCESS = 4;
+  COMMAND_TYPE_EXECUTE = 5;
+  COMMAND_TYPE_INSTALL = 6;
+  COMMAND_TYPE_UNINSTALL = 7;
+  COMMAND_TYPE_CREATE_USER = 8;
+  COMMAND_TYPE_DELETE_USER = 9;
+  COMMAND_TYPE_CHANGE_PASSWORD = 10;
+  COMMAND_TYPE_DOWNLOAD = 11;
+}
+
+// 명령 실행 결과 상태 (클라이언트가 보고; 설계 4.4 의 종료 상태).
+enum CommandResultStatus {
+  COMMAND_RESULT_STATUS_UNSPECIFIED = 0;
+  COMMAND_RESULT_STATUS_COMPLETED = 1;
+  COMMAND_RESULT_STATUS_ERROR = 2;
+  COMMAND_RESULT_STATUS_TIMEOUT = 3;
+}
+
+// 명령 전달 정책 (설계 4.4).
+enum DeliveryMode {
+  DELIVERY_MODE_UNSPECIFIED = 0;
+  DELIVERY_MODE_DROP_IF_OFFLINE = 1;  // 오프라인 시 폐기 (시간 민감)
+  DELIVERY_MODE_QUEUE = 2;            // 재연결 시 전달 (TTL 동반)
+}
+
+// 로그 레벨 (설계 9 - 구조화 로그).
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARNING = 3;
+  LOG_LEVEL_ERROR = 4;
+  LOG_LEVEL_CRITICAL = 5;
+}

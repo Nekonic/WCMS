@@ -81,6 +81,9 @@ backups/
 *.backup
 shared/
 
+# 생성된 protobuf 코드 (proto/buf.gen.yaml 출력)
+gen/
+
 # OS
 .DS_Store
 Thumbs.db
