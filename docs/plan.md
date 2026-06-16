@@ -1,6 +1,9 @@
 # WCMS 개발 계획
 
 > 완료된 버전 이력: `docs/CHANGELOG.md`
+> v0.10.0 재작성 아키텍처·설계: `docs/REWRITE_DESIGN.md`
+>
+> v0.10.0의 첫 시도(TypeScript + Hono + Svelte)는 폐기됨. v0.10.0를 Django + Rust + C# + PostgreSQL로 재정의.
 
 ---
 
@@ -9,168 +12,92 @@
 | 브랜치 | 내용 |
 |--------|------|
 | `main` | Flask v0.9.x — 프로덕션 운영 중. 치명적 버그만 핫픽스 |
-| `dev`  | v0.10.0 전체 재작성 (TypeScript + Hono + Svelte) — 대규모 공사 중 |
+| 재작성 브랜치 | v0.10.0 전체 재작성 — 대규모 공사 중 |
 
 ---
 
 ## [main] 긴급 버그 수정 (Flask v0.9.x)
 
-> dev 머지 전까지 main에서만 처리. 수정 후 즉시 커밋.
+> 재작성 전환 전까지 main에서만 처리. 수정 후 즉시 커밋.
 
 현재 미해결 항목 없음.
 
 ---
 
-## [v0.10.0] - 전체 재작성 (TypeScript + Svelte)
+## [v0.10.0] 전체 재작성 (Django + Rust + C# + PostgreSQL)
 
-### 배경
+> 설계 단일 참조본: `docs/REWRITE_DESIGN.md`
+> 원칙: 프로덕션 v0.9.x를 살려둔 채 한 조각씩 전환. 실습실 2개를 천연 카나리아로 활용.
 
-v0.9.x Flask 스택의 한계:
-- 데코레이터 중첩(`@csrf.exempt`, `@limiter.limit`, `@require_admin`)으로 보안 동작 예측 어려움
-- Jinja2 서버 렌더링 → 프론트/백 혼재로 AI 유지보수 어려움
-- 프록시 환경(nginx → Apache2 → Flask)에서 세션/CSRF 버그 반복 발생
+### Phase 0 - 계약 동결 + 기반
 
-### 새 스택
+- [ ] 현재 클라이언트<->서버 동작을 계약으로 고정 (재연결, long-poll 형식, 명령 결과 스키마 등 엣지케이스 포함)
+- [ ] protobuf 스키마 정의 (PC<->게이트웨이 메시지, 공유 타입)
+- [ ] PostgreSQL 구축 + Django 프로젝트 스캐폴드 + ORM 스키마/마이그레이션
+- [ ] SQLite -> PostgreSQL 데이터 이관 스크립트
 
-| 역할 | 기술 |
-|------|------|
-| API 서버 | TypeScript + Hono |
-| 요청 검증 | Zod |
-| DB | SQLite (기존 스키마 그대로) + Drizzle ORM |
-| 프론트엔드 | Svelte |
-| 클라이언트 | Python + PyInstaller (변경 없음) |
+### Phase 1 - Django 관리 백엔드
 
-### DB 스키마
+- [ ] 관리자 인증/세션 (세션 쿠키 + CSRF)
+- [ ] admin REST API (PC 조회/명령 발행/실습실/좌석/등록 토큰/버전)
+- [ ] 명령 발행 + 감사 추적 (발행자/시각/대상/모드/결과)
+- [ ] 신원 기준 rate limit
+- [ ] enrollment REST: PIN 인증 -> CSR -> client_id + 인증서 발급
+- [ ] 로그 배치 업로드 수신 + `client_logs` 저장
 
-기존 스키마 그대로 사용. Drizzle로 타입 생성만 추가.
+### Phase 2 - Rust 실시간 게이트웨이
 
-```
-admins
-pc_registration_tokens
-pc_info
-pc_specs
-pc_dynamic_info
-commands
-seat_layout
-seat_map
-network_events
-client_versions
-```
+- [ ] WS 서버 + 연결 레지스트리(권위 있는 presence)
+- [ ] mTLS 클라이언트 인증
+- [ ] ping/pong 생존 확인 + 죽은 소켓 즉시 오프라인
+- [ ] 명령 push(서버->PC) + 결과/heartbeat 수신
+- [ ] 명령 전달 모드(drop/queue + TTL + ack)
+- [ ] Django<->Rust 경계 구현 (무상태 게이트웨이: Django 내부 API, 양방향)
+- [ ] async 안티패턴 점검(블로킹 호출 금지)
 
----
+### Phase 3 - C# 클라이언트
 
-### Phase 1 - API 서버 (Hono)
+- [ ] Windows Worker Service 골격 + 자가업데이트(REST 바이너리 교체)
+- [ ] OS 의존 인터페이스 격리(ISystemInfo/ICommandRunner/IRegistryAccess/IWebSocketTransport/IClock)
+- [ ] 키쌍 생성 + enrollment + 인증서 저장(ProgramData)
+- [ ] WS 컨트롤 채널 + 4겹 재연결 방어(워치독, 전원/네트워크 이벤트, 백오프+jitter)
+- [ ] 명령 실행기: 전원/메시지/프로세스/설치(Chocolatey)/계정/언어팩
+- [ ] 시스템 정보 수집(WMI/레지스트리)
+- [ ] 구조화 로그 + 서버 업로드 + critical WS push
 
-> 클라이언트(Windows 서비스)가 바라보는 엔드포인트 URL 호환 유지
+### Phase 4 - 테스트 & 부하
 
-#### 클라이언트 API `/api/client`
+- [ ] 재연결 상태머신 결정론 단위테스트(가짜 시계/transport)
+- [ ] 명령 디스패치 단위테스트
+- [ ] 헤드리스 클라이언트 코어 = 부하 시뮬레이터(N=80/200/500)
+- [ ] 부하 테스트가 옛 드롭 시나리오(연결 램프업) 재현 + 통과 증명
+- [ ] protobuf 계약 테스트
+- [ ] Django pytest / Rust 통합 테스트
 
-- [ ] `POST   /api/client/register` — PC 등록 (PIN 인증)
-- [ ] `POST   /api/client/heartbeat` — 상태 업데이트
-- [ ] `GET    /api/client/commands` — 명령 대기 (Long-poll)
-- [ ] `POST   /api/client/commands/:id/result` — 명령 결과 제출
-- [ ] `POST   /api/client/offline` — 네트워크 오프라인 신호
-- [ ] `POST   /api/client/shutdown` — 종료 신호
-- [ ] `GET    /api/client/version` — 최신 클라이언트 버전 조회
-- [ ] `POST   /api/client/version` — 버전 등록 (GitHub Actions 토큰 인증)
+### Phase 5 - 카나리 전환
 
-#### 관리자 API - 인증
+- [ ] 실습실 A PC를 신규 클라이언트+게이트웨이로 전환, 실습실 B는 Flask 유지
+- [ ] 검증 후 실습실 B 전환
 
-- [ ] `POST   /api/admin/login` — 로그인 (세션 발급)
-- [ ] `POST   /api/admin/logout` — 로그아웃
+### Phase 6 - 프론트엔드 SPA
 
-#### 관리자 API - PC 조회
+> API 계약 동결 후 본격 착수
 
-- [ ] `GET    /api/pcs` — PC 전체 목록 (필터 지원)
-- [ ] `GET    /api/pcs/public` — PC 기본 정보 (인증 불필요)
-- [ ] `GET    /api/pcs/duplicates` — 중복 호스트명 PC
-- [ ] `GET    /api/pcs/unverified` — 미검증 PC
-- [ ] `GET    /api/pcs/:id` — PC 상세 정보
-- [ ] `GET    /api/pcs/:id/history` — 프로세스 기록
-- [ ] `DELETE /api/pcs/:id` — PC 삭제
+- [ ] SvelteKit + 디자인 시스템(색감/UI 전면 개편)
+- [ ] 페이지: 로그인 / PC 그리드 / PC 상세 / 실습실·좌석 편집 / 등록 토큰 / 버전 / 로그·네트워크 이벤트 / fleet health
+- [ ] 컴포넌트 테스트(Vitest) + E2E(Playwright)
 
-#### 관리자 API - PC 명령
+### Phase 7 - 관측성(프리미엄) + 정리
 
-- [ ] `POST   /api/pcs/:id/command` — 범용 명령 전송
-- [ ] `POST   /api/pcs/:id/shutdown` — 종료
-- [ ] `POST   /api/pcs/:id/restart` — 재시작 (reboot 통합)
-- [ ] `POST   /api/pcs/:id/message` — 메시지 전송
-- [ ] `POST   /api/pcs/:id/kill-process` — 프로세스 종료
-- [ ] `POST   /api/pcs/:id/install` — 프로그램 설치
-- [ ] `POST   /api/pcs/:id/uninstall` — 프로그램 삭제
-- [ ] `POST   /api/pcs/:id/account/create` — Windows 계정 생성
-- [ ] `POST   /api/pcs/:id/account/delete` — Windows 계정 삭제
-- [ ] `POST   /api/pcs/:id/account/password` — 비밀번호 변경
-- [ ] `DELETE /api/pcs/:id/commands` — 명령 큐 삭제
-
-#### 관리자 API - 일괄 명령
-
-- [ ] `POST   /api/pcs/bulk-command` — 여러 PC 동시 명령
-- [ ] `DELETE /api/pcs/commands` — 여러 PC 명령 큐 삭제
-- [ ] `GET    /api/commands/pending` — 대기 명령 목록
-- [ ] `POST   /api/commands/results` — 명령 결과 조회 (폴링)
-
-#### 관리자 API - 실습실
-
-- [ ] `GET    /api/rooms` — 실습실 목록
-- [ ] `POST   /api/rooms` — 실습실 생성
-- [ ] `PUT    /api/rooms/:id` — 실습실 수정
-- [ ] `DELETE /api/rooms/:id` — 실습실 삭제
-- [ ] `GET    /api/rooms/:room/layout` — 좌석 배치 조회
-- [ ] `POST   /api/rooms/:room/layout` — 좌석 배치 저장
-
-#### 관리자 API - 버전 관리
-
-- [ ] `GET    /api/client/versions` — 버전 목록
-- [ ] `DELETE /api/client/versions/:id` — 버전 삭제
-
-#### 관리자 API - 등록 토큰
-
-- [ ] `GET    /api/admin/tokens` — 토큰 목록
-- [ ] `POST   /api/admin/tokens` — 토큰 생성
-- [ ] `DELETE /api/admin/tokens/:id` — 토큰 삭제
-
-#### 관리자 API - 기타
-
-- [ ] `GET    /api/admin/processes` — 모든 PC 프로세스 목록
-
-#### 설치 API `/install`
-
-- [ ] `GET    /install/install.cmd` — Windows Batch 스크립트
-- [ ] `GET    /install/install.ps1` — PowerShell 스크립트
-- [ ] `GET    /install/version` — 버전 조회
+- [ ] Prometheus 메트릭(active connection 등) + Grafana
+- [ ] 알림(연속 명령 실패 / 실습실 오프라인 / 재연결 폭주)
+- [ ] `api/`(구 Hono 시도) 제거
+- [ ] Flask 서버 디커미션
 
 ---
 
-### Phase 2 - 프론트엔드 (Svelte)
+## 공통 - 인프라
 
-> API 명세 완성 후 진행
-
-#### 페이지 목록
-
-- [ ] 로그인
-- [ ] 메인 (실습실 선택 + PC 그리드)
-- [ ] PC 모달 (정보 + 명령)
-- [ ] 실습실 관리
-- [ ] 좌석 배치 편집기
-- [ ] 등록 토큰 관리
-- [ ] 클라이언트 버전 관리
-- [ ] 서버 로그 / 네트워크 이벤트
-
----
-
-### Phase 3 - 클라이언트 정리 (Python)
-
-> Phase 1, 2 완료 후 진행
-
-- [ ] `executor.py` 분리: `commands/` 디렉토리로 명령별 파일 분리
-- [ ] 언어 설정 안정성 개선 (레지스트리 직접 패치 → 검증된 방식)
-- [ ] 에러 리포팅 구조화 (서버로 에러 내용 전송)
-
----
-
-### 공통 - 인프라
-
-- [ ] `CLAUDE.md` 작성 (아키텍처, 배포 환경, 주요 결정 사항)
-- [ ] `docs/API.md` Zod 스키마 기반으로 자동 생성
-- [ ] GitHub Actions: 서버 빌드 + 배포 워크플로우
+- [ ] Docker compose (Postgres + Django + Rust + 프론트 + 단일 리버스 프록시)
+- [ ] GitHub Actions: 빌드/배포 워크플로우
+- [ ] `docs/ARCHITECTURE.md` 갱신(전환 완료 시점)

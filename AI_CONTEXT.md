@@ -5,16 +5,30 @@
 
 ---
 
+## 현재 상태: v0.10.0 전체 재작성 진행 중
+
+스택을 Django + Rust + C# + PostgreSQL로 전면 재작성 중.
+
+- 아키텍처·설계: `docs/REWRITE_DESIGN.md`
+- 단계별 작업: `docs/plan.md`
+- 버전 명명: 안정화 전까지 `1.0`을 쓰지 않는다. 개발 버전은 `0.x`(예: 0.10.0).
+
+아래 "레거시 규칙"은 `main` 브랜치(Flask v0.9.x, 핫픽스만)에 적용된다. 재작성 작업에는 위 설계 문서를 따른다.
+
+---
+
 ## Non-goals
 
-- 크로스플랫폼 클라이언트 — pywin32, WMI 의존으로 Windows 전용 고정
-- 외부 DB — SQLite 전용 (WAL 모드)
-- 실시간 WebSocket — 2초 폴링으로 충분
-- 과도한 추상화 — 현재 필요한 것만 구현
+- 크로스플랫폼 클라이언트 — Windows 전용 고정 (레거시 pywin32/WMI, 신규 C#/.NET 모두)
+- 과도한 추상화 — 목적(테스트 가능성 등) 없는 추상화 금지
+
+> 폐기된 옛 non-goal: "SQLite 전용", "WebSocket 불필요(폴링으로 충분)" — v0.10.0에서 PostgreSQL + WebSocket으로 전환됨.
 
 ---
 
 ## Landmines (코드에서 추측 불가능한 제약)
+
+> 아래는 주로 레거시 Flask 서버(`main`)에 해당. 재작성 스택의 제약은 `docs/REWRITE_DESIGN.md` 5장(피할 안티패턴) 참조.
 
 **패키지 관리**: `pip` 직접 실행 금지. `uv add` / `uv sync` / `uv run python ...` 사용.
 
