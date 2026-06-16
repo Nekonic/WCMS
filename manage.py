@@ -323,6 +323,16 @@ def run_tests(target="all"):
             if target == "server":
                 sys.exit(1)
 
+    if target in ["all", "contract"]:
+        print_step("계약 테스트 실행 (현재 클라이언트<->서버 동작 고정)...")
+
+        try:
+            subprocess.run(["uv", "run", "python", "-m", "pytest", "tests/contract", "-v", "--tb=short"], check=True)
+        except subprocess.CalledProcessError:
+            print("계약 테스트 실패")
+            if target == "contract":
+                sys.exit(1)
+
     if target in ["all", "client"]:
         if platform.system() != "Windows":
             print_step("클라이언트 테스트 건너뛰기 (Windows 전용)")
@@ -411,7 +421,7 @@ def main():
         print("Commands:")
         print("  run                    : 서버 실행 (기본값)")
         print("    --prod,    -p        : Gunicorn으로 프로덕션 모드 실행")
-        print("  test [target]          : 테스트 실행 (target: all, server, client, archive)")
+        print("  test [target]          : 테스트 실행 (target: all, server, client, contract, archive)")
         print("  init-db [id] [pw]      : 데이터베이스 초기화 (기본값: admin / admin)")
         print("    --force,   -f        : 기존 DB를 묻지 않고 삭제 후 재초기화")
         print("  migrate [file]         : 마이그레이션 실행 (file 생략 시 모든 마이그레이션)")
