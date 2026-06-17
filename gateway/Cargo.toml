@@ -1,0 +1,46 @@
+[package]
+name = "gateway"
+version = "0.1.0"
+edition = "2021"
+description = "WCMS realtime WebSocket gateway — authoritative presence registry for lab PCs"
+
+[[bin]]
+name = "gateway"
+path = "src/main.rs"
+
+[lib]
+name = "gateway"
+path = "src/lib.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+
+# Web / WebSocket
+axum = { version = "0.7", features = ["ws"] }
+
+# Protobuf
+prost = "0.13"
+prost-types = "0.13"
+
+# Async utilities
+futures = "0.3"
+
+# Logging / tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Concurrent hash map for the connection registry
+dashmap = "6"
+
+# UUID v4 with serde support
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Error handling
+thiserror = "2"
+
+# Serde (required transitively; makes UUID/config ergonomic)
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+prost-build = "0.13"
