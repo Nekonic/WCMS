@@ -119,6 +119,12 @@ WCMS_INTERNAL_TOKEN = env(
     "WCMS_INTERNAL_TOKEN", default="dev-internal-token-change-me"
 )
 
+# Rust 실시간 게이트웨이 내부 API 기본 URL (설계 §3/§4.4).
+# 운영 환경에서는 환경변수로 실제 게이트웨이 주소를 지정한다.
+WCMS_GATEWAY_URL = env(
+    "WCMS_GATEWAY_URL", default="http://127.0.0.1:8080"
+)
+
 # nginx 가 mTLS 클라이언트 인증서를 전달할 때 사용하는 요청 META 헤더 이름.
 # nginx: proxy_set_header X-SSL-Client-Cert $ssl_client_escaped_cert;
 # Django META 변환: HTTP_X_SSL_CLIENT_CERT (헤더명의 '-' -> '_', 'HTTP_' 접두사 추가).

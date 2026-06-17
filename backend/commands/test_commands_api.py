@@ -1,5 +1,6 @@
 """명령 발행/조회 API 검증."""
 import pytest
+from unittest.mock import MagicMock, patch
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
@@ -31,15 +32,18 @@ def test_issue_command_requires_auth(pc):
 
 @pytest.mark.django_db
 def test_issue_time_sensitive_command_is_drop(auth_api, pc):
-    resp = auth_api.post(f"/api/pcs/{pc.id}/commands/",
-                         {"command_type": "shutdown", "parameters": {"delay": 0}}, format="json")
+    # pc 는 기본적으로 오프라인(is_online=False). drop_if_offline 명령은 즉시 EXPIRED 처리.
+    with patch("commands.services.requests.post") as mock_post:
+        resp = auth_api.post(f"/api/pcs/{pc.id}/commands/",
+                             {"command_type": "shutdown", "parameters": {"delay": 0}}, format="json")
     assert resp.status_code == 201
     assert resp.data["command_type"] == "shutdown"
     assert resp.data["delivery_mode"] == Command.DeliveryMode.DROP_IF_OFFLINE
-    assert resp.data["status"] == Command.Status.PENDING
+    assert resp.data["status"] == Command.Status.EXPIRED  # 오프라인 + drop -> 즉시 폐기
     assert resp.data["issuer"] == "admin"
     assert resp.data["expires_at"] is None
     assert resp.data["parameters"] == {"delay": 0}
+    mock_post.assert_not_called()  # 오프라인이므로 게이트웨이 push 없음
 
 
 @pytest.mark.django_db
@@ -97,7 +101,9 @@ def test_bulk_command_requires_pc_ids(auth_api):
 
 @pytest.mark.django_db
 def test_command_audit_list_with_status_filter(auth_api, pc):
-    auth_api.post(f"/api/pcs/{pc.id}/commands/", {"command_type": "shutdown"}, format="json")
+    # queue 모드 명령(install)은 오프라인이어도 PENDING 유지 -> status=pending 필터 검증.
+    with patch("commands.services.requests.post"):
+        auth_api.post(f"/api/pcs/{pc.id}/commands/", {"command_type": "install"}, format="json")
     resp = auth_api.get("/api/commands/?status=pending")
     assert resp.status_code == 200
     assert len(resp.data) == 1
