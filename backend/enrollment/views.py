@@ -18,6 +18,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from fleet.models import Client
@@ -105,10 +106,13 @@ class ClientEnrollView(APIView):
     Errors:
         400 — 필수 필드 누락 또는 CSR 파싱 실패
         403 — 토큰 미존재, 만료, 또는 1회용 토큰 재사용
+        429 — rate limit 초과 (설계 4.5; per-client 신원 기준 WS/실시간 rate limit 은 Rust 게이트웨이 담당)
     """
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "enroll"
 
     def post(self, request) -> Response:
         """PIN + CSR 을 검증하고 클라이언트 인증서를 발급한다."""

@@ -112,6 +112,14 @@ WCMS_CA_KEY_PATH = env(
     "WCMS_CA_KEY_PATH", default=str(BASE_DIR / "ca" / "ca.key")
 )
 
+# nginx 가 mTLS 클라이언트 인증서를 전달할 때 사용하는 요청 META 헤더 이름.
+# nginx: proxy_set_header X-SSL-Client-Cert $ssl_client_escaped_cert;
+# Django META 변환: HTTP_X_SSL_CLIENT_CERT (헤더명의 '-' -> '_', 'HTTP_' 접두사 추가).
+# 값이 URL-인코딩(percent-encoded) PEM 일 수 있으므로 인증 클래스에서 unquote 처리.
+WCMS_CLIENT_CERT_HEADER = env(
+    "WCMS_CLIENT_CERT_HEADER", default="HTTP_X_SSL_CLIENT_CERT"
+)
+
 
 # DRF — 관리자 API 기본값은 세션 인증 + 로그인 필요.
 # 클라이언트용 엔드포인트(enrollment 등)는 뷰별로 권한/인증을 재정의한다.
@@ -122,4 +130,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # rate limit 범위별 상한 (설계 4.5 참조).
+    # 실시간/WS 경로의 per-client 신원 기준 rate limit 은 Rust 게이트웨이가 담당(Phase 2).
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+        "enroll": "20/min",
+    },
 }
