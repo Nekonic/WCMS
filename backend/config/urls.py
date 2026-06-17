@@ -24,4 +24,5 @@ urlpatterns = [
     path("api/", include("commands.urls")),
     path("api/", include("enrollment.urls")),
     path("api/", include("clientlogs.urls")),
+    path("internal/", include("internalapi.urls")),
 ]

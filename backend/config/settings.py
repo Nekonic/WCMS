@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "enrollment",
     "commands",
     "clientlogs",
+    "internalapi",
 ]
 
 MIDDLEWARE = [
@@ -110,6 +111,12 @@ WCMS_CA_CERT_PATH = env(
 )
 WCMS_CA_KEY_PATH = env(
     "WCMS_CA_KEY_PATH", default=str(BASE_DIR / "ca" / "ca.key")
+)
+
+# 게이트웨이 전용 내부 API 공유 토큰 (설계 §3).
+# 운영 환경에서는 반드시 환경변수로 강력한 난수 값을 지정한다.
+WCMS_INTERNAL_TOKEN = env(
+    "WCMS_INTERNAL_TOKEN", default="dev-internal-token-change-me"
 )
 
 # nginx 가 mTLS 클라이언트 인증서를 전달할 때 사용하는 요청 META 헤더 이름.

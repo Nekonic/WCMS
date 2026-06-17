@@ -52,7 +52,7 @@
 - [ ] ping/pong 생존 확인 + 죽은 소켓 즉시 오프라인 (WS ping 처리 완료; 주기 ping + 미응답 축출 남음)
 - [ ] 명령 push(서버->PC) + 결과/heartbeat 수신 (push/수신 루프 기반 완료; Django 연동 남음)
 - [ ] 명령 전달 모드(drop/queue + TTL + ack)
-- [ ] Django<->Rust 경계 구현 (무상태 게이트웨이: Django 내부 API, 양방향)
+- [ ] Django<->Rust 경계 구현 (무상태 게이트웨이: Django 내부 API, 양방향) — Django 내부 API 완료(/internal/ presence·telemetry·pending-commands, bearer 인증, 테스트 34); 게이트웨이 HTTP 연동 남음
 - [-] async 안티패턴 점검(블로킹 호출 금지) — 전 경로 async, 블로킹 호출 없음
 
 ### Phase 3 - C# 클라이언트
