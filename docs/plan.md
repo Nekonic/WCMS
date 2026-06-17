@@ -39,8 +39,8 @@
 ### Phase 1 - Django 관리 백엔드
 
 - [-] 관리자 인증/세션 (세션 쿠키 + CSRF) — `backend/accounts` login/logout/me/csrf (테스트 7)
-- [ ] admin REST API — PC 조회 완료(목록/필터/상세/삭제, 테스트 5). 명령 발행/실습실/좌석/등록 토큰/버전 남음
-- [ ] 명령 발행 + 감사 추적 (발행자/시각/대상/모드/결과)
+- [ ] admin REST API — PC 조회 + 명령 발행/일괄/감사 완료. 실습실/좌석/등록 토큰/버전 남음
+- [-] 명령 발행 + 감사 추적 (발행자/시각/대상/모드/결과) — `backend/commands` 발행/일괄/이력/감사 (테스트 9)
 - [ ] 신원 기준 rate limit
 - [ ] enrollment REST: PIN 인증 -> CSR -> client_id + 인증서 발급
 - [ ] 로그 배치 업로드 수신 + `client_logs` 저장
