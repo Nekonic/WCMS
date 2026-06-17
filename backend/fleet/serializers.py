@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ClientDynamicInfo, ClientSpecs
+from .models import Client, ClientDynamicInfo, ClientSpecs, ClientVersion, Room
 
 
 class ClientSpecsSerializer(serializers.ModelSerializer):
@@ -50,3 +50,53 @@ class ClientDetailSerializer(ClientListSerializer):
             return ClientDynamicSerializer(obj.dynamic).data
         except ClientDynamicInfo.DoesNotExist:
             return None
+
+
+# ---------------------------------------------------------------------------
+# Room / Seat 직렬화
+# ---------------------------------------------------------------------------
+
+class RoomSerializer(serializers.ModelSerializer):
+    """실습실 CRUD 직렬화."""
+    class Meta:
+        model = Room
+        fields = ["id", "name", "rows", "cols", "description", "is_active",
+                  "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class SeatClientSerializer(serializers.Serializer):
+    """좌석 레이아웃 응답에 포함되는 간략 클라이언트 정보."""
+    id = serializers.UUIDField(read_only=True)
+    hostname = serializers.CharField(read_only=True)
+    is_online = serializers.BooleanField(read_only=True)
+
+
+class SeatAssignmentSerializer(serializers.Serializer):
+    """좌석 배치 요청 항목."""
+    row = serializers.IntegerField(min_value=0)
+    col = serializers.IntegerField(min_value=0)
+    client_id = serializers.UUIDField(allow_null=True, required=False, default=None)
+
+    def validate_client_id(self, value):
+        """client_id 가 주어졌을 때 실제 Client 존재 여부를 확인한다."""
+        if value is not None and not Client.objects.filter(pk=value).exists():
+            raise serializers.ValidationError("존재하지 않는 클라이언트 ID 입니다.")
+        return value
+
+
+class SeatLayoutUpdateSerializer(serializers.Serializer):
+    """좌석 레이아웃 일괄 업데이트 요청 본문."""
+    assignments = SeatAssignmentSerializer(many=True)
+
+
+# ---------------------------------------------------------------------------
+# ClientVersion 직렬화
+# ---------------------------------------------------------------------------
+
+class ClientVersionSerializer(serializers.ModelSerializer):
+    """클라이언트 버전 레지스트리 직렬화."""
+    class Meta:
+        model = ClientVersion
+        fields = ["id", "version", "download_url", "changelog", "released_at"]
+        read_only_fields = ["id", "released_at"]
