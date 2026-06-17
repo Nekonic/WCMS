@@ -91,3 +91,6 @@ Thumbs.db
 api/.env
 api/node_modules
 api/dist
+
+# CA 개인키 — 절대 커밋하지 않는다
+backend/ca/

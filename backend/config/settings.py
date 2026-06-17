@@ -103,6 +103,16 @@ SESSION_COOKIE_SECURE = env.bool("DJANGO_COOKIE_SECURE", default=not DEBUG)
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 
+# PKC CA 경로 — 운영 환경에서는 환경변수로 실제 CA 경로를 지정한다.
+# 미지정 시 BASE_DIR/ca/ 아래의 기본 경로를 사용한다.
+WCMS_CA_CERT_PATH = env(
+    "WCMS_CA_CERT_PATH", default=str(BASE_DIR / "ca" / "ca.crt")
+)
+WCMS_CA_KEY_PATH = env(
+    "WCMS_CA_KEY_PATH", default=str(BASE_DIR / "ca" / "ca.key")
+)
+
+
 # DRF — 관리자 API 기본값은 세션 인증 + 로그인 필요.
 # 클라이언트용 엔드포인트(enrollment 등)는 뷰별로 권한/인증을 재정의한다.
 REST_FRAMEWORK = {

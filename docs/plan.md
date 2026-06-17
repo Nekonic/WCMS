@@ -42,7 +42,7 @@
 - [-] admin REST API — PC 조회/명령/실습실+좌석레이아웃/등록토큰/버전/로그조회 완료
 - [-] 명령 발행 + 감사 추적 (발행자/시각/대상/모드/결과) — `backend/commands` 발행/일괄/이력/감사 (테스트 9)
 - [ ] 신원 기준 rate limit
-- [ ] enrollment REST: PIN 인증 -> CSR -> client_id + 인증서 발급
+- [-] enrollment REST: PIN 인증 -> CSR -> client_id + 인증서 발급 — POST /api/client/enroll/ (자체 CA 서명, 테스트 8)
 - [ ] 로그 배치 업로드 수신 + `client_logs` 저장 (admin 조회 GET /api/logs/ 완료; 클라이언트 배치 업로드 POST 남음)
 
 ### Phase 2 - Rust 실시간 게이트웨이
