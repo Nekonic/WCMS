@@ -17,7 +17,7 @@ path = "src/lib.rs"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 
 # Web / WebSocket
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["ws", "json"] }
 
 # Protobuf
 prost = "0.13"
@@ -38,9 +38,21 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 # Error handling
 thiserror = "2"
+anyhow = "1"
 
 # Serde (required transitively; makes UUID/config ergonomic)
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client for Django internal API (rustls only, no OpenSSL)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+# HTTP mock server for DjangoClient unit tests
+mockito = "1"
+# axum testing helpers
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 
 [build-dependencies]
 prost-build = "0.13"

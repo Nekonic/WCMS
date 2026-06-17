@@ -3,7 +3,9 @@
 //! Exposes internal modules so that integration tests (in `tests/`) and the
 //! `main.rs` binary can share code without duplication.
 
+pub mod django;
 pub mod proto;
+pub mod push;
 pub mod registry;
 pub mod ws;
 

@@ -6,18 +6,17 @@
 //! 2. The **first** inbound binary frame must be a `ClientEnvelope::Hello`.
 //!    We parse the `client_id` UUID from it, register the client in the
 //!    [`Registry`], and send back a `ServerEnvelope::Welcome`.
-//! 3. A **writer task** is spawned; it drains the per-connection mpsc channel
+//! 3. On Hello: Django `presence(connect=true)` + fetch_pending_commands 호출.
+//!    대기 중인 명령을 모두 클라이언트에 push 한다 (design §4.4 큐 드레인).
+//! 4. A **writer task** is spawned; it drains the per-connection mpsc channel
 //!    and writes each `ServerEnvelope` as a binary protobuf frame.
-//! 4. The **read loop** decodes subsequent `ClientEnvelope` frames:
-//!    - `Heartbeat`  → log + TODO forward to Django
-//!    - `CommandAck` → log + TODO forward to Django
-//!    - `CommandResult` → log + TODO forward to Django
-//!    - `LogEvent`   → log + TODO forward to Django
-//! 5. On socket close/error: `unregister` the client (presence = offline).
-//!
-//! Axum automatically replies to WebSocket `Ping` frames with `Pong`;
-//! no manual ping handling is required for that path.  Periodic server-side
-//! pings (to detect half-open connections) are a DEFERRED item — see TODO.
+//! 5. The **read loop** decodes subsequent `ClientEnvelope` frames:
+//!    - `Heartbeat`     → Django heartbeat 텔레메트리 전송
+//!    - `CommandAck`    → Django command-ack 전송
+//!    - `CommandResult` → Django command-result 전송
+//!    - `LogEvent`      → tracing 로그 + TODO(log-sink)
+//! 6. On socket close/error: `unregister` + Django `presence(connect=false)`.
+//!    DisconnectGuard 로 모든 종료 경로에서 실행을 보장한다.
 //!
 //! # Anti-pattern guard (design §5)
 //! No blocking calls (`std::thread::sleep`, sync I/O) are used inside any
@@ -40,6 +39,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
+    django::{pending_command_to_proto, DjangoClient},
     proto::{
         client_envelope, server_envelope, ClientEnvelope, ServerEnvelope, Welcome,
     },
@@ -50,6 +50,10 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Registry,
+    pub django: Arc<DjangoClient>,
+    /// `WCMS_INTERNAL_TOKEN` — 게이트웨이 내부 API 인증에 사용된다.
+    /// push 핸들러가 env 대신 여기서 읽으므로 테스트에서 race-free 하다.
+    pub internal_token: String,
 }
 
 /// axum route handler for `GET /ws`.
@@ -98,25 +102,69 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         .sender(client_id)
         .expect("sender must exist immediately after register");
 
-    // ── Step 3: Send Welcome ──────────────────────────────────────────────
+    // ── Step 3: Django presence(connect) + 큐 드레인 ─────────────────────
+
+    // presence(connect=true) — Django 장애 시 warn 후 계속 진행
+    if let Err(e) = state.django.presence(client_id, true).await {
+        warn!(client_id = %client_id, error = %e, "ws: Django presence(connect) 실패 — 무시");
+    }
+
+    // 재연결 시 대기 중인 명령 fetch → push (design §4.4)
+    match state.django.fetch_pending_commands(client_id).await {
+        Ok(pending) => {
+            for cmd in pending {
+                let proto_cmd = pending_command_to_proto(cmd);
+                let envelope = ServerEnvelope {
+                    payload: Some(server_envelope::Payload::Command(proto_cmd)),
+                };
+                // Registry 에 직접 push; writer_task 가 아직 시작 전이므로
+                // send_envelope 를 직접 호출한다.
+                if let Err(e) = send_envelope(&mut sink, envelope).await {
+                    error!(client_id = %client_id, "ws: 대기 명령 전송 실패: {e}");
+                    state.registry.unregister(client_id, &sender);
+                    // presence disconnect 도 알린다
+                    if let Err(de) = state.django.presence(client_id, false).await {
+                        warn!(client_id = %client_id, error = %de, "ws: Django presence(disconnect) 실패 — 무시");
+                    }
+                    return;
+                }
+            }
+        }
+        Err(e) => {
+            warn!(client_id = %client_id, error = %e, "ws: pending-commands fetch 실패 — 무시");
+        }
+    }
+
+    // ── Step 4: Send Welcome ──────────────────────────────────────────────
 
     let welcome = build_welcome();
     if let Err(e) = send_envelope(&mut sink, welcome).await {
         error!(client_id = %client_id, "ws: failed to send Welcome: {e}");
         state.registry.unregister(client_id, &sender);
+        if let Err(de) = state.django.presence(client_id, false).await {
+            warn!(client_id = %client_id, error = %de, "ws: Django presence(disconnect) 실패 — 무시");
+        }
         return;
     }
 
-    // ── Step 4: Spawn writer task ─────────────────────────────────────────
+    // ── Step 5: Spawn writer task ─────────────────────────────────────────
 
     let writer_handle = tokio::spawn(writer_task(sink, rx));
 
-    // ── Step 5: Read loop ─────────────────────────────────────────────────
+    // ── Step 6: Read loop ─────────────────────────────────────────────────
+
+    // DisconnectGuard: 모든 종료 경로에서 presence(disconnect) + unregister 를 보장한다.
+    let guard = DisconnectGuard {
+        client_id,
+        sender: sender.clone(),
+        registry: state.registry.clone(),
+        django: state.django.clone(),
+    };
 
     while let Some(result) = stream.next().await {
         match result {
             Ok(msg) => {
-                if !dispatch_client_message(client_id, msg) {
+                if !dispatch_client_message(client_id, msg, &state.django).await {
                     // Socket closed gracefully.
                     break;
                 }
@@ -128,15 +176,44 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    // ── Step 6: Cleanup ───────────────────────────────────────────────────
+    // ── Step 7: Cleanup ───────────────────────────────────────────────────
 
     info!(client_id = %client_id, "ws: connection closed — unregistering (offline)");
-    state.registry.unregister(client_id, &sender);
+    // guard 가 Drop 될 때 unregister + Django presence(disconnect) 를 호출한다.
+    drop(guard);
 
     // Abort the writer task; the mpsc receiver is dropped when this task
     // exits, which causes the writer to drain and exit cleanly.
     writer_handle.abort();
 }
+
+// ─── DisconnectGuard ─────────────────────────────────────────────────────────
+
+/// RAII guard: 소켓 종료 시(정상/오류/panic 모두) unregister + Django disconnect 를 보장.
+struct DisconnectGuard {
+    client_id: Uuid,
+    sender: mpsc::Sender<ServerEnvelope>,
+    registry: Registry,
+    django: Arc<DjangoClient>,
+}
+
+impl Drop for DisconnectGuard {
+    fn drop(&mut self) {
+        self.registry.unregister(self.client_id, &self.sender);
+
+        // Drop 내에서는 async fn 을 직접 await 할 수 없다.
+        // tokio::spawn 으로 별도 task 에서 비동기 호출을 수행한다.
+        let django = self.django.clone();
+        let client_id = self.client_id;
+        tokio::spawn(async move {
+            if let Err(e) = django.presence(client_id, false).await {
+                warn!(client_id = %client_id, error = %e, "ws: Django presence(disconnect) 실패 — 무시");
+            }
+        });
+    }
+}
+
+// ─── Writer task ─────────────────────────────────────────────────────────────
 
 /// Drain the per-connection mpsc channel and write each `ServerEnvelope` as a
 /// binary protobuf frame.  Exits when the channel is closed (which happens when
@@ -165,6 +242,8 @@ async fn send_envelope(
     sink.send(Message::Binary(buf.into())).await
 }
 
+// ─── Handshake helpers ───────────────────────────────────────────────────────
+
 /// Try to decode a `ClientEnvelope::Hello` from a WS message.
 ///
 /// Returns `(client_id, client_version)` on success.
@@ -185,16 +264,22 @@ fn parse_hello(msg: Message) -> Option<(Uuid, String)> {
     }
 }
 
+// ─── Dispatch ────────────────────────────────────────────────────────────────
+
 /// Dispatch a subsequent `ClientEnvelope` frame from the read loop.
 ///
 /// Returns `false` if the connection should be closed (Close frame received).
-fn dispatch_client_message(client_id: Uuid, msg: Message) -> bool {
+async fn dispatch_client_message(
+    client_id: Uuid,
+    msg: Message,
+    django: &DjangoClient,
+) -> bool {
     match msg {
         Message::Binary(bytes) => {
             match ClientEnvelope::decode(bytes.as_ref()) {
                 Ok(envelope) => {
                     if let Some(payload) = envelope.payload {
-                        handle_client_payload(client_id, payload);
+                        handle_client_payload(client_id, payload, django).await;
                     }
                 }
                 Err(e) => {
@@ -222,7 +307,11 @@ fn dispatch_client_message(client_id: Uuid, msg: Message) -> bool {
     }
 }
 
-fn handle_client_payload(client_id: Uuid, payload: client_envelope::Payload) {
+async fn handle_client_payload(
+    client_id: Uuid,
+    payload: client_envelope::Payload,
+    django: &DjangoClient,
+) {
     match payload {
         client_envelope::Payload::Hello(_) => {
             // Duplicate Hello after handshake; ignore.
@@ -236,8 +325,9 @@ fn handle_client_payload(client_id: Uuid, payload: client_envelope::Payload) {
                 full = hb.full,
                 "ws: Heartbeat received"
             );
-            // TODO(django-integration): forward heartbeat telemetry to Django
-            // internal API (POST /internal/telemetry/heartbeat).
+            if let Err(e) = django.heartbeat(client_id, &hb).await {
+                warn!(client_id = %client_id, error = %e, "ws: heartbeat Django 전송 실패 — 무시");
+            }
         }
         client_envelope::Payload::CommandAck(ack) => {
             info!(
@@ -245,8 +335,9 @@ fn handle_client_payload(client_id: Uuid, payload: client_envelope::Payload) {
                 command_id = %ack.command_id,
                 "ws: CommandAck received"
             );
-            // TODO(django-integration): notify Django that the command was
-            // received (transition: sent -> executing in commands table).
+            if let Err(e) = django.command_ack(&ack.command_id).await {
+                warn!(client_id = %client_id, error = %e, "ws: command_ack Django 전송 실패 — 무시");
+            }
         }
         client_envelope::Payload::CommandResult(result) => {
             info!(
@@ -256,8 +347,9 @@ fn handle_client_payload(client_id: Uuid, payload: client_envelope::Payload) {
                 exit_code = result.exit_code,
                 "ws: CommandResult received"
             );
-            // TODO(django-integration): POST result to Django internal API
-            // (POST /internal/commands/{id}/result).
+            if let Err(e) = django.command_result(&result).await {
+                warn!(client_id = %client_id, error = %e, "ws: command_result Django 전송 실패 — 무시");
+            }
         }
         client_envelope::Payload::LogEvent(log) => {
             info!(
@@ -267,11 +359,14 @@ fn handle_client_payload(client_id: Uuid, payload: client_envelope::Payload) {
                 message = %log.message,
                 "ws: LogEvent received"
             );
-            // TODO(django-integration): batch or immediately forward to Django
-            // log ingestion endpoint.
+            // TODO(log-sink): Django 측 로그 배치 수집 엔드포인트가 구현되면
+            // POST /internal/telemetry/logs/ 로 전송한다.
+            // 현재는 tracing 으로만 기록하고 끝낸다.
         }
     }
 }
+
+// ─── Welcome builder ─────────────────────────────────────────────────────────
 
 fn build_welcome() -> ServerEnvelope {
     use std::time::{SystemTime, UNIX_EPOCH};
