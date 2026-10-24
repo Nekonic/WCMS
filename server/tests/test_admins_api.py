@@ -131,3 +131,44 @@ def test_reset_before_first_enroll_still_asks_for_password(admin_api):
     step = login.post("/api/auth/login", {"username": "kim", "password": "kim-long-password-42"}, format="json")
     assert step.json() == {"next": "otp"}
     assert AuditLog.objects.filter(action="admin.reset", detail__purpose=EnrollmentToken.NEW).exists()
+
+
+def test_enroll_page_gets_csrf_cookie_and_can_post(admin_api):
+    url = create_admin(admin_api).json()["enroll_url"]
+    anon = APIClient(enforce_csrf_checks=True)
+    info = anon.get(f"/api/auth{url}")
+    assert info.status_code == 200
+    csrf = info.cookies["csrftoken"].value
+    blocked = anon.post(f"/api/auth{url}", {"password": "kim-long-password-42", "code": "000000"}, format="json")
+    assert blocked.status_code == 403 and blocked.json()["error"] == "csrf_failed"
+    code = pyotp.TOTP(info.json()["secret"]).now()
+    done = anon.post(
+        f"/api/auth{url}",
+        {"password": "kim-long-password-42", "code": code},
+        format="json",
+        HTTP_X_CSRFTOKEN=csrf,
+    )
+    assert done.status_code == 204
+
+
+@pytest.mark.parametrize("variant", ["ａｄｍｉｎ", "ＡDMIN"])
+def test_create_rejects_compatibility_form_of_existing_username(admin_api, variant):
+    response = create_admin(admin_api, variant)
+    assert response.status_code == 400
+    assert "username" in response.json()["fields"]
+    assert User.objects.count() == 1
+
+
+def test_create_stores_normalized_username(admin_api):
+    response = create_admin(admin_api, "ｋｉｍ")
+    assert response.status_code == 201
+    assert response.json()["admin"]["username"] == "kim"
+    assert User.objects.filter(username="kim").exists()
+
+
+@pytest.mark.parametrize("raw", ["a½", "ﷺ" * 10])
+def test_create_revalidates_normalized_username(admin_api, raw):
+    response = create_admin(admin_api, raw)
+    assert response.status_code == 400
+    assert "username" in response.json()["fields"]
+    assert User.objects.count() == 1

@@ -153,7 +153,10 @@ def usable_token(token: str) -> EnrollmentToken:
 class EnrollView(APIView):
     permission_classes = [AllowAny]
 
+    # 등록 화면은 /me를 부르지 않고 바로 POST할 수 있어야 하므로 여기서도 CSRF 쿠키를 심는다.
+    # dispatch가 아니라 get에만 건다(POST의 csrf_protect 검사를 건너뛰게 하지 않도록).
     @extend_schema(responses={200: EnrollInfoSerializer, **error_responses(404)})
+    @method_decorator(ensure_csrf_cookie)
     def get(self, request, token: str):
         entry = usable_token(token)
         uri = pyotp.TOTP(entry.totp_secret).provisioning_uri(name=entry.user.get_username(), issuer_name="WCMS")
