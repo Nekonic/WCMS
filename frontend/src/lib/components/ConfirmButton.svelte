@@ -22,8 +22,12 @@
 
 	async function confirmAction() {
 		busy = true;
-		await onconfirm();
-		busy = false;
+		try {
+			await onconfirm();
+		} finally {
+			busy = false;
+		}
+		// 예외가 나면 여기까지 오지 않는다. 대화상자는 열린 채 확인 버튼을 다시 누를 수 있다
 		dialog?.close();
 	}
 </script>
