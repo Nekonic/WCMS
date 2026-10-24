@@ -82,14 +82,20 @@ class LiveConsumer(AsyncJsonWebsocketConsumer):
         if not public and not (self.admin and await _still_admin(self.user.pk)):
             await self.send_json({"type": "error", "error": "forbidden_topic", "topic": topic})
             return
-        key, snapshot = await _snapshot(kind, ident, public)
-        if snapshot is None:
-            await self.send_json({"type": "error", "error": "not_found", "topic": topic})
-            return
-        if topic not in self.topics:
+        # 스냅샷과 이후 변경 사이에 빈틈이 없도록 그룹에 먼저 들어간다.
+        # 스냅샷을 만드는 동안 도착한 이벤트는 스냅샷 뒤에 전달된다(이벤트는 전체 상태를 담는다).
+        new = topic not in self.topics
+        if new:
             group = _group(kind, ident, public)
             await self.channel_layer.group_add(group, self.channel_name)
             self.topics[topic] = group
+        key, snapshot = await _snapshot(kind, ident, public)
+        if snapshot is None:
+            group = self.topics.pop(topic, None)
+            if group is not None:
+                await self.channel_layer.group_discard(group, self.channel_name)
+            await self.send_json({"type": "error", "error": "not_found", "topic": topic})
+            return
         await self.send_json({"type": "snapshot", "topic": topic, key: snapshot})
 
     async def unsubscribe(self, topic) -> None:

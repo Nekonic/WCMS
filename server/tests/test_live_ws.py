@@ -6,12 +6,13 @@ from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 
-from agent import consumers, protocol
+from agent import consumers, protocol, state
 from labs.models import PC, Room
+from live import consumers as consumers_live
 from live.consumers import LiveConsumer
-from live.publish import room_changed
+from live.publish import publish_pc, room_changed
 from wcms.asgi import application
-from wcms.groups import room_public_group, user_group
+from wcms.groups import room_group, room_public_group, user_group
 
 pytestmark = pytest.mark.django_db(transaction=True)
 ADMIN_ONLY = {"hostname", "user", "session", "foreground", "cpu", "version", "id"}
@@ -192,3 +193,34 @@ async def test_handler_error_closes_connection_and_cleans_groups(monkeypatch):
     await ws.send_input({"type": "websocket.disconnect", "code": 1011})
     await ws.wait()
     assert not get_channel_layer().groups.get(room_public_group(room.id))
+
+
+async def test_change_during_snapshot_is_not_lost(monkeypatch):
+    room, pc, _ = await make_room_and_pc()
+    real_snapshot = consumers_live._snapshot
+
+    async def snapshot_then_change(*args):
+        result = await real_snapshot(*args)
+        await sync_to_async(state.mark_connected)(pc.id, "chan")
+        await publish_pc(pc.id, online_changed=True)
+        return result
+
+    monkeypatch.setattr("live.consumers._snapshot", snapshot_then_change)
+    ws = await live_as(AnonymousUser())
+    topic = f"room:{room.id}:public"
+    await ws.send_json_to({"type": "subscribe", "topic": topic})
+    snapshot = await ws.receive_json_from()
+    assert snapshot["type"] == "snapshot" and snapshot["seats"][0]["online"] is False
+    seat = await ws.receive_json_from(timeout=2)
+    assert seat["type"] == "seat" and seat["topic"] == topic and seat["seat"]["online"] is True
+    await ws.disconnect()
+
+
+async def test_not_found_leaves_no_subscription():
+    ws = await live_as(await make_staff())
+    await ws.send_json_to({"type": "subscribe", "topic": "room:999"})
+    assert (await ws.receive_json_from())["error"] == "not_found"
+    await sync_to_async(room_changed)(999)
+    assert await ws.receive_nothing(timeout=0.3)
+    assert not get_channel_layer().groups.get(room_group(999))
+    await ws.disconnect()
