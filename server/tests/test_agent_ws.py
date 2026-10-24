@@ -61,6 +61,7 @@ async def current_state(pc_id: int) -> dict:
 @pytest.fixture(autouse=True)
 def no_status_throttle(monkeypatch):
     monkeypatch.setattr(protocol, "STATUS_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(protocol, "PING_REFRESH_INTERVAL", 0.0)
 
 
 async def test_rejects_missing_and_wrong_token():
@@ -310,17 +311,123 @@ async def test_ping_after_state_loss_brings_pc_back_online():
     await ws.disconnect()
 
 
-async def test_status_from_replaced_connection_is_ignored():
+async def test_status_from_replaced_connection_closes_superseded():
+    # 교체 알림(pc.superseded)을 놓친 연결은 다음 status에서 4409로 닫히고 상태는 건드리지 않는다
     pc, token = await make_pc()
     ws = await open_with_hello(token)
     await sync(ws)
     await sync_to_async(state.mark_connected)(pc.id, "someone-else")
     await ws.send_json_to(example("status.json"))
-    await sync(ws)
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == protocol.CLOSE_SUPERSEDED
     assert await connection_of(pc.id) == "someone-else"
     assert (await current_state(pc.id))["status"] == {}
     await ws.disconnect()
     assert (await current_state(pc.id))["online"] is True
+
+
+async def test_ping_from_replaced_connection_closes_superseded():
+    pc, token = await make_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    await sync_to_async(state.mark_connected)(pc.id, "someone-else")
+    await ws.send_json_to(example("ping.json"))
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == protocol.CLOSE_SUPERSEDED
+    await ws.disconnect()
+    assert await connection_of(pc.id) == "someone-else"
+    assert (await current_state(pc.id))["online"] is True
+
+
+async def test_connect_publish_failure_keeps_connection_and_cleans_up(monkeypatch):
+    # mark_connected 뒤에 알림이 실패해도 연결은 살아 있어야 disconnect()가 돌아 offline이 된다
+    real = consumers.publish_pc
+    calls = []
+
+    async def fail_first(pc_id, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("channel layer down")
+        await real(pc_id, **kwargs)
+
+    monkeypatch.setattr(consumers, "publish_pc", fail_first)
+    pc, token = await make_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    assert (await current_state(pc.id))["online"] is True
+    await ws.disconnect()
+    assert (await current_state(pc.id))["online"] is False
+    assert len(calls) == 2
+
+
+async def test_disconnect_after_state_loss_publishes_offline():
+    pc, token = await make_seated_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    public = await listen(room_public_group(pc.room_id))
+    await sync_to_async(cache.delete)(f"pcstate:{pc.id}")
+    await ws.disconnect()
+    seats = [m["seat"] for m in await drain(public) if m["type"] == "live.seat"]
+    assert seats and seats[-1]["online"] is False
+
+
+async def test_rapid_pings_refresh_state_once(monkeypatch):
+    monkeypatch.setattr(protocol, "PING_REFRESH_INTERVAL", 60.0)
+    touches = []
+    real_touch = state.touch
+
+    def counting_touch(*args):
+        touches.append(args)
+        return real_touch(*args)
+
+    monkeypatch.setattr(state, "touch", counting_touch)
+    layer = get_channel_layer()
+    joins = []
+    real_group_add = type(layer).group_add
+
+    async def counting_group_add(self, group, channel):
+        joins.append(group)
+        await real_group_add(self, group, channel)
+
+    monkeypatch.setattr(type(layer), "group_add", counting_group_add)
+    pc, token = await make_pc()
+    ws = await open_with_hello(token)
+    for _ in range(5):
+        await sync(ws)
+    assert len(touches) == 1
+    assert joins.count(pc_group(pc.id)) == 2  # 연결할 때 한 번, 첫 ping에서 한 번
+    await ws.disconnect()
+
+
+async def test_connect_publish_cannot_be_overtaken_by_next_connection(monkeypatch):
+    # 새 연결의 online 알림은 잠금 안에서 accept 전에 보낸다. 잠금 밖에서 보내면 그 사이에
+    # 다음 연결이 들어왔다 나가며 보낸 offline 뒤에 늦은 online이 도착해 공개 좌석이 online으로 남는다
+    layer = get_channel_layer()
+    original = type(layer).group_send
+    delaying = asyncio.Event()
+
+    async def slow_first_online_seat(self, group, message):
+        if message.get("type") == "live.seat" and message["seat"]["online"] and not delaying.is_set():
+            delaying.set()
+            await asyncio.sleep(0.2)
+        await original(self, group, message)
+
+    pc, token = await make_seated_pc()
+    public = await listen(room_public_group(pc.room_id))
+    monkeypatch.setattr(type(layer), "group_send", slow_first_online_seat)
+    first = connect(token)
+    first_connecting = asyncio.create_task(first.connect())
+    await delaying.wait()
+    second = await open_with_hello(token)
+    await sync(second)
+    await second.disconnect()
+    assert (await first_connecting)[0] is True
+    closed = await first.receive_output(timeout=1)
+    assert closed["code"] == protocol.CLOSE_SUPERSEDED
+    await first.disconnect()
+    assert (await current_state(pc.id))["online"] is False
+    seats = [m["seat"] for m in await drain(public) if m["type"] == "live.seat"]
+    assert seats[-1]["online"] is False
 
 
 async def test_old_offline_publish_cannot_overtake_new_online(monkeypatch):

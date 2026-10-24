@@ -48,6 +48,7 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
     pc_id: int | None = None
     hello_done = False
     last_status: float | None = None
+    last_ping_refresh: float | None = None
 
     async def connect(self) -> None:
         token = protocol.bearer_token(self.scope)
@@ -61,7 +62,11 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_send(group, {"type": "pc.superseded"})
             await self.channel_layer.group_add(group, self.channel_name)
             await sync_to_async(state.mark_connected)(pc_id, self.channel_name)
-            await publish_pc(pc_id, online_changed=True)
+            try:
+                await publish_pc(pc_id, online_changed=True)
+            except Exception:
+                # 여기서 예외가 나가면 연결이 열리지 않아 disconnect()가 돌지 않고 PC가 온라인으로 남는다
+                logger.exception("online publish failed (pc_id=%s)", pc_id)
         await self.accept()
 
     async def disconnect(self, code: int) -> None:
@@ -114,15 +119,24 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
             await self.refresh(protocol.clean_status(message))
         elif kind == "ping":
             # 채널 레이어는 group_expiry가 지나거나 Redis가 재시작되면 그룹 가입을 잊는다.
-            # 며칠씩 이어지는 연결도 교체/무효 알림을 받도록 ping마다 다시 가입한다 (멱등)
-            await self.channel_layer.group_add(pc_group(self.pc_id), self.channel_name)
-            await self.refresh()
+            # 며칠씩 이어지는 연결도 교체/무효 알림을 받도록 ping으로 다시 가입한다 (멱등).
+            # 상태 쓰기와 재가입은 PING_REFRESH_INTERVAL마다 한 번만 하고 pong은 매번 보낸다
+            now = time.monotonic()
+            if self.last_ping_refresh is None or now - self.last_ping_refresh >= protocol.PING_REFRESH_INTERVAL:
+                self.last_ping_refresh = now
+                await self.channel_layer.group_add(pc_group(self.pc_id), self.channel_name)
+                if not await self.refresh():
+                    return
             await self.send_json({"type": "pong"})
         else:
             await self.send_json(_error("unknown_type"))
 
-    async def refresh(self, status: dict | None = None) -> None:
-        """ping과 status 공통. 상태 TTL을 갱신하고 status가 있으면 저장한 뒤, 바뀐 만큼 알린다."""
+    async def refresh(self, status: dict | None = None) -> bool:
+        """ping과 status 공통. 상태 TTL을 갱신하고 status가 있으면 저장한 뒤, 바뀐 만큼 알린다.
+
+        다른 연결이 PC를 쥐고 있으면 (교체/무효 알림을 놓쳤거나 되살리기 경합에서 졌다) 이 연결은
+        더 이상 주인이 아니므로 4409로 닫고 False를 돌려준다. 주인 연결은 IGNORED를 받지 않는다.
+        """
         async with _locks[self.pc_id]:
             if status is None:
                 result = await sync_to_async(state.touch)(self.pc_id, self.channel_name)
@@ -132,6 +146,10 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
                 await publish_pc(self.pc_id, online_changed=True)
             elif result is state.Refresh.SAVED and status is not None:
                 await publish_pc(self.pc_id, online_changed=False)
+        if result is state.Refresh.IGNORED:
+            await self.close(code=protocol.CLOSE_SUPERSEDED)
+            return False
+        return True
 
     async def pc_superseded(self, event: dict) -> None:
         await self.close(code=protocol.CLOSE_SUPERSEDED)

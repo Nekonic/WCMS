@@ -22,6 +22,7 @@ ADMIN_ONLY = {"hostname", "user", "session", "foreground", "cpu", "version", "id
 @pytest.fixture(autouse=True)
 def no_status_throttle(monkeypatch):
     monkeypatch.setattr(protocol, "STATUS_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(protocol, "PING_REFRESH_INTERVAL", 0.0)
 
 
 @pytest.fixture(autouse=True)
