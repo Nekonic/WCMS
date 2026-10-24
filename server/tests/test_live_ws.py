@@ -12,6 +12,8 @@ from web.consumers import LiveConsumer
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
+ADMIN_ONLY_KEYS = {"hostname", "user", "session", "foreground", "cpu", "version"}
+
 
 @database_sync_to_async
 def make_pc() -> PC:
@@ -43,7 +45,7 @@ async def test_anonymous_receives_public_payload():
     message = await ws.receive_json_from()
     assert message["type"] == "pc"
     assert message["pc"]["state"] == "in_use"
-    assert "user" not in message["pc"]
+    assert not ADMIN_ONLY_KEYS & message["pc"].keys()
     await ws.disconnect()
 
 
@@ -76,3 +78,42 @@ async def test_same_origin_accepted():
     connected, _ = await ws.connect()
     assert connected
     await ws.disconnect()
+
+
+async def test_client_status_reaches_browser_grids():
+    _, token = await database_sync_to_async(PC.register)(
+        hostname="LAB-02", machine_guid="g2", specs={}, version="2026.1"
+    )
+    anonymous = await connect_as(AnonymousUser())
+    staff = await connect_as(await make_staff())
+
+    client = WebsocketCommunicator(
+        application, "/client/ws", headers=[(b"authorization", f"Bearer {token}".encode())]
+    )
+    connected, _ = await client.connect()
+    assert connected
+    # The connect itself broadcasts once to every browser socket.
+    assert (await anonymous.receive_json_from(timeout=2))["type"] == "pc"
+    assert (await staff.receive_json_from(timeout=2))["type"] == "pc"
+
+    await client.send_json_to(
+        {
+            "type": "status",
+            "user": "Student",
+            "session": "active",
+            "foreground": {"process": "chrome.exe", "title": "t"},
+        }
+    )
+    public = await anonymous.receive_json_from(timeout=2)
+    assert public["type"] == "pc"
+    assert public["pc"]["state"] == "in_use"
+    assert not ADMIN_ONLY_KEYS & public["pc"].keys()
+    detail = await staff.receive_json_from(timeout=2)
+    assert detail["pc"]["user"] == "Student"
+    assert detail["pc"]["state"] == "active"
+
+    await client.disconnect()
+    assert (await anonymous.receive_json_from(timeout=2))["pc"]["state"] == "offline"
+    assert (await staff.receive_json_from(timeout=2))["pc"]["state"] == "offline"
+    await anonymous.disconnect()
+    await staff.disconnect()

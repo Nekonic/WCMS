@@ -19,7 +19,7 @@ def _parse_seats(post: QueryDict, rows: int, cols: int) -> tuple[dict[Seat, int]
             raw = post.get(f"seat-{row}-{col}", "")
             if not raw:
                 continue
-            if not raw.isdigit():
+            if not (raw.isascii() and raw.isdigit()):
                 return {}, "잘못된 PC 선택입니다."
             pc_id = int(raw)
             if pc_id in seen:
@@ -78,7 +78,7 @@ def room_edit(request: HttpRequest, room_id: int) -> HttpResponse:
         for row in range(rows):
             for col in range(cols):
                 value = request.POST.get(f"seat-{row}-{col}", "")
-                if value.isdigit():
+                if value.isascii() and value.isdigit():
                     current[(row, col)] = int(value)
 
     pcs = PC.objects.select_related("room").order_by("hostname")

@@ -128,3 +128,18 @@ async def test_binary_frame_returns_error():
     await ws.send_to(bytes_data=b"\x00\x01")
     assert await ws.receive_json_from() == {"type": "error", "error": "bad_json"}
     await ws.disconnect()
+
+
+async def test_non_finite_number_is_not_stored():
+    pc, token = await make_pc()
+    ws = communicator(token)
+    await ws.connect()
+    await ws.send_to(text_data='{"type":"status","cpu":Infinity,"mem_used":NaN,"disk_used":5}')
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
+
+    stored = (await reload(pc.id)).status
+    assert "cpu" not in stored
+    assert "mem_used" not in stored
+    assert stored["disk_used"] == 5
+    await ws.disconnect()

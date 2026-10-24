@@ -18,7 +18,7 @@ class TOTPDevice(models.Model):
 
     def verify(self, code: str) -> bool:
         code = code.replace(" ", "").strip()
-        if not code.isdigit():
+        if not (code.isascii() and code.isdigit()):
             return False
         totp = pyotp.TOTP(self.secret)
         current = int(time.time() // STEP_SECONDS)

@@ -69,6 +69,18 @@ def test_same_pc_twice_rejected(admin_client):
     assert a.room is None
 
 
+def test_non_ascii_digit_seat_rejected(admin_client):
+    room = Room.objects.create(name="301", rows=2, cols=4)
+    a = make_pc(1)
+    data = room_fields(rows="2", cols="4", aisle_after="")
+    data.update({"seat-0-0": "\u00b2", "seat-0-1": str(a.id)})
+    response = admin_client.post(f"/rooms/{room.id}/edit/", data)
+    assert response.status_code == 200
+    assert "잘못된 PC 선택입니다." in response.content.decode()
+    a.refresh_from_db()
+    assert a.room is None
+
+
 def test_shrinking_room_unassigns_out_of_range_pc(admin_client):
     room = Room.objects.create(name="301", rows=2, cols=4)
     a = make_pc(1)

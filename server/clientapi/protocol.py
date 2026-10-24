@@ -1,3 +1,5 @@
+import math
+
 NUMBER_FIELDS = ("cpu", "mem_used", "mem_total", "disk_used", "disk_total")
 SESSIONS = ("active", "locked", "none")
 
@@ -19,7 +21,7 @@ def clean_status(message: dict) -> dict:
     status: dict = {}
     for key in NUMBER_FIELDS:
         value = message.get(key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
             status[key] = value
     user = message.get("user")
     if isinstance(user, str):

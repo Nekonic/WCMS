@@ -101,6 +101,10 @@ def test_code_cannot_be_reused(device):
     assert device.verify(code) is False
 
 
+def test_non_ascii_digits_rejected_without_error(device):
+    assert device.verify("\u00b2\u00b2\u00b2\u00b2\u00b2\u00b2") is False
+
+
 def test_open_redirect_blocked(client, device):
     password_step(client, next_url="https://evil.example/")
     response = client.post("/login/otp/", {"code": pyotp.TOTP(device.secret).now()})
