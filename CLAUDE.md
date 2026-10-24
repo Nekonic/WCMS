@@ -3,6 +3,7 @@
 설계: docs/superpowers/specs/2026-10-24-wcms-2026-1-design.md
 계획: docs/superpowers/plans/
 클라이언트 프로토콜: protocol/README.md (예시: protocol/examples/)
+브라우저 실시간: docs/live-ws.md
 
 - server/: Django + DRF + Channels. 명령은 server/ 에서 `uv run ...`. 패키지 추가는 `uv add` (pip 직접 사용 금지)
 - frontend/: SvelteKit SPA (계획 03)
