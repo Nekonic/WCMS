@@ -24,8 +24,14 @@ def read_version() -> str:
 
 DEBUG = env_bool("WCMS_DEBUG", True)
 SECRET_KEY = os.environ.get("WCMS_SECRET_KEY", DEV_SECRET_KEY)
-if not DEBUG and SECRET_KEY == DEV_SECRET_KEY:
+if not DEBUG and (not SECRET_KEY or SECRET_KEY == DEV_SECRET_KEY):
     raise ImproperlyConfigured("WCMS_DEBUG=0이면 WCMS_SECRET_KEY를 반드시 설정해야 합니다.")
+
+PRODUCTION_REQUIRED = ["WCMS_REDIS_URL", "WCMS_ALLOWED_HOSTS", "WCMS_CSRF_TRUSTED_ORIGINS"]
+if not DEBUG:
+    missing = [name for name in PRODUCTION_REQUIRED if not os.environ.get(name)]
+    if missing:
+        raise ImproperlyConfigured(f"WCMS_DEBUG=0이면 다음 환경 변수가 필요합니다: {', '.join(missing)}")
 
 ALLOWED_HOSTS = env_list("WCMS_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("WCMS_CSRF_TRUSTED_ORIGINS", "http://localhost:5173")
