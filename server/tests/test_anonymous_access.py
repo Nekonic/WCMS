@@ -37,7 +37,7 @@ def _walk(patterns, prefix: str = ""):
             yield prefix + str(entry.pattern), entry
 
 
-def api_routes() -> list[tuple[str, type]]:
+def api_routes() -> list[tuple[str, object]]:
     routes = []
     for route, entry in _walk(get_resolver().url_patterns):
         if not route.startswith("api/"):
@@ -45,10 +45,17 @@ def api_routes() -> list[tuple[str, type]]:
         if entry.callback is api_not_found:
             continue
         assert isinstance(entry.pattern, RoutePattern), f"/{route}: path()로 등록해야 이 테스트가 확인할 수 있다"
-        view = getattr(entry.callback, "cls", None)
-        assert view is not None, f"/{route}: DRF 뷰가 아니다"
-        routes.append(("/" + route, view))
+        assert getattr(entry.callback, "cls", None) is not None, f"/{route}: DRF 뷰가 아니다"
+        routes.append(("/" + route, entry.callback))
     return routes
+
+
+def view_methods(callback) -> list[str]:
+    """ViewSet은 as_view()에 넘긴 actions에 있는 메서드만 라우팅된다. 일반 뷰는 핸들러가 있는 메서드."""
+    actions = getattr(callback, "actions", None)
+    if actions:
+        return [method for method in METHODS if method in actions]
+    return [method for method in METHODS if hasattr(callback.cls, method)]
 
 
 def schema_path(route: str) -> str:
@@ -62,11 +69,40 @@ def concrete_path(route: str) -> str:
 
 def operations() -> list[tuple[str, str, str]]:
     ops = []
-    for route, view in api_routes():
-        for method in METHODS:
-            if hasattr(view, method):
-                ops.append((method.upper(), schema_path(route), concrete_path(route)))
+    for route, callback in api_routes():
+        for method in view_methods(callback):
+            ops.append((method.upper(), schema_path(route), concrete_path(route)))
     return ops
+
+
+def test_top_level_routes_are_known():
+    # /api/ 밖의 경로는 위 검사를 받지 않는다. 새 최상위 경로(include 포함)는 여기를 고쳐 일부러 추가한다.
+    # /client/register는 PC 등록 비밀값으로 인증하는 에이전트 경로다 (test_agent_register.py)
+    top = {str(entry.pattern) for entry in get_resolver().url_patterns}
+    assert top == {"healthz", "api/", "^api(?:/|$)", "client/"}
+    outside_api = {
+        route
+        for route, entry in _walk(get_resolver().url_patterns)
+        if not route.startswith("api/") and entry.callback is not api_not_found
+    }
+    assert outside_api == {"healthz", "client/register"}
+
+
+def test_viewset_methods_come_from_actions():
+    from rest_framework import viewsets
+
+    class Things(viewsets.ViewSet):
+        def list(self, request):
+            pass
+
+        def create(self, request):
+            pass
+
+        def destroy(self, request, pk=None):
+            pass
+
+    assert view_methods(Things.as_view({"get": "list"})) == ["get"]
+    assert view_methods(Things.as_view({"post": "create", "delete": "destroy"})) == ["post", "delete"]
 
 
 def test_routes_found():
