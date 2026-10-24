@@ -328,3 +328,51 @@ async def test_public_silent_for_unseated_pc():
     await client.disconnect()
     assert await ws.receive_nothing(timeout=0.3)
     await ws.disconnect()
+
+
+async def test_missing_origin_rejected():
+    ws = WebsocketCommunicator(application, "/ws/live", headers=[(b"host", b"localhost")])
+    assert (await ws.connect())[0] is False
+
+
+async def test_documented_message_edges():
+    room, _, _ = await make_room_and_pc()
+    ws = await live_as(AnonymousUser())
+    await ws.send_to(bytes_data=b"\x00")
+    assert await ws.receive_json_from() == {"type": "error", "error": "bad_json"}
+    for raw in ("[1]", '"subscribe"', "null"):
+        await ws.send_to(text_data=raw)
+        assert await ws.receive_json_from() == {"type": "error", "error": "bad_json"}
+    await ws.send_json_to({"type": "subscribe", "topic": f"room:{room.id}"})
+    assert await ws.receive_json_from() == {"type": "error", "error": "forbidden_topic", "topic": f"room:{room.id}"}
+    await ws.send_json_to({"type": "subscribe", "topic": "room:99:public"})
+    assert await ws.receive_json_from() == {"type": "error", "error": "not_found", "topic": "room:99:public"}
+    await ws.send_json_to({"type": "subscribe", "topic": "room:x"})
+    assert await ws.receive_json_from() == {"type": "error", "error": "bad_topic"}
+    await ws.send_json_to({"type": "unsubscribe", "topic": "room:12345"})
+    assert await ws.receive_nothing(timeout=0.2)
+
+    topic = f"room:{room.id}:public"
+    for _ in range(2):
+        await ws.send_json_to({"type": "subscribe", "topic": topic})
+        assert (await ws.receive_json_from())["type"] == "snapshot"
+    await sync_to_async(room_changed)(room.id)
+    assert await ws.receive_json_from() == {"type": "room_changed", "topic": topic}
+    assert await ws.receive_nothing(timeout=0.3)
+    await ws.disconnect()
+
+
+async def test_unseated_pc_reaches_pc_topic_only():
+    room, pc, _ = await make_room_and_pc()
+    await unseat(pc)
+    ws = await live_as(await make_staff())
+    await ws.send_json_to({"type": "subscribe", "topic": f"room:{room.id}"})
+    assert (await ws.receive_json_from())["pcs"] == []
+    await ws.send_json_to({"type": "subscribe", "topic": f"pc:{pc.id}"})
+    assert (await ws.receive_json_from())["pc"]["online"] is False
+    await sync_to_async(state.mark_connected)(pc.id, "chan")
+    await publish_pc(pc.id, online_changed=True)
+    update = await ws.receive_json_from(timeout=1)
+    assert update["topic"] == f"pc:{pc.id}" and update["pc"]["online"] is True
+    assert await ws.receive_nothing(timeout=0.3)
+    await ws.disconnect()

@@ -124,3 +124,21 @@ def test_pins(admin_api):
 def test_pin_minutes_must_be_allowed(admin_api):
     response = admin_api.post("/api/pins", {"multi_use": False, "minutes": 30}, format="json")
     assert response.status_code == 400
+
+
+def test_room_changes_notify_live_viewers(admin_api, monkeypatch):
+    changed = []
+    monkeypatch.setattr("labs.views.room_changed", changed.append)
+    room, other = Room.objects.create(name="301", rows=2, cols=4), Room.objects.create(name="302", rows=2, cols=4)
+    a, b = make_pc(1), make_pc(2)
+    seat(b, other, 0, 0)
+    admin_api.patch(f"/api/rooms/{room.id}", {"name": "303"}, format="json")
+    assert changed == [room.id]
+    admin_api.put(f"/api/rooms/{room.id}/seats", {"seats": [{"row": 0, "col": 0, "pc": b.id}]}, format="json")
+    assert sorted(changed[1:]) == sorted([room.id, other.id])
+    del changed[:]
+    admin_api.delete(f"/api/pcs/{b.id}")
+    admin_api.delete(f"/api/pcs/{a.id}")
+    assert changed == [room.id]
+    admin_api.delete(f"/api/rooms/{room.id}")
+    assert changed == [room.id, room.id]

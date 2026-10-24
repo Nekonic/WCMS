@@ -172,3 +172,11 @@ def test_create_revalidates_normalized_username(admin_api, raw):
     assert response.status_code == 400
     assert "username" in response.json()["fields"]
     assert User.objects.count() == 1
+
+
+def test_delete_admin_ends_their_live_sessions(admin_api, monkeypatch):
+    ended = []
+    monkeypatch.setattr("accounts.views.end_live_sessions", ended.append)
+    target_id = create_admin(admin_api).json()["admin"]["id"]
+    admin_api.delete(f"/api/admins/{target_id}")
+    assert ended == [target_id]
