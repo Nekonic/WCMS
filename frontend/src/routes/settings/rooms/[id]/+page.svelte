@@ -23,7 +23,17 @@
 		rows = data.room.rows;
 		cols = data.room.cols;
 		aisle = data.room.aisle_after ?? null;
-		assignment = Object.fromEntries(data.seats.map((s) => [seatKey(s.row, s.col), s.pc]));
+		// 모든 칸을 '' (비움)으로 채운 뒤 서버에 있는 배치를 덮어쓴다. 빈 칸이 undefined면 새로고침 뒤 select가 빈 채로 보인다
+		const next: Record<string, number | ''> = {};
+		for (let row = 0; row < data.room.rows; row++) {
+			for (let col = 0; col < data.room.cols; col++) {
+				next[seatKey(row, col)] = '';
+			}
+		}
+		for (const s of data.seats) {
+			next[seatKey(s.row, s.col)] = s.pc;
+		}
+		assignment = next;
 	});
 
 	function pcText(pc: PageData['pcs'][number]): string {
@@ -50,9 +60,9 @@
 	async function saveSeats() {
 		error = '';
 		saved = '';
-		// 아직 고르지 않은 자리는 undefined, "비움"을 고른 자리는 ''
+		// 비운 자리는 ''이므로 보내지 않는다
 		const seats = Object.entries(assignment)
-			.filter(([, pc]) => pc !== '' && pc !== undefined)
+			.filter(([, pc]) => pc !== '')
 			.map(([key, pc]) => {
 				const [row, col] = key.split(':').map(Number);
 				return { row, col, pc: pc as number };
