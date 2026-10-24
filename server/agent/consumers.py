@@ -16,6 +16,8 @@ from wcms.net import is_internal_scope
 logger = logging.getLogger(__name__)
 
 # ASGI 서버는 프로세스 하나로 고정이므로 PC별 상태 변경은 이 잠금으로 순서를 지킨다.
+# 알림(publish_pc)도 같은 잠금 안에서 보낸다. 밖에서 보내면 끊긴 연결의 offline 알림이
+# 새 연결의 online 알림보다 늦게 도착해 공개 좌석이 offline으로 남을 수 있다.
 _locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
@@ -59,17 +61,16 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_send(group, {"type": "pc.superseded"})
             await self.channel_layer.group_add(group, self.channel_name)
             await sync_to_async(state.mark_connected)(pc_id, self.channel_name)
+            await publish_pc(pc_id, online_changed=True)
         await self.accept()
-        await publish_pc(pc_id, online_changed=True)
 
     async def disconnect(self, code: int) -> None:
         if self.pc_id is None:
             return
         await self.channel_layer.group_discard(pc_group(self.pc_id), self.channel_name)
         async with _locks[self.pc_id]:
-            changed = await sync_to_async(state.mark_disconnected)(self.pc_id, self.channel_name)
-        if changed:
-            await publish_pc(self.pc_id, online_changed=True)
+            if await sync_to_async(state.mark_disconnected)(self.pc_id, self.channel_name):
+                await publish_pc(self.pc_id, online_changed=True)
 
     async def receive(self, text_data=None, bytes_data=None) -> None:
         if text_data is None:
@@ -110,16 +111,27 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
             if self.last_status is not None and now - self.last_status < protocol.STATUS_MIN_INTERVAL:
                 return
             self.last_status = now
-            async with _locks[self.pc_id]:
-                saved = await sync_to_async(state.save_status)(
-                    self.pc_id, self.channel_name, protocol.clean_status(message)
-                )
-            if saved:
-                await publish_pc(self.pc_id, online_changed=False)
+            await self.refresh(protocol.clean_status(message))
         elif kind == "ping":
+            # 채널 레이어는 group_expiry가 지나거나 Redis가 재시작되면 그룹 가입을 잊는다.
+            # 며칠씩 이어지는 연결도 교체/무효 알림을 받도록 ping마다 다시 가입한다 (멱등)
+            await self.channel_layer.group_add(pc_group(self.pc_id), self.channel_name)
+            await self.refresh()
             await self.send_json({"type": "pong"})
         else:
             await self.send_json(_error("unknown_type"))
+
+    async def refresh(self, status: dict | None = None) -> None:
+        """ping과 status 공통. 상태 TTL을 갱신하고 status가 있으면 저장한 뒤, 바뀐 만큼 알린다."""
+        async with _locks[self.pc_id]:
+            if status is None:
+                result = await sync_to_async(state.touch)(self.pc_id, self.channel_name)
+            else:
+                result = await sync_to_async(state.save_status)(self.pc_id, self.channel_name, status)
+            if result is state.Refresh.REVIVED:
+                await publish_pc(self.pc_id, online_changed=True)
+            elif result is state.Refresh.SAVED and status is not None:
+                await publish_pc(self.pc_id, online_changed=False)
 
     async def pc_superseded(self, event: dict) -> None:
         await self.close(code=protocol.CLOSE_SUPERSEDED)

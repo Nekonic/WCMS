@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from django.core.cache import cache
 
 from agent import state
 from agent.protocol import bearer_token, clean_status
@@ -47,8 +48,8 @@ def test_state_lifecycle():
     assert state.get_state(1) == {"online": False, "status": {}}
     state.mark_connected(1, "chan-a")
     assert state.get_state(1)["online"] is True
-    assert state.save_status(1, "chan-b", {"cpu": 1}) is False
-    assert state.save_status(1, "chan-a", {"cpu": 1}) is True
+    assert state.save_status(1, "chan-b", {"cpu": 1}) is state.Refresh.IGNORED
+    assert state.save_status(1, "chan-a", {"cpu": 1}) is state.Refresh.SAVED
     assert state.get_state(1)["status"] == {"cpu": 1}
     assert state.mark_disconnected(1, "chan-b") is False
     assert state.mark_disconnected(1, "chan-a") is True
@@ -71,3 +72,44 @@ def test_get_states():
 def test_huge_int_dropped_without_raising(key):
     assert key not in clean_status(json.loads('{"%s": 1%s}' % (key, "0" * 400)))
     assert key not in clean_status({key: 10**400})
+
+
+def test_save_status_revives_missing_or_stale_key(monkeypatch):
+    # 캐시에서 밀려났거나 Redis가 재시작되었거나 다른 부팅의 값이면 이 연결로 다시 온라인이 된다
+    assert state.save_status(5, "chan", {"cpu": 1}) is state.Refresh.REVIVED
+    assert state.get_state(5) == {"online": True, "status": {"cpu": 1}}
+    monkeypatch.setattr(state, "BOOT_ID", "another-boot")
+    assert state.save_status(5, "chan", {"cpu": 2}) is state.Refresh.REVIVED
+    assert state.get_state(5) == {"online": True, "status": {"cpu": 2}}
+    assert state.mark_disconnected(5, "chan") is True
+
+
+def test_other_connection_is_never_overwritten():
+    state.mark_connected(6, "new")
+    assert state.save_status(6, "old", {"cpu": 1}) is state.Refresh.IGNORED
+    assert state.touch(6, "old") is state.Refresh.IGNORED
+    assert state.get_state(6) == {"online": True, "status": {}}
+    assert state.mark_disconnected(6, "new") is True
+    assert state.touch(6, "old") is state.Refresh.IGNORED
+    assert state.get_state(6)["online"] is False
+
+
+def test_touch_keeps_status_and_refreshes_ttl(monkeypatch):
+    state.mark_connected(7, "chan")
+    state.save_status(7, "chan", {"cpu": 1})
+    timeouts = []
+    original = cache.set
+
+    def recording_set(key, value, timeout):
+        timeouts.append(timeout)
+        original(key, value, timeout)
+
+    monkeypatch.setattr(cache, "set", recording_set)
+    assert state.touch(7, "chan") is state.Refresh.SAVED
+    assert timeouts == [state.TTL]
+    assert state.get_state(7) == {"online": True, "status": {"cpu": 1}}
+
+
+def test_touch_revives_missing_key():
+    assert state.touch(8, "chan") is state.Refresh.REVIVED
+    assert state.get_state(8) == {"online": True, "status": {}}

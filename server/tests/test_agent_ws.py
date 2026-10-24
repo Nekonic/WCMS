@@ -7,12 +7,13 @@ from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
+from django.core.cache import cache
 from django.test import override_settings
 
 from agent import consumers, protocol, state
-from labs.models import PC
+from labs.models import PC, Room
 from wcms.asgi import application
-from wcms.groups import pc_group
+from wcms.groups import pc_group, room_public_group
 
 pytestmark = pytest.mark.django_db(transaction=True)
 EXAMPLES = Path(__file__).resolve().parents[2] / "protocol" / "examples"
@@ -227,3 +228,124 @@ async def test_simultaneous_connections_leave_exactly_one(monkeypatch):
     assert (await current_state(pc.id))["online"] is True
     await survivor.disconnect()
     assert (await current_state(pc.id))["online"] is False
+
+
+@database_sync_to_async
+def make_seated_pc() -> tuple[PC, str]:
+    room = Room.objects.create(name="301", rows=1, cols=1)
+    pc, token = PC.register(hostname="LAB-01", machine_guid="g1", specs={}, version="2026.1")
+    pc.room, pc.row, pc.col = room, 0, 0
+    pc.save()
+    return pc, token
+
+
+async def connection_of(pc_id: int) -> str:
+    return (await sync_to_async(cache.get)(f"pcstate:{pc_id}"))["connection"]
+
+
+async def listen(group: str) -> str:
+    layer = get_channel_layer()
+    channel = await layer.new_channel()
+    await layer.group_add(group, channel)
+    return channel
+
+
+async def drain(channel: str) -> list[dict]:
+    messages = []
+    while True:
+        try:
+            messages.append(await asyncio.wait_for(get_channel_layer().receive(channel), 0.2))
+        except asyncio.TimeoutError:
+            return messages
+
+
+async def test_ping_rejoins_expired_group():
+    # 채널 레이어는 group_expiry가 지나거나 Redis가 재시작되면 그룹 가입을 잊는다
+    pc, token = await make_pc()
+    layer = get_channel_layer()
+    first = await open_with_hello(token)
+    await sync(first)
+    await layer.group_discard(pc_group(pc.id), await connection_of(pc.id))
+    await sync(first)
+    second = await open_with_hello(token)
+    closed = await first.receive_output(timeout=1)
+    assert closed["code"] == protocol.CLOSE_SUPERSEDED
+    await first.disconnect()
+
+    await sync(second)
+    await layer.group_discard(pc_group(pc.id), await connection_of(pc.id))
+    await sync(second)
+    await layer.group_send(pc_group(pc.id), {"type": "pc.revoked"})
+    closed = await second.receive_output(timeout=1)
+    assert closed["code"] == protocol.CLOSE_REVOKED
+
+
+async def test_status_after_state_loss_brings_pc_back_online():
+    pc, token = await make_seated_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    public = await listen(room_public_group(pc.room_id))
+    await sync_to_async(cache.delete)(f"pcstate:{pc.id}")
+    assert (await current_state(pc.id))["online"] is False
+    await ws.send_json_to(example("status.json"))
+    await sync(ws)
+    assert (await current_state(pc.id))["online"] is True
+    assert (await current_state(pc.id))["status"]["user"] == "Student"
+    seats = [m["seat"] for m in await drain(public) if m["type"] == "live.seat"]
+    assert seats and seats[-1]["online"] is True
+    await ws.disconnect()
+    assert (await current_state(pc.id))["online"] is False
+
+
+async def test_ping_after_state_loss_brings_pc_back_online():
+    pc, token = await make_seated_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    public = await listen(room_public_group(pc.room_id))
+    await sync_to_async(cache.delete)(f"pcstate:{pc.id}")
+    await sync(ws)
+    assert (await current_state(pc.id))["online"] is True
+    seats = [m["seat"] for m in await drain(public) if m["type"] == "live.seat"]
+    assert seats and seats[-1]["online"] is True
+    await ws.disconnect()
+
+
+async def test_status_from_replaced_connection_is_ignored():
+    pc, token = await make_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    await sync_to_async(state.mark_connected)(pc.id, "someone-else")
+    await ws.send_json_to(example("status.json"))
+    await sync(ws)
+    assert await connection_of(pc.id) == "someone-else"
+    assert (await current_state(pc.id))["status"] == {}
+    await ws.disconnect()
+    assert (await current_state(pc.id))["online"] is True
+
+
+async def test_old_offline_publish_cannot_overtake_new_online(monkeypatch):
+    # 끊긴 연결이 offline 상태를 읽고 보내기 전에 새 연결이 online을 알리면 공개 좌석이 offline으로 남는다.
+    # 상태를 읽은 뒤 보내기까지의 틈을 넓히려고 offline 좌석 알림만 늦춘다
+    layer = get_channel_layer()
+    original = type(layer).group_send
+
+    async def slow_offline_seat(self, group, message):
+        if message.get("type") == "live.seat" and not message["seat"]["online"]:
+            await asyncio.sleep(0.2)
+        await original(self, group, message)
+
+    monkeypatch.setattr(type(layer), "group_send", slow_offline_seat)
+    pc, token = await make_seated_pc()
+    old = await open_with_hello(token)
+    await sync(old)
+    public = await listen(room_public_group(pc.room_id))
+    leaving = asyncio.create_task(old.disconnect())
+    while (await current_state(pc.id))["online"]:
+        await asyncio.sleep(0.005)
+    new = await open_with_hello(token)
+    await sync(new)
+    await leaving
+    assert (await current_state(pc.id))["online"] is True
+    seats = [m["seat"] for m in await drain(public) if m["type"] == "live.seat"]
+    assert seats[-1]["online"] is True
+    await new.disconnect()

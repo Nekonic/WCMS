@@ -1,3 +1,4 @@
+import enum
 import time
 import uuid
 
@@ -34,12 +35,18 @@ def get_states(pc_ids: list[int]) -> dict[int, dict]:
     return {pc_id: _public(found.get(_key(pc_id))) for pc_id in pc_ids}
 
 
+class Refresh(enum.Enum):
+    IGNORED = "ignored"  # 다른 연결이 이 PC를 쥐고 있다 (교체되었거나 이미 끊김)
+    SAVED = "saved"  # 이 연결의 상태를 갱신했다. 온라인 여부는 그대로
+    REVIVED = "revived"  # 값이 사라져 있어 (TTL, 캐시 축출, Redis 재시작) 이 연결로 다시 온라인이 되었다
+
+
+def _connected(channel: str, status: dict) -> dict:
+    return {"boot": BOOT_ID, "online": True, "connection": channel, "status": status, "since": time.time()}
+
+
 def mark_connected(pc_id: int, channel: str) -> None:
-    cache.set(
-        _key(pc_id),
-        {"boot": BOOT_ID, "online": True, "connection": channel, "status": {}, "since": time.time()},
-        TTL,
-    )
+    cache.set(_key(pc_id), _connected(channel, {}), TTL)
 
 
 def mark_disconnected(pc_id: int, channel: str) -> bool:
@@ -50,9 +57,23 @@ def mark_disconnected(pc_id: int, channel: str) -> bool:
     return True
 
 
-def save_status(pc_id: int, channel: str, status: dict) -> bool:
+def _refresh(pc_id: int, channel: str, status: dict | None) -> Refresh:
+    """살아 있는 연결이 보낸 메시지로 TTL을 갱신한다. status가 있으면 함께 저장한다."""
     raw = _current(cache.get(_key(pc_id)))
-    if raw is None or raw.get("connection") != channel:
-        return False
-    cache.set(_key(pc_id), {**raw, "status": status, "updated": time.time()}, TTL)
-    return True
+    if raw is None:
+        cache.set(_key(pc_id), _connected(channel, status or {}), TTL)
+        return Refresh.REVIVED
+    if raw.get("connection") != channel:
+        return Refresh.IGNORED
+    if status is not None:
+        raw = {**raw, "status": status, "updated": time.time()}
+    cache.set(_key(pc_id), raw, TTL)
+    return Refresh.SAVED
+
+
+def save_status(pc_id: int, channel: str, status: dict) -> Refresh:
+    return _refresh(pc_id, channel, status)
+
+
+def touch(pc_id: int, channel: str) -> Refresh:
+    return _refresh(pc_id, channel, None)
