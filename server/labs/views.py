@@ -10,12 +10,9 @@ from rest_framework.views import APIView
 from audit.services import record
 from labs.models import PC, RegistrationPin, Room
 from labs.serializers import PCSerializer, PinCreateSerializer, PinSerializer, RoomSerializer, SeatsSerializer
+from live.publish import room_changed
 from wcms.api import error_responses
 from wcms.groups import pc_group
-
-
-def room_changed(room_id: int) -> None:
-    """좌석이나 실습실 정보가 바뀌었을 때 부른다. 실시간 알림은 live 앱이 연결한다."""
 
 
 def unseat(queryset) -> None:
