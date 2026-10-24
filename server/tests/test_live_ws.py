@@ -224,3 +224,107 @@ async def test_not_found_leaves_no_subscription():
     assert await ws.receive_nothing(timeout=0.3)
     assert not get_channel_layer().groups.get(room_group(999))
     await ws.disconnect()
+
+
+def _member(group: str) -> str:
+    (channel,) = get_channel_layer().groups[group]
+    return channel
+
+
+async def test_ping_replies_pong_and_restores_expired_groups():
+    room, _, _ = await make_room_and_pc()
+    user = await make_staff()
+    ws = await live_as(user)
+    topic = f"room:{room.id}"
+    await ws.send_json_to({"type": "subscribe", "topic": topic})
+    await ws.receive_json_from()
+    layer = get_channel_layer()
+    # 그룹 만료(24시간)나 Redis 재시작으로 구독이 사라진 상황
+    channel = _member(room_group(room.id))
+    await layer.group_discard(room_group(room.id), channel)
+    await layer.group_discard(user_group(user.pk), channel)
+    await sync_to_async(room_changed)(room.id)
+    assert await ws.receive_nothing(timeout=0.3)
+
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
+    await sync_to_async(room_changed)(room.id)
+    assert await ws.receive_json_from(timeout=1) == {"type": "room_changed", "topic": topic}
+    await layer.group_send(user_group(user.pk), {"type": "session.end"})
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == 4401
+
+
+async def test_anonymous_ping_restores_public_group_only():
+    room, _, _ = await make_room_and_pc()
+    ws = await live_as(AnonymousUser())
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
+    topic = f"room:{room.id}:public"
+    await ws.send_json_to({"type": "subscribe", "topic": topic})
+    await ws.receive_json_from()
+    layer = get_channel_layer()
+    await layer.group_discard(room_public_group(room.id), _member(room_public_group(room.id)))
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
+    await sync_to_async(room_changed)(room.id)
+    assert await ws.receive_json_from(timeout=1) == {"type": "room_changed", "topic": topic}
+    assert not layer.groups.get(room_group(room.id))
+    await ws.disconnect()
+
+
+async def test_non_canonical_topics_rejected():
+    room, _, _ = await make_room_and_pc()
+    ws = await live_as(await make_staff())
+    for topic in (
+        f"room:0{room.id}",
+        f"room:{room.id}\n",
+        f"room:{room.id}:public\n",
+        "room:١",  # 아랍-인도 숫자 1
+        "room:１",  # 전각 숫자 1
+        "room:00",
+        "pc:01",
+        " room:1",
+    ):
+        await ws.send_json_to({"type": "subscribe", "topic": topic})
+        assert (await ws.receive_json_from())["error"] == "bad_topic", topic
+    await ws.disconnect()
+
+
+async def test_room_zero_is_canonical():
+    ws = await live_as(await make_staff())
+    await ws.send_json_to({"type": "subscribe", "topic": "room:0"})
+    assert (await ws.receive_json_from())["error"] == "not_found"
+    await ws.disconnect()
+
+
+async def test_public_silent_on_status_only_change():
+    room, pc, _ = await make_room_and_pc()
+    ws = await live_as(AnonymousUser())
+    await ws.send_json_to({"type": "subscribe", "topic": f"room:{room.id}:public"})
+    await ws.receive_json_from()
+    await sync_to_async(state.mark_connected)(pc.id, "chan")
+    await publish_pc(pc.id, online_changed=False)
+    assert await ws.receive_nothing(timeout=0.3)
+    await ws.disconnect()
+
+
+@database_sync_to_async
+def unseat(pc: PC) -> None:
+    pc.row = pc.col = None
+    pc.save()
+
+
+async def test_public_silent_for_unseated_pc():
+    room, pc, token = await make_room_and_pc()
+    await unseat(pc)
+    ws = await live_as(AnonymousUser())
+    await ws.send_json_to({"type": "subscribe", "topic": f"room:{room.id}:public"})
+    assert (await ws.receive_json_from())["seats"] == []
+    client = await agent(token)
+    await client.send_json_to({"type": "ping"})
+    await client.receive_json_from()
+    assert await ws.receive_nothing(timeout=0.3)
+    await client.disconnect()
+    assert await ws.receive_nothing(timeout=0.3)
+    await ws.disconnect()

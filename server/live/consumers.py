@@ -10,7 +10,8 @@ from wcms.api import is_admin
 from wcms.groups import pc_watch_group, room_group, room_public_group, user_group
 
 logger = logging.getLogger(__name__)
-TOPIC = re.compile(r"^(room|pc):(\d{1,10})(:public)?$")
+# 발행 쪽 키(f"room:{id}")와 문자열이 같은 정규형만 받는다: ASCII 숫자, 앞자리 0 없음, 끝 줄바꿈 없음
+TOPIC = re.compile(r"\A(room|pc):(0|[1-9][0-9]{0,9})(:public)?\Z")
 CLOSE_SESSION_ENDED = 4401
 
 
@@ -70,6 +71,9 @@ class LiveConsumer(AsyncJsonWebsocketConsumer):
             await self.subscribe(message.get("topic"))
         elif kind == "unsubscribe":
             await self.unsubscribe(message.get("topic"))
+        elif kind == "ping":
+            await self.refresh_groups()
+            await self.send_json({"type": "pong"})
         else:
             await self.send_json({"type": "error", "error": "unknown_type"})
 
@@ -97,6 +101,13 @@ class LiveConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"type": "error", "error": "not_found", "topic": topic})
             return
         await self.send_json({"type": "snapshot", "topic": topic, key: snapshot})
+
+    async def refresh_groups(self) -> None:
+        """그룹 구독은 채널 레이어에서 만료된다(24시간, Redis 재시작). ping마다 다시 넣어 연결이 조용히 끊기지 않게 한다."""
+        for group in self.topics.values():
+            await self.channel_layer.group_add(group, self.channel_name)
+        if self.admin:
+            await self.channel_layer.group_add(user_group(self.user.pk), self.channel_name)
 
     async def unsubscribe(self, topic) -> None:
         group = self.topics.pop(topic, None) if isinstance(topic, str) else None
