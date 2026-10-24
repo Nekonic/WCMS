@@ -1,90 +1,13 @@
-# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-
-
-# Virtual environments
-venv/
-env/
 .venv/
-ENV/
-env.bak/
-venv.bak/
-
-# UV package manager
-.uv/
-uv.lock
-
-# Build artifacts
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Testing
 .pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-
-# Logging
-*.log
-logs/
-
-# Database
-*.db
-*.sqlite
 *.sqlite3
-db/
-
-# Flask session
-flask_session/
-
-# Environment variables
+*.sqlite3-*
+server/staticfiles/
+server/tools/.fake_clients.json
 .env
-.env.local
-.env.docker
-
-# Docker
-docker-compose.override.yml
-
-# Shared folder (호스트-컨테이너 파일 공유)
-shared/*
-!shared/README.md
-
-# ISO 파일 및 백업
-iso/
-backups/
-*.backup
-shared/
-
-# OS
 .DS_Store
-Thumbs.db
-
-api/.env
-api/node_modules
-api/dist
+.idea/
+.vscode/
+build/
