@@ -26,9 +26,10 @@ def _state(pc: PC, admin: bool) -> str:
 
 def pc_payload(pc: PC, *, admin: bool) -> dict:
     state = _state(pc, admin)
+    placed = pc.room_id is not None and pc.row is not None and pc.col is not None
     data = {
         "id": pc.id,
-        "label": pc.label,
+        "label": pc.label if admin or placed else "",
         "room_id": pc.room_id,
         "row": pc.row,
         "col": pc.col,

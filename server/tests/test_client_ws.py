@@ -106,3 +106,25 @@ async def test_new_connection_supersedes_old():
     assert (await reload(pc.id)).online is True
     await second.disconnect()
     assert (await reload(pc.id)).online is False
+
+
+async def test_invalid_json_returns_error_and_keeps_connection():
+    pc, token = await make_pc()
+    ws = communicator(token)
+    await ws.connect()
+    await ws.send_to(text_data="{not json")
+    assert await ws.receive_json_from() == {"type": "error", "error": "bad_json"}
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
+    assert (await reload(pc.id)).online is True
+    await ws.disconnect()
+    assert (await reload(pc.id)).online is False
+
+
+async def test_binary_frame_returns_error():
+    _, token = await make_pc()
+    ws = communicator(token)
+    await ws.connect()
+    await ws.send_to(bytes_data=b"\x00\x01")
+    assert await ws.receive_json_from() == {"type": "error", "error": "bad_json"}
+    await ws.disconnect()

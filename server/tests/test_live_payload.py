@@ -44,3 +44,15 @@ def test_offline_state():
     pc.online = False
     assert pc_payload(pc, admin=True)["state"] == "offline"
     assert pc_payload(pc, admin=False)["state_label"] == "오프라인"
+
+
+def test_unplaced_pc_public_label_hides_hostname():
+    pc, _ = PC.register(hostname="LAB-99", machine_guid="g9", specs={}, version="2026.1")
+    pc.online = True
+    pc.last_seen = timezone.now()
+    pc.status = {"session": "active"}
+    pc.save()
+    public = pc_payload(pc, admin=False)
+    assert public["label"] == ""
+    assert "LAB-99" not in [v for v in public.values() if isinstance(v, str)]
+    assert pc_payload(pc, admin=True)["label"] == "LAB-99"

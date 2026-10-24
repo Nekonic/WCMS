@@ -86,5 +86,6 @@
 |---|---|
 | `{"type": "pong"}` | ping 응답 |
 | `{"type": "error", "error": "unknown_type"}` | 모르는 type을 받음 |
+| `{"type": "error", "error": "bad_json"}` | JSON이 아니거나 바이너리 프레임 (연결은 유지) |
 
 명령 메시지는 계획 2에서 추가한다.

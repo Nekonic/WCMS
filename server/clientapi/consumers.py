@@ -59,6 +59,16 @@ class ClientConsumer(AsyncJsonWebsocketConsumer):
         if await _mark_disconnected(self.pc_id, self.channel_name):
             await broadcast_pc(self.pc_id)
 
+    async def receive(self, text_data=None, bytes_data=None, **kwargs) -> None:
+        try:
+            if text_data is None:
+                raise ValueError("non-text frame")
+            content = await self.decode_json(text_data)
+        except ValueError:
+            await self.send_json({"type": "error", "error": "bad_json"})
+            return
+        await self.receive_json(content)
+
     async def receive_json(self, content, **kwargs) -> None:
         kind = content.get("type") if isinstance(content, dict) else None
         if kind == "status":
