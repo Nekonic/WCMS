@@ -5,11 +5,21 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.parsers import JSONParser
 
 
+CSRF_FAILED_DETAIL = "보안 토큰이 없거나 맞지 않습니다. 새로고침 후 다시 시도하세요."
+
+
 class SessionAuth(SessionAuthentication):
     """세션 인증. 미인증 요청이 403이 아니라 401을 받도록 인증 헤더 값을 돌려준다."""
 
     def authenticate_header(self, request) -> str:
         return "Session"
+
+    def enforce_csrf(self, request) -> None:
+        """DRF 뷰는 csrf_exempt라 CSRF_FAILURE_VIEW가 적용되지 않는다. 같은 csrf_failed 형식으로 바꾼다."""
+        try:
+            super().enforce_csrf(request)
+        except exceptions.PermissionDenied:
+            raise ApiError("csrf_failed", CSRF_FAILED_DETAIL, 403)
 
 
 def is_admin(user) -> bool:
@@ -80,7 +90,7 @@ def exception_handler(exc, context):
 
 
 def csrf_failure(request: HttpRequest, reason: str = "") -> JsonResponse:
-    return JsonResponse(error_body("csrf_failed", "보안 토큰이 없거나 맞지 않습니다. 새로고침 후 다시 시도하세요."), status=403)
+    return JsonResponse(error_body("csrf_failed", CSRF_FAILED_DETAIL), status=403)
 
 
 def api_not_found(request: HttpRequest, *args, **kwargs) -> JsonResponse:
