@@ -572,3 +572,22 @@ git commit -m "feat(deploy): docker compose with nginx, server and redis"
 - [ ] compose로 띄우고 `createadmin` → `https://localhost/enroll/...` 등록 → 로그인 → 실습실 추가 → PIN → `uv run python tools/fake_client.py --server http://localhost:8889 --pin <PIN> --count 3` → 자리 배치 → 실습실 화면에서 실시간 갱신 → 로그아웃 뒤 비로그인 화면
 - [ ] `docker compose restart server` 뒤 화면이 다시 연결되고 PC가 다시 온라인으로 바뀌는지
 - [ ] 정리: `docker compose down -v`, `deploy/.env`와 `deploy/certs/` 삭제
+
+---
+
+## 실행 결과 및 다음으로 넘기는 항목
+
+이 문서의 범위는 완료됐다 (서버 테스트 263개 통과). compose로 띄워 smoke 13개를 확인했고, 내장 브라우저로 등록·로그인·PIN·가짜 클라이언트(8889)·자리 배치·실시간 갱신·서버 재시작 뒤 복구·비로그인 응답을, 자체 서명 인증서로 https 로그인 CSRF와 Secure 쿠키를 확인했다.
+
+### 계획 09 나머지에서 처리
+
+- 실습실 PC용 내부 TLS (자체 루트 CA, 계획 05와 함께)
+- 원 서버의 443은 Cloudflare에서만 닿게 방화벽을 둔다 (직접 접속하면 한국만 허용 WAF를 우회)
+- CI에서 compose를 띄워 `deploy/smoke.sh` 실행 (`.env`는 임의 비밀 키, 인증서는 자체 서명, `localhost`를 ALLOWED_HOSTS에 남김)
+- `cloudflare.conf` 대역 목록 갱신 절차, Content-Security-Policy
+- 예약 작업, 로그·백업 압축 보관
+
+### 계획 06·08에서 처리
+
+- 화면 프레임: `--ws-max-size`(1MiB)를 `/client/ws`에 맞게 올린다
+- 설치 파일 업로드: 내부 블록 `client_max_body_size`(기본 1m), X-Accel-Redirect 내려받기 location
