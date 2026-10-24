@@ -95,3 +95,8 @@ def csrf_failure(request: HttpRequest, reason: str = "") -> JsonResponse:
 
 def api_not_found(request: HttpRequest, *args, **kwargs) -> JsonResponse:
     return JsonResponse(error_body("not_found", "없는 API입니다."), status=404)
+
+
+def server_error(request: HttpRequest) -> JsonResponse:
+    """handler500. 예외 내용은 응답에 넣지 않는다(로그에만 남는다)."""
+    return JsonResponse(error_body("server_error", "서버 오류가 발생했습니다. 잠시 후 다시 시도하세요."), status=500)
