@@ -77,3 +77,17 @@ def test_requires_internal_path_when_enabled(api):
 
 def test_get_not_allowed(api):
     assert api.get("/client/register").status_code == 405
+
+
+@pytest.mark.parametrize("pin", [123456, "١٢٣٤٥٦", "123456\n", " 123456", "123456 ", None, ["123456"]])
+def test_malformed_pin_is_400(api, pin):
+    response = post(api, body(pin))
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid"
+
+
+def test_malformed_pins_do_not_count_toward_lockout(api):
+    for _ in range(10):
+        assert post(api, body(123456)).status_code == 400
+        assert post(api, body("١٢٣٤٥٦")).status_code == 400
+    assert post(api, body(new_pin())).status_code == 201

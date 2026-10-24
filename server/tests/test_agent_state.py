@@ -65,3 +65,9 @@ def test_get_states():
     state.mark_connected(3, "c")
     states = state.get_states([3, 4])
     assert states[3]["online"] is True and states[4]["online"] is False
+
+
+@pytest.mark.parametrize("key", ["cpu", "mem_used", "mem_total", "disk_used", "disk_total"])
+def test_huge_int_dropped_without_raising(key):
+    assert key not in clean_status(json.loads('{"%s": 1%s}' % (key, "0" * 400)))
+    assert key not in clean_status({key: 10**400})

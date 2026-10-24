@@ -18,8 +18,20 @@ MAX_SPECS_BYTES = 16384
 pin_failures = FailureLimiter("register-ip", limit=10, window=600)
 
 
+class PinField(serializers.RegexField):
+    """JSON 문자열, ASCII 숫자 6자리. 숫자 타입, 유니코드 숫자, 공백은 거절한다."""
+
+    def __init__(self, **kwargs):
+        super().__init__(r"\A[0-9]{6}\Z", trim_whitespace=False, **kwargs)
+
+    def to_internal_value(self, data):
+        if not isinstance(data, str):
+            self.fail("invalid")
+        return super().to_internal_value(data)
+
+
 class RegisterSerializer(serializers.Serializer):
-    pin = serializers.RegexField(r"^\d{6}$")
+    pin = PinField()
     hostname = serializers.CharField(max_length=64)
     machine_guid = serializers.CharField(max_length=64)
     specs = serializers.JSONField(required=False, default=dict)
