@@ -113,3 +113,18 @@ def test_touch_keeps_status_and_refreshes_ttl(monkeypatch):
 def test_touch_revives_missing_key():
     assert state.touch(8, "chan") is state.Refresh.REVIVED
     assert state.get_state(8) == {"online": True, "status": {}}
+
+
+def test_mark_disconnected_reports_lost_state(monkeypatch):
+    # 값이 사라졌거나 다른 부팅의 값이면 캐시는 이미 offline으로 읽힌다. 알림을 보내도록 True
+    assert state.mark_disconnected(9, "chan") is True
+    state.mark_connected(9, "chan")
+    monkeypatch.setattr(state, "BOOT_ID", "another-boot")
+    assert state.mark_disconnected(9, "chan") is True
+    assert state.get_state(9)["online"] is False
+
+
+def test_mark_disconnected_by_other_connection_is_ignored():
+    state.mark_connected(10, "new")
+    assert state.mark_disconnected(10, "old") is False
+    assert state.get_state(10)["online"] is True

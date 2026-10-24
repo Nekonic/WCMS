@@ -50,8 +50,12 @@ def mark_connected(pc_id: int, channel: str) -> None:
 
 
 def mark_disconnected(pc_id: int, channel: str) -> bool:
+    """offline을 알려야 하면 True. 값이 사라졌으면 (축출, Redis 재시작, 다른 부팅) 이미 offline으로 읽히므로
+    쓰지 않고 True만 돌려준다. 다른 연결이 쥐고 있으면 False."""
     raw = _current(cache.get(_key(pc_id)))
-    if raw is None or raw.get("connection") != channel:
+    if raw is None:
+        return True
+    if raw.get("connection") != channel:
         return False
     cache.set(_key(pc_id), {**raw, "online": False, "connection": "", "status": {}}, TTL)
     return True
