@@ -4607,3 +4607,52 @@ Expected: 모두 통과, 경고 없음
 git add server/tools/fake_client.py README.md .gitignore
 git commit -m "feat(server): fake client for protocol v1 and run instructions"
 ```
+
+---
+
+## 실행 결과 및 다음 계획으로 넘기는 항목
+
+계획 02는 완료됐다 (`9e6733c..3656941`, 테스트 259개 통과, 15개는 비로그인 허용 목록이라 건너뜀). 실행 중 계획과 달라진 점:
+
+- DRF의 CSRF 실패도 `csrf_failed`로 답한다. 등록 링크는 조건부 UPDATE로 한 번만 쓰이고, 등록을 마치지 않은 관리자를 재설정하면 새 등록 링크(NEW)를 준다.
+- PIN은 6자리 ASCII 숫자 문자열만 받는다. status 숫자는 범위를 먼저 보고 유한한 값만 받는다. hello의 `proto`는 정수 1만 받는다.
+- 학생이 보낸 문자열의 짝 없는 surrogate: 등록 값(호스트 이름, GUID, 버전, specs)은 400, status 문자열은 `?`로 바꾼다. REST 응답은 `UNICODE_JSON=False`(비ASCII를 `\uXXXX`로)라 어떤 값도 500을 만들지 못한다.
+- 두 consumer 모두 처리 중 예외는 기록하고 1011로 닫는다. 연결 교체·그룹 가입·상태 기록·publish는 PC별 잠금 안에서 한다.
+- `/ws/live`는 그룹에 먼저 들어간 뒤 스냅샷을 만든다. 토픽은 정규형(`room:5`, 앞자리 0 없음)만 받는다.
+- 채널 그룹 만료(24시간, Redis 재시작) 대응: 클라이언트 ping마다(10초에 한 번까지) 그룹 재가입과 상태 TTL 갱신, 상태가 사라졌으면 되살린다. 다른 연결이 PC를 쥐고 있으면 4409로 닫는다. `/ws/live`에 ping/pong을 더해 그룹 재가입과 관리자 권한·세션 재확인(없으면 4401). 계획 03 Task 3에 25초 ping을 넣었다.
+- `/api` 아래는 404·500도 JSON. OpenAPI 후처리 훅이 응답 필드 required와 401/403 오류 응답을 채운다.
+- 모든 `/api/` 경로가 비로그인에 401을 주는지 URLconf를 돌며 확인하는 테스트(`tests/test_anonymous_access.py`). 허용 목록은 테스트 안의 고정 집합이다.
+- 브라우저 실시간 규약 문서 `docs/live-ws.md`.
+
+### 계획 03에서 처리
+
+- 등록 링크 화면은 `GET /api/auth/enroll/<token>`이 CSRF 쿠키를 준다 (`/me` 먼저 부를 필요 없음)
+- `pc:<id>` 구독자는 자리 이동·이름 변경·PC 삭제 때 아무 메시지도 받지 않는다. PC 상세 화면이 생기면(계획 04) 같이 정한다
+- 스키마: 작은 정수 필드가 int64로 나옴, `Error.fields`가 자유 형식, `X-CSRFToken` 헤더 미기재
+
+### 계획 04에서 처리
+
+- `AuditLog.actor`가 SET_NULL이라 관리자를 지우면 누가 했는지 사라진다. `actor_name` 스냅샷 추가, `record(actor, action, target, detail: dict)`로 시그니처 정리
+- 연결 시 `from_token`과 `group_add` 사이의 폐기 경합: 잠금 안에서 토큰을 다시 확인
+- 관리자 강등 기능을 만들면 그 사용자의 실시간 세션을 끝낸다 (`end_live_sessions`)
+
+### 계획 05에서 처리
+
+- hello 전에도 온라인으로 보이고 hello 시간 제한이 없음
+- protocol/README.md 보강: 오류 `fields` 모양, 429의 Retry-After, TLS 신뢰(자체 루트 CA), 핸드셰이크 403과 그 밖의 실패 구분, 4410 뒤 재등록 흐름, hello 전 JSON이지만 객체가 아닌 프레임
+
+### 계획 06에서 처리
+
+- 바이너리 프레임 플래그 비트, 방향, seq 순환
+
+### 계획 09에서 처리
+
+- `DEBUG` 기본값을 끄는 쪽으로, `DEBUG=0`이면 `WCMS_REDIS_URL`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`가 없을 때 시작 실패
+- 환경: `SECRET_KEY`, `WCMS_BEHIND_TLS_PROXY`, `WCMS_REQUIRE_INTERNAL=1`, `WCMS_TRUST_X_REAL_IP=1` (없으면 IP 시도 제한이 전체 공용이 되어 로그인 20회 실패로 모두 잠김)
+- nginx: 두 server 블록 모두 `X-Real-IP`를 덮어쓰고, `X-WCMS-Via`는 내부 블록에서만 설정
+- uvicorn 워커 하나, ws ping 간격과 최대 메시지 크기
+- Redis 지속성(또는 재시작 절차 문서화). 재시작하면 세션이 사라지고 그룹·상태는 ping으로 복구된다
+- 정리 작업: 쓰지 않은 등록 PIN, 기록 보존 기간
+- `createadmin` 입력 검증과 원자성
+- SQLite 잠금 대기(timeout 20초)는 동기 처리 스레드 하나를 통째로 멈추므로 트랜잭션을 짧게, timeout 재검토
+- 상태 키가 축출된 순간 교체가 겹치면 밀려난 연결이 상태를 되살릴 수 있음 (Redis noeviction이면 생기지 않음)

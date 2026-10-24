@@ -583,10 +583,10 @@ git commit -m "feat(frontend): generated API types and fetch client with CSRF an
 - Test: `frontend/src/lib/live/socket.test.ts`, `frontend/src/lib/live/merge.test.ts`, `frontend/src/lib/grid.test.ts`, `frontend/src/lib/pcState.test.ts`
 
 **Interfaces:**
-- Consumes: `LivePC`, `PublicSeat` (Task 2), 서버 `/ws/live` 메시지 (계획 02 Task 13)
+- Consumes: `LivePC`, `PublicSeat` (Task 2), 서버 `/ws/live` 메시지 (`docs/live-ws.md`)
 - Produces:
   - `$lib/live/types.ServerMessage` (snapshot pcs/seats/pc, pc, seat, room_changed, error)
-  - `$lib/live/socket.LiveSocket(url, create?, onSessionEnd?)`: `subscribe(topic, handler) => unsubscribe`, `close()`. 같은 토픽은 서버에 한 번만 구독, 마지막 해제 때 unsubscribe. 재접속(1초부터 두 배, 최대 30초, 0~1초 무작위)하면 모든 토픽 다시 구독. `room_changed`를 받으면 그 토픽 다시 구독. close code 4401이면 재접속하지 않고 `onSessionEnd` 호출
+  - `$lib/live/socket.LiveSocket(url, create?, onSessionEnd?)`: `subscribe(topic, handler) => unsubscribe`, `close()`. 같은 토픽은 서버에 한 번만 구독, 마지막 해제 때 unsubscribe. 재접속(1초부터 두 배, 최대 30초, 0~1초 무작위)하면 모든 토픽 다시 구독. `room_changed`를 받으면 그 토픽 다시 구독. close code 4401이면 재접속하지 않고 `onSessionEnd` 호출. 연결이 열려 있는 동안 25초마다 `{type: 'ping'}`을 보낸다 (서버가 만료된 그룹 가입을 되살리고 관리자 권한과 세션을 다시 확인한다). `pong`은 무시
   - `$lib/live/socket.SESSION_ENDED = 4401`
   - `$lib/live/merge`: `seatKey(row, col): string`, `adminRoomReducer(current: Map<number, LivePC>, message): Map<number, LivePC>`, `publicRoomReducer(current: Map<string, PublicSeat>, message): Map<string, PublicSeat>` (새 Map을 돌려준다)
   - `$lib/live/index`: `live(): LiveSocket` (앱 전체에 하나), `resetLive(): void` (로그인·로그아웃 뒤 새 세션으로 다시 연결)
@@ -697,6 +697,20 @@ describe('LiveSocket', () => {
 		vi.advanceTimersByTime(60_000);
 		expect(onEnd).toHaveBeenCalledOnce();
 		expect(sockets).toHaveLength(1);
+	});
+
+	it('pings every 25 seconds while open', () => {
+		const live = new LiveSocket('ws://x/ws/live', create);
+		live.subscribe('room:1', () => {});
+		sockets[0].open();
+		vi.advanceTimersByTime(25_000);
+		expect(sockets[0].sent).toEqual([
+			{ type: 'subscribe', topic: 'room:1' },
+			{ type: 'ping' }
+		]);
+		sockets[0].drop();
+		vi.advanceTimersByTime(25_000);
+		expect(sockets[0].sent).toHaveLength(2);
 	});
 
 	it('ignores malformed messages', () => {
@@ -811,7 +825,8 @@ export type ServerMessage =
 	| { type: 'pc'; topic: string; pc: LivePC }
 	| { type: 'seat'; topic: string; seat: PublicSeat }
 	| { type: 'room_changed'; topic: string }
-	| { type: 'error'; error: string; topic?: string };
+	| { type: 'error'; error: string; topic?: string }
+	| { type: 'pong' };
 
 export type Handler = (message: ServerMessage) => void;
 ```
@@ -824,6 +839,7 @@ import type { Handler, ServerMessage } from './types';
 export const SESSION_ENDED = 4401;
 const OPEN = 1;
 const MAX_DELAY = 30_000;
+const PING_INTERVAL = 25_000;
 
 export interface SocketLike {
 	readyState: number;
@@ -839,6 +855,7 @@ export class LiveSocket {
 	private readonly topics = new Map<string, Set<Handler>>();
 	private delay = 1000;
 	private timer: ReturnType<typeof setTimeout> | null = null;
+	private pinger: ReturnType<typeof setInterval> | null = null;
 	private stopped = false;
 
 	constructor(
@@ -870,6 +887,7 @@ export class LiveSocket {
 	close(): void {
 		this.stopped = true;
 		if (this.timer) clearTimeout(this.timer);
+		this.stopPing();
 		this.socket?.close();
 		this.socket = null;
 	}
@@ -889,10 +907,13 @@ export class LiveSocket {
 			for (const topic of this.topics.keys()) {
 				socket.send(JSON.stringify({ type: 'subscribe', topic }));
 			}
+			this.stopPing();
+			this.pinger = setInterval(() => this.send({ type: 'ping' }), PING_INTERVAL);
 		};
 		socket.onmessage = (event) => this.dispatch(event.data);
 		socket.onclose = (event) => {
 			this.socket = null;
+			this.stopPing();
 			if (event.code === SESSION_ENDED) {
 				this.stopped = true;
 				this.onSessionEnd();
@@ -906,6 +927,11 @@ export class LiveSocket {
 				this.ensureOpen();
 			}, wait);
 		};
+	}
+
+	private stopPing(): void {
+		if (this.pinger) clearInterval(this.pinger);
+		this.pinger = null;
 	}
 
 	private dispatch(raw: unknown): void {
