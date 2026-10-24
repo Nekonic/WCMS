@@ -77,12 +77,17 @@ class EnrollmentToken(models.Model):
         if step is None:
             return False
         with transaction.atomic():
+            now = timezone.now()
+            claimed = EnrollmentToken.objects.filter(
+                pk=self.pk, used_at__isnull=True, expires_at__gt=now
+            ).update(used_at=now)
+            if claimed != 1:
+                return False
             if self.needs_password:
                 self.user.set_password(password)
                 self.user.save(update_fields=["password"])
             TOTPDevice.objects.update_or_create(
                 user=self.user, defaults={"secret": self.totp_secret, "last_used_step": step}
             )
-            self.used_at = timezone.now()
-            self.save(update_fields=["used_at"])
+            self.used_at = now
         return True

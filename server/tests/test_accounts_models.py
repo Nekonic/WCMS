@@ -92,3 +92,25 @@ def test_createadmin_prints_enroll_link():
 def test_createadmin_rejects_existing_username(admin_user):
     with pytest.raises(CommandError):
         call_command("createadmin", "admin", stdout=StringIO())
+
+
+def test_complete_twice_on_same_instance_second_fails(admin_user):
+    entry, _ = EnrollmentToken.issue(user=admin_user, purpose="reset", created_by=None)
+    code = pyotp.TOTP(entry.totp_secret).now()
+    assert entry.complete(password=None, code=code) is True
+    assert entry.complete(password=None, code=code) is False
+
+
+def test_complete_with_row_expired_in_db_fails(admin_user):
+    entry, _ = EnrollmentToken.issue(user=admin_user, purpose="reset", created_by=None)
+    EnrollmentToken.objects.filter(pk=entry.pk).update(expires_at=timezone.now() - timedelta(seconds=1))
+    assert entry.complete(password=None, code=pyotp.TOTP(entry.totp_secret).now()) is False
+    assert not TOTPDevice.objects.filter(user=admin_user).exists()
+
+
+def test_stale_instance_after_reissue_cannot_complete(admin_user):
+    stale, _ = EnrollmentToken.issue(user=admin_user, purpose="reset", created_by=None)
+    _, token = EnrollmentToken.issue(user=admin_user, purpose="reset", created_by=None)
+    assert stale.complete(password=None, code=pyotp.TOTP(stale.totp_secret).now()) is False
+    assert not TOTPDevice.objects.filter(user=admin_user, secret=stale.totp_secret).exists()
+    assert EnrollmentToken.find_usable(token) is not None
