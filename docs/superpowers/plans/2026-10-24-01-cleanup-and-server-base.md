@@ -3296,7 +3296,7 @@ git commit -m "feat(server): fake client for local development"
 
 ## 실행 결과 및 다음 계획으로 넘기는 항목
 
-계획 1은 완료됐다 (`1689eb2..970cfc0`, 테스트 74개 통과). 실행 중 계획과 달라진 점:
+계획 1은 완료됐다 (테스트 74개 통과). 실행 중 계획과 달라진 점:
 
 - 클라이언트가 JSON이 아니거나 바이너리 프레임을 보내면 `{"type": "error", "error": "bad_json"}`로 답하고 연결을 유지한다 (`docs/protocol.md` 반영).
 - 비로그인용 payload의 `label`은 자리가 없는 PC면 빈 문자열이다 (호스트 이름 노출 방지).
