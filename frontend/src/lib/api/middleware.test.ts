@@ -60,12 +60,14 @@ describe('api middleware', () => {
 	it('redirects to login on 401 outside /api/auth/', async () => {
 		const { middleware, navigate } = setup();
 		const response = new Response(null, { status: 401 });
-		const result = await middleware.onResponse!({
+		const result = (await middleware.onResponse!({
 			request: new Request(`${ORIGIN}/api/rooms`),
 			response,
 			...params
-		});
-		expect(result).toBe(response);
+		})) as Response;
+		// 본문이 비었으므로 오류 형식으로 바뀐다 (상태는 그대로)
+		expect(result.status).toBe(401);
+		expect(await result.json()).toEqual({ error: 'server_error', detail: '서버가 요청을 처리하지 못했습니다.' });
 		expect(navigate).toHaveBeenCalledWith('/login?next=%2Frooms%2F3%3Fa%3D1%26b%3D2');
 	});
 
@@ -113,6 +115,94 @@ describe('api middleware', () => {
 		const result = await (client as unknown as { POST: (path: string) => Promise<{ error?: unknown }> }).POST(
 			'/api/auth/logout'
 		);
+		expect(result.error).toEqual({ error: 'network', detail: '서버에 연결하지 못했습니다.' });
+	});
+
+	async function respond(response: Response, path = '/api/rooms') {
+		const { middleware } = setup();
+		return (await middleware.onResponse!({
+			request: new Request(`${ORIGIN}${path}`, { method: 'POST' }),
+			response,
+			...params
+		})) as Response;
+	}
+
+	it('turns an empty 502 into the network error body', async () => {
+		const result = await respond(new Response('', { status: 502, headers: { 'Content-Type': 'text/plain' } }));
+		expect(result.status).toBe(502);
+		expect(result.headers.get('Content-Type')).toBe('application/json');
+		expect(await result.json()).toEqual({ error: 'network', detail: '서버에 연결하지 못했습니다.' });
+	});
+
+	it('uses the network body for 503 and 504 without a JSON error', async () => {
+		for (const status of [503, 504]) {
+			const result = await respond(new Response('<html>down</html>', { status }));
+			expect(result.status).toBe(status);
+			expect(await result.json()).toEqual({ error: 'network', detail: '서버에 연결하지 못했습니다.' });
+		}
+	});
+
+	it('turns an HTML 500 into server_error', async () => {
+		const result = await respond(
+			new Response('<html>oops</html>', { status: 500, headers: { 'Content-Type': 'text/html' } })
+		);
+		expect(result.status).toBe(500);
+		expect(await result.json()).toEqual({ error: 'server_error', detail: '서버가 요청을 처리하지 못했습니다.' });
+	});
+
+	it('turns JSON without a string error field into server_error', async () => {
+		for (const body of ['{"detail":"x"}', '[]', '"text"', '{"error":3}']) {
+			const result = await respond(
+				new Response(body, { status: 400, headers: { 'Content-Type': 'application/json' } })
+			);
+			expect(result.status).toBe(400);
+			expect(await result.json()).toEqual({ error: 'server_error', detail: '서버가 요청을 처리하지 못했습니다.' });
+		}
+	});
+
+	it('passes a proper JSON error body through unchanged', async () => {
+		const original = new Response(JSON.stringify({ error: 'invalid', detail: '틀렸습니다.', fields: { a: ['b'] } }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json' }
+		});
+		const result = await respond(original);
+		expect(result).toBe(original);
+		expect(await result.json()).toEqual({ error: 'invalid', detail: '틀렸습니다.', fields: { a: ['b'] } });
+	});
+
+	it('leaves 2xx and 204 responses untouched', async () => {
+		const ok = new Response('not json', { status: 200 });
+		expect(await respond(ok)).toBe(ok);
+		const empty = new Response(null, { status: 204 });
+		expect(await respond(empty)).toBe(empty);
+	});
+
+	it('still redirects a 401 and keeps its JSON error', async () => {
+		const { middleware, navigate } = setup();
+		const original = new Response(JSON.stringify({ error: 'not_authenticated', detail: '로그인하세요.' }), {
+			status: 401,
+			headers: { 'Content-Type': 'application/json' }
+		});
+		const result = await middleware.onResponse!({
+			request: new Request(`${ORIGIN}/api/rooms`),
+			response: original,
+			...params
+		});
+		expect(navigate).toHaveBeenCalledOnce();
+		expect(result).toBe(original);
+	});
+
+	it('gives openapi-fetch callers a truthy error for an empty 502', async () => {
+		const { middleware } = setup();
+		const client = createClient<Record<string, never>>({
+			baseUrl: ORIGIN,
+			fetch: () => Promise.resolve(new Response('', { status: 502 }))
+		});
+		client.use(middleware);
+		const result = await (client as unknown as { POST: (path: string) => Promise<{ error?: unknown }> }).POST(
+			'/api/auth/login'
+		);
+		expect(result.error).toBeTruthy();
 		expect(result.error).toEqual({ error: 'network', detail: '서버에 연결하지 못했습니다.' });
 	});
 });
