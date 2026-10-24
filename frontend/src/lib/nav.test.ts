@@ -6,7 +6,7 @@ describe('safeNext', () => {
 		expect(safeNext('/settings/pins?x=1')).toBe('/settings/pins?x=1');
 	});
 	it('rejects external or missing targets', () => {
-		for (const value of [null, '', 'https://evil.example', '//evil.example', '/\\evil.example', 'settings']) {
+		for (const value of [null, '', 'https://evil.example', '//evil.example', '/\\evil.example', '/\t/evil.example', '/\n/evil.example', '/\r/evil.example', 'settings']) {
 			expect(safeNext(value)).toBe('/');
 		}
 	});
