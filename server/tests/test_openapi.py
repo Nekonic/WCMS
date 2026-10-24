@@ -37,3 +37,13 @@ def test_schema_accuracy(tmp_path):
     assert {"401", "403"} <= set(paths["/api/rooms"]["get"]["responses"])
     assert "403" in paths["/api/auth/logout"]["post"]["responses"]
     assert "401" not in paths["/api/public/rooms"]["get"]["responses"]
+
+
+def test_paginated_lists_always_have_next_and_previous(tmp_path):
+    components = yaml.safe_load(generate(tmp_path))["components"]["schemas"]
+    paginated = {name: c for name, c in components.items() if name.startswith("Paginated")}
+    assert "PaginatedAuditLogList" in paginated
+    for component in paginated.values():
+        assert {"next", "previous", "results"} <= set(component["required"])
+        assert component["properties"]["next"]["nullable"] is True
+        assert component["properties"]["previous"]["nullable"] is True

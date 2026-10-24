@@ -1285,6 +1285,8 @@ components:
     PaginatedAuditLogList:
       type: object
       required:
+      - next
+      - previous
       - results
       properties:
         next:

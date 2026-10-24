@@ -26,6 +26,10 @@ def postprocess_responses(result, generator, request, public):
         component = schemas.get(name)
         if component is not None:
             component["required"] = sorted(component["properties"])
+    # 페이지 응답의 next/previous는 값이 없을 때도 null로 항상 들어 있다
+    for name, component in schemas.items():
+        if name.startswith("Paginated") and {"next", "previous"} <= set(component.get("properties", {})):
+            component["required"] = sorted({*component.get("required", []), "next", "previous"})
 
     for path_item in result.get("paths", {}).values():
         for method, operation in path_item.items():
