@@ -1,7 +1,10 @@
 import pyotp
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.test import Client
 
+from accounts import views
 from accounts.models import TOTPDevice
 
 pytestmark = pytest.mark.django_db
@@ -115,3 +118,44 @@ def test_logout_requires_post(client, staff):
     assert client.get("/logout/").status_code == 405
     client.post("/logout/")
     assert not logged_in(client)
+
+
+def test_otp_lockout_applies_across_sessions(client, device):
+    password_step(client)
+    for _ in range(5):
+        client.post("/login/otp/", {"code": "abcdef"})
+
+    fresh = Client()
+    response = password_step(fresh)
+    assert response.status_code == 200
+    assert "잠시 후" in response.content.decode()
+    assert not logged_in(fresh)
+    assert fresh.get("/login/otp/").url == "/login/"
+
+
+def test_password_throttled_after_ten_failures(client, staff, monkeypatch):
+    for _ in range(10):
+        response = password_step(client, password="wrong")
+        assert response.status_code == 200
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("authenticate must not run while throttled")
+
+    monkeypatch.setattr(views, "authenticate", fail_if_called)
+    response = password_step(client)
+    assert response.status_code == 200
+    assert "잠시 후" in response.content.decode()
+    assert not logged_in(client)
+    assert client.get("/login/otp/setup/").url == "/login/"
+
+
+def test_successful_otp_login_clears_failure_counter(client, device):
+    password_step(client)
+    client.post("/login/otp/", {"code": "abcdef"})
+    client.post("/login/otp/", {"code": "abcdef"})
+    assert cache.get(f"otp-fail:{device.user_id}") == 2
+
+    response = client.post("/login/otp/", {"code": pyotp.TOTP(device.secret).now()})
+    assert response.url == "/"
+    assert logged_in(client)
+    assert cache.get(f"otp-fail:{device.user_id}") is None
