@@ -1,18 +1,39 @@
 import time
 
+import pyotp
+import segno
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema
+from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import TOTPDevice
-from accounts.serializers import CodeSerializer, LoginResultSerializer, LoginSerializer, MeSerializer, me_payload
+from accounts.models import EnrollmentToken, TOTPDevice
+from accounts.serializers import (
+    AdminCreatedSerializer,
+    AdminCreateSerializer,
+    AdminSerializer,
+    CodeSerializer,
+    EnrollCompleteSerializer,
+    EnrollInfoSerializer,
+    EnrollLinkSerializer,
+    LoginResultSerializer,
+    LoginSerializer,
+    MeSerializer,
+    admin_payload,
+    me_payload,
+)
+from audit.services import record
 from wcms.api import ApiError, error_responses, is_admin
 from wcms.groups import user_group
 from wcms.limits import FailureLimiter
@@ -114,4 +135,99 @@ class LogoutView(APIView):
         logout(request._request)
         if user_id is not None:
             end_live_sessions(user_id)
+        return Response(status=204)
+
+
+enroll_attempts = FailureLimiter("enroll", limit=10, window=900)
+INVALID_TOKEN = "링크가 만료됐거나 이미 사용됐습니다. 관리자에게 새 링크를 받으세요."
+
+
+def usable_token(token: str) -> EnrollmentToken:
+    entry = EnrollmentToken.find_usable(token)
+    if entry is None:
+        raise ApiError("invalid_token", INVALID_TOKEN, 404)
+    return entry
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class EnrollView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(responses={200: EnrollInfoSerializer, **error_responses(404)})
+    def get(self, request, token: str):
+        entry = usable_token(token)
+        uri = pyotp.TOTP(entry.totp_secret).provisioning_uri(name=entry.user.get_username(), issuer_name="WCMS")
+        return Response(
+            {
+                "username": entry.user.get_username(),
+                "needs_password": entry.needs_password,
+                "secret": entry.totp_secret,
+                "otp_uri": uri,
+                "qr_svg": segno.make(uri, error="m").svg_inline(scale=5),
+            }
+        )
+
+    @extend_schema(request=EnrollCompleteSerializer, responses={204: None, **error_responses(400, 404, 429)})
+    def post(self, request, token: str):
+        entry = usable_token(token)
+        if enroll_attempts.blocked(entry.token_hash):
+            raise ApiError("too_many_attempts", TOO_MANY, 429)
+        serializer = EnrollCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        password = serializer.validated_data.get("password")
+        if entry.needs_password:
+            if not password:
+                raise drf_serializers.ValidationError({"password": ["비밀번호를 입력하세요."]})
+            try:
+                validate_password(password, entry.user)
+            except DjangoValidationError as exc:
+                raise drf_serializers.ValidationError({"password": list(exc.messages)})
+        if not entry.complete(password=password, code=serializer.validated_data["code"]):
+            enroll_attempts.record(entry.token_hash)
+            raise ApiError("invalid_code", "인증 코드가 올바르지 않습니다.")
+        record(entry.user, "admin.enrolled", f"user:{entry.user.id}", purpose=entry.purpose)
+        return Response(status=204)
+
+
+def staff_users():
+    return get_user_model().objects.filter(is_staff=True).select_related("totp")
+
+
+def enroll_link(entry: EnrollmentToken, token: str) -> dict:
+    return {"enroll_url": f"/enroll/{token}", "expires_at": entry.expires_at}
+
+
+class AdminListView(APIView):
+    @extend_schema(responses={200: AdminSerializer(many=True)})
+    def get(self, request):
+        return Response([admin_payload(user, request.user) for user in staff_users().order_by("username")])
+
+    @extend_schema(request=AdminCreateSerializer, responses={201: AdminCreatedSerializer, **error_responses(400)})
+    def post(self, request):
+        serializer = AdminCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = get_user_model().objects.create_user(username=serializer.validated_data["username"], is_staff=True)
+        entry, token = EnrollmentToken.issue(user=user, purpose=EnrollmentToken.NEW, created_by=request.user)
+        record(request.user, "admin.create", f"user:{user.id}", username=user.get_username())
+        return Response({"admin": admin_payload(user, request.user), **enroll_link(entry, token)}, status=201)
+
+
+class AdminResetView(APIView):
+    @extend_schema(request=None, responses={200: EnrollLinkSerializer, **error_responses(404)})
+    def post(self, request, pk: int):
+        user = get_object_or_404(staff_users(), pk=pk)
+        entry, token = EnrollmentToken.issue(user=user, purpose=EnrollmentToken.RESET, created_by=request.user)
+        record(request.user, "admin.reset", f"user:{user.id}")
+        return Response(enroll_link(entry, token))
+
+
+class AdminDetailView(APIView):
+    @extend_schema(responses={204: None, **error_responses(400, 404)})
+    def delete(self, request, pk: int):
+        user = get_object_or_404(staff_users(), pk=pk)
+        if user.id == request.user.id:
+            raise ApiError("cannot_delete_self", "자기 계정은 삭제할 수 없습니다.")
+        record(request.user, "admin.delete", f"user:{user.id}", username=user.get_username())
+        user.delete()
+        end_live_sessions(pk)
         return Response(status=204)
