@@ -6,7 +6,7 @@
 
 **Architecture:** 저장소 루트 `frontend/`. SvelteKit 2 + Svelte 5 + TypeScript, adapter-static으로 SPA 빌드(모든 경로 index.html). REST는 `server/openapi.yaml`에서 생성한 타입 + openapi-fetch 래퍼(`src/lib/api`), 실시간은 WebSocket 하나를 쓰는 `src/lib/live`. 실시간 상태는 `lib/live`에서만 다루고 REST는 CRUD와 기록 조회에만 쓴다. 스타일은 Tailwind CSS v4, 화면 예시의 색을 토큰으로.
 
-**Tech Stack:** Node 22 LTS, pnpm, SvelteKit 2, Svelte 5(runes), TypeScript, Vite, @sveltejs/adapter-static, Tailwind CSS v4(@tailwindcss/vite), openapi-typescript, openapi-fetch, vitest, svelte-check
+**Tech Stack:** Node 22 이상, pnpm, SvelteKit 2, Svelte 5(runes), TypeScript, Vite, @sveltejs/adapter-static, Tailwind CSS v4(@tailwindcss/vite), openapi-typescript, openapi-fetch, vitest, svelte-check
 
 **선행 조건:** 계획 02 완료 (`server/openapi.yaml`, `/api/*`, `/ws/live`)
 
@@ -18,7 +18,7 @@
 
 ## Global Constraints
 
-- 패키지 관리는 pnpm, Node 22. 명령은 모두 `frontend/`에서 실행한다.
+- 패키지 관리는 pnpm, Node 22 이상. 명령은 모두 `frontend/`에서 실행한다.
 - 서버 API 타입은 손으로 쓰지 않는다. `pnpm gen:api`로 `server/openapi.yaml`에서 `src/lib/api/schema.d.ts`를 생성하고 커밋한다. WebSocket 메시지 유니온 타입만 손으로 쓴다(`src/lib/live/types.ts`).
 - 학생이 조작할 수 있는 값(호스트 이름, 사용자 이름, 창 제목, 프로세스 이름)은 Svelte 텍스트 보간으로만 출력한다. `{@html}` 금지. 예외는 서버가 만든 등록용 QR SVG 하나.
 - 비로그인 화면은 `/api/public/*`와 `room:<id>:public` 구독만 쓴다. 좌석 라벨과 켜짐/꺼짐 외에는 보여주지 않는다.
