@@ -11,12 +11,14 @@
 	let username = $state('');
 	let link = $state<{ who: string; url: string; expires: string } | null>(null);
 	let copied = $state(false);
+	let copyFailed = $state(false);
 	let error = $state('');
 	let fields = $state<Record<string, string>>({});
 
 	function showLink(who: string, enrollUrl: string, expiresAt: string) {
 		link = { who, url: `${location.origin}${enrollUrl}`, expires: formatTime(expiresAt) };
 		copied = false;
+		copyFailed = false;
 	}
 
 	async function create(event: SubmitEvent) {
@@ -51,9 +53,15 @@
 	}
 
 	async function copy() {
-		if (link) {
+		if (!link) return;
+		try {
+			// 보안 컨텍스트가 아니면(LAN의 http 등) navigator.clipboard가 없다
 			await navigator.clipboard.writeText(link.url);
 			copied = true;
+			copyFailed = false;
+		} catch {
+			copied = false;
+			copyFailed = true;
 		}
 	}
 </script>
@@ -68,6 +76,7 @@
 			<code class="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1.5 font-mono text-ink">{link.url}</code>
 			<button class="btn btn-sm" type="button" onclick={copy}>{copied ? '복사됨' : '복사'}</button>
 		</div>
+		{#if copyFailed}<p class="text-[13px] text-danger" role="alert">자동 복사가 안 됩니다. 링크를 직접 복사하세요.</p>{/if}
 	</section>
 {/if}
 

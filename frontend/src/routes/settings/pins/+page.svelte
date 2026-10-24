@@ -27,7 +27,12 @@
 	}
 
 	async function revoke(id: number) {
-		await api.DELETE('/api/pins/{id}', { params: { path: { id } } });
+		const { error: failure } = await api.DELETE('/api/pins/{id}', { params: { path: { id } } });
+		if (failure) {
+			error = errorMessage(failure);
+			return;
+		}
+		error = '';
 		if (created?.id === id) created = null;
 		await invalidateAll();
 	}
