@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from collections import defaultdict
 
@@ -11,6 +12,8 @@ from labs.models import PC
 from live.publish import publish_pc
 from wcms.groups import pc_group
 from wcms.net import is_internal_scope
+
+logger = logging.getLogger(__name__)
 
 # ASGI 서버는 프로세스 하나로 고정이므로 PC별 상태 변경은 이 잠금으로 순서를 지킨다.
 _locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -25,6 +28,14 @@ def _pc_id_for_token(token: str) -> int | None:
 @database_sync_to_async
 def _save_version(pc_id: int, version: str) -> None:
     PC.objects.filter(pk=pc_id).update(client_version=version[:20])
+
+
+def _is_utf8(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _error(code: str) -> dict:
@@ -44,9 +55,9 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
             return
         self.pc_id = pc_id
         group = pc_group(pc_id)
-        await self.channel_layer.group_send(group, {"type": "pc.superseded"})
-        await self.channel_layer.group_add(group, self.channel_name)
         async with _locks[pc_id]:
+            await self.channel_layer.group_send(group, {"type": "pc.superseded"})
+            await self.channel_layer.group_add(group, self.channel_name)
             await sync_to_async(state.mark_connected)(pc_id, self.channel_name)
         await self.accept()
         await publish_pc(pc_id, online_changed=True)
@@ -72,7 +83,12 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         if not isinstance(message, dict):
             await self.send_json(_error("bad_json"))
             return
-        await self.handle(message)
+        try:
+            await self.handle(message)
+        except Exception:
+            # 예외가 디스패치 루프를 죽이면 disconnect()가 호출되지 않아 PC가 온라인으로 남는다
+            logger.exception("client websocket handler failed (pc_id=%s)", self.pc_id)
+            await self.close(code=1011)
 
     async def handle(self, message: dict) -> None:
         kind = message.get("type")
@@ -80,12 +96,13 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
             if kind != "hello":
                 await self.close(code=protocol.CLOSE_HELLO_REQUIRED)
                 return
-            if message.get("proto") != protocol.PROTO_VERSION:
+            proto = message.get("proto")
+            if type(proto) is not int or proto != protocol.PROTO_VERSION:
                 await self.close(code=protocol.CLOSE_UNSUPPORTED_PROTO)
                 return
             self.hello_done = True
             version = message.get("version")
-            if isinstance(version, str):
+            if isinstance(version, str) and _is_utf8(version):
                 await _save_version(self.pc_id, version)
             return
         if kind == "status":

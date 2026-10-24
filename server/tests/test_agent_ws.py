@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -162,3 +163,67 @@ async def test_revoked_closes_connection():
     await get_channel_layer().group_send(pc_group(pc.id), {"type": "pc.revoked"})
     closed = await ws.receive_output(timeout=1)
     assert closed["code"] == protocol.CLOSE_REVOKED
+
+
+async def test_unsupported_proto_types():
+    _, token = await make_pc()
+    for proto in (True, 1.0, "1"):
+        ws = connect(token)
+        await ws.connect()
+        await ws.send_json_to({"type": "hello", "proto": proto})
+        closed = await ws.receive_output(timeout=1)
+        assert closed["code"] == protocol.CLOSE_UNSUPPORTED_PROTO, proto
+
+
+async def test_unencodable_version_is_ignored():
+    pc, token = await make_pc()
+    ws = connect(token)
+    await ws.connect()
+    await ws.send_to(text_data='{"type":"hello","proto":1,"version":"\\ud800"}')
+    await sync(ws)
+    assert (await current_state(pc.id))["online"] is True
+    refreshed = await database_sync_to_async(PC.objects.get)(pk=pc.id)
+    assert refreshed.client_version == "2026.1"
+    await ws.disconnect()
+
+
+async def test_handler_exception_closes_and_cleans_up(monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    pc, token = await make_pc()
+    ws = await open_with_hello(token)
+    await sync(ws)
+    monkeypatch.setattr(state, "save_status", boom)
+    await ws.send_json_to(example("status.json"))
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == 1011
+    await ws.disconnect()
+    assert (await current_state(pc.id))["online"] is False
+
+
+async def test_simultaneous_connections_leave_exactly_one(monkeypatch):
+    layer = get_channel_layer()
+    original = type(layer).group_send
+
+    async def yielding_group_send(self, group, message):
+        await original(self, group, message)
+        await asyncio.sleep(0)  # 시간 지연이 아니라 다른 연결에 실행을 넘겨 경합을 만든다
+
+    monkeypatch.setattr(type(layer), "group_send", yielding_group_send)
+    pc, token = await make_pc()
+    a, b = connect(token), connect(token)
+    results = await asyncio.gather(a.connect(), b.connect())
+    assert all(connected for connected, _ in results)
+    for ws in (a, b):
+        await ws.send_json_to(example("hello.json"))
+        await ws.send_json_to(example("ping.json"))
+    # 한쪽은 4409 종료, 다른 쪽은 pong. 첫 출력만 읽으므로 시간 초과로 앱이 취소되는 일이 없다
+    first_a, first_b = await asyncio.gather(a.receive_output(timeout=1), b.receive_output(timeout=1))
+    closed = [o for o in (first_a, first_b) if o["type"] == "websocket.close"]
+    assert [o["code"] for o in closed] == [protocol.CLOSE_SUPERSEDED]
+    survivor, loser = (b, a) if first_a["type"] == "websocket.close" else (a, b)
+    await loser.disconnect()
+    assert (await current_state(pc.id))["online"] is True
+    await survivor.disconnect()
+    assert (await current_state(pc.id))["online"] is False
