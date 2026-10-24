@@ -1,0 +1,29 @@
+[project]
+name = "wcms-server"
+version = "2026.1"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "channels>=4.2",
+    "channels-redis>=4.2",
+    "daphne>=4.1",
+    "django>=5.2,<5.3",
+    "pyotp>=2.9",
+    "segno>=1.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-django>=4.9",
+    "websockets>=14",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "wcms.settings"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
