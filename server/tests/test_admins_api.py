@@ -114,3 +114,20 @@ def test_reissue_invalidates_old_link(admin_api):
     old = token_of(created["enroll_url"])
     admin_api.post(f"/api/admins/{created['admin']['id']}/reset")
     assert EnrollmentToken.find_usable(old) is None
+
+
+def test_reset_before_first_enroll_still_asks_for_password(admin_api):
+    created = create_admin(admin_api).json()
+    url = admin_api.post(f"/api/admins/{created['admin']['id']}/reset").json()["enroll_url"]
+    anon = APIClient()
+    data = anon.get(f"/api/auth{url}").json()
+    assert data["needs_password"] is True
+
+    code = pyotp.TOTP(data["secret"]).now()
+    done = anon.post(f"/api/auth{url}", {"password": "kim-long-password-42", "code": code}, format="json")
+    assert done.status_code == 204
+
+    login = APIClient()
+    step = login.post("/api/auth/login", {"username": "kim", "password": "kim-long-password-42"}, format="json")
+    assert step.json() == {"next": "otp"}
+    assert AuditLog.objects.filter(action="admin.reset", detail__purpose=EnrollmentToken.NEW).exists()

@@ -216,8 +216,9 @@ class AdminResetView(APIView):
     @extend_schema(request=None, responses={200: EnrollLinkSerializer, **error_responses(404)})
     def post(self, request, pk: int):
         user = get_object_or_404(staff_users(), pk=pk)
-        entry, token = EnrollmentToken.issue(user=user, purpose=EnrollmentToken.RESET, created_by=request.user)
-        record(request.user, "admin.reset", f"user:{user.id}")
+        purpose = EnrollmentToken.RESET if user.has_usable_password() else EnrollmentToken.NEW
+        entry, token = EnrollmentToken.issue(user=user, purpose=purpose, created_by=request.user)
+        record(request.user, "admin.reset", f"user:{user.id}", purpose=purpose)
         return Response(enroll_link(entry, token))
 
 
