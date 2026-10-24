@@ -1,6 +1,6 @@
 """개발용 가짜 클라이언트. C++ 클라이언트 없이 서버와 화면을 확인할 때 쓴다. 프로토콜은 protocol/README.md.
 
-uv run python tools/fake_client.py --server http://localhost:8000 --pin 123456 --count 8
+uv run python tools/fake_client.py --server http://localhost:8888 --pin 123456 --count 8
 """
 
 import argparse
@@ -99,7 +99,7 @@ async def run_one(server: str, ws_url: str, index: int, tokens: dict[str, str]) 
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--server", default="http://localhost:8000")
+    parser.add_argument("--server", default="http://localhost:8888")
     parser.add_argument("--pin")
     parser.add_argument("--count", type=int, default=8)
     args = parser.parse_args()

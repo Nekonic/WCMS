@@ -2,7 +2,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
-const backend = 'http://localhost:8000';
+const backend = 'http://localhost:8888';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
