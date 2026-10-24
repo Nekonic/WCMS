@@ -31,6 +31,7 @@ ALLOWED_HOSTS = env_list("WCMS_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("WCMS_CSRF_TRUSTED_ORIGINS", "http://localhost:5173")
 
 INSTALLED_APPS = [
+    "wcms",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

@@ -1,0 +1,1222 @@
+openapi: 3.0.3
+info:
+  title: WCMS API
+  version: '2026.1'
+paths:
+  /api/admins:
+    get:
+      operationId: api_admins_list
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Admin'
+          description: ''
+    post:
+      operationId: api_admins_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCreated'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/admins/{id}:
+    delete:
+      operationId: api_admins_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '204':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/admins/{id}/reset:
+    post:
+      operationId: api_admins_reset_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollLink'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/audit:
+    get:
+      operationId: api_audit_list
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: 페이지네이션 커서 값.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+  /api/auth/enroll/{token}:
+    get:
+      operationId: api_auth_enroll_retrieve
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollInfo'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+    post:
+      operationId: api_auth_enroll_create
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollCompleteRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/auth/login:
+    post:
+      operationId: api_auth_login_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/auth/logout:
+    post:
+      operationId: api_auth_logout_create
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/auth/me:
+    get:
+      operationId: api_auth_me_retrieve
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+  /api/auth/otp:
+    post:
+      operationId: api_auth_otp_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/pcs:
+    get:
+      operationId: api_pcs_list
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PC'
+          description: ''
+  /api/pcs/{id}:
+    delete:
+      operationId: api_pcs_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/pcs/{id}/live:
+    get:
+      operationId: api_pcs_live_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivePC'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/pins:
+    get:
+      operationId: api_pins_list
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pin'
+          description: ''
+    post:
+      operationId: api_pins_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PinCreateRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pin'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/pins/{id}:
+    delete:
+      operationId: api_pins_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/public/rooms:
+    get:
+      operationId: api_public_rooms_list
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicRoom'
+          description: ''
+  /api/public/rooms/{id}:
+    get:
+      operationId: api_public_rooms_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicRoomDetail'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/rooms:
+    get:
+      operationId: api_rooms_list
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Room'
+          description: ''
+    post:
+      operationId: api_rooms_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+          description: ''
+  /api/rooms/{id}:
+    get:
+      operationId: api_rooms_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+          description: ''
+    put:
+      operationId: api_rooms_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+          description: ''
+    patch:
+      operationId: api_rooms_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRoomRequest'
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+          description: ''
+    delete:
+      operationId: api_rooms_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/rooms/{id}/pcs:
+    get:
+      operationId: api_rooms_pcs_list
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LivePC'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/rooms/{id}/seats:
+    get:
+      operationId: api_rooms_seats_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seats'
+          description: ''
+    put:
+      operationId: api_rooms_seats_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeatsRequest'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Seats'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+components:
+  schemas:
+    Admin:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        totp_enrolled:
+          type: boolean
+        is_self:
+          type: boolean
+      required:
+      - id
+      - is_self
+      - totp_enrolled
+      - username
+    AdminCreateRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+      required:
+      - username
+    AdminCreated:
+      type: object
+      properties:
+        enroll_url:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        admin:
+          $ref: '#/components/schemas/Admin'
+      required:
+      - admin
+      - enroll_url
+      - expires_at
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        actor:
+          type: string
+          nullable: true
+          readOnly: true
+        action:
+          type: string
+          maxLength: 64
+        target:
+          type: string
+          maxLength: 128
+        detail: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - action
+      - actor
+      - created_at
+      - id
+    CodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 10
+      required:
+      - code
+    EnrollCompleteRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+        code:
+          type: string
+          minLength: 1
+          maxLength: 10
+      required:
+      - code
+    EnrollInfo:
+      type: object
+      properties:
+        username:
+          type: string
+        needs_password:
+          type: boolean
+        secret:
+          type: string
+        otp_uri:
+          type: string
+        qr_svg:
+          type: string
+      required:
+      - needs_password
+      - otp_uri
+      - qr_svg
+      - secret
+      - username
+    EnrollLink:
+      type: object
+      properties:
+        enroll_url:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - enroll_url
+      - expires_at
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+        fields:
+          type: object
+          additionalProperties: {}
+      required:
+      - detail
+      - error
+    Foreground:
+      type: object
+      properties:
+        process:
+          type: string
+        title:
+          type: string
+      required:
+      - process
+      - title
+    LivePC:
+      type: object
+      properties:
+        id:
+          type: integer
+        hostname:
+          type: string
+        label:
+          type: string
+        room:
+          type: integer
+          nullable: true
+        row:
+          type: integer
+          nullable: true
+        col:
+          type: integer
+          nullable: true
+        version:
+          type: string
+        online:
+          type: boolean
+        session:
+          $ref: '#/components/schemas/SessionEnum'
+        user:
+          type: string
+        foreground:
+          allOf:
+          - $ref: '#/components/schemas/Foreground'
+          nullable: true
+        cpu:
+          type: number
+          format: double
+          nullable: true
+        mem_used:
+          type: number
+          format: double
+          nullable: true
+        mem_total:
+          type: number
+          format: double
+          nullable: true
+        disk_used:
+          type: number
+          format: double
+          nullable: true
+        disk_total:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - col
+      - cpu
+      - disk_total
+      - disk_used
+      - foreground
+      - hostname
+      - id
+      - label
+      - mem_total
+      - mem_used
+      - online
+      - room
+      - row
+      - session
+      - user
+      - version
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 150
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - password
+      - username
+    LoginResult:
+      type: object
+      properties:
+        next:
+          $ref: '#/components/schemas/NextEnum'
+      required:
+      - next
+    Me:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          nullable: true
+      required:
+      - authenticated
+      - user
+    MinutesEnum:
+      enum:
+      - 10
+      - 60
+      - 180
+      type: integer
+      description: |-
+        * `10` - 10
+        * `60` - 60
+        * `180` - 180
+    NextEnum:
+      enum:
+      - otp
+      type: string
+      description: '* `otp` - otp'
+    PC:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        hostname:
+          type: string
+          maxLength: 64
+        label:
+          type: string
+          readOnly: true
+        room:
+          type: integer
+          nullable: true
+        row:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        col:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        client_version:
+          type: string
+          maxLength: 20
+        specs: {}
+        registered_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - hostname
+      - id
+      - label
+      - registered_at
+    PaginatedAuditLogList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    PatchedRoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        rows:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        cols:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        aisle_after:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        sort_order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+    Pin:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        pin:
+          type: string
+          maxLength: 6
+        multi_use:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+        used_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - expires_at
+      - id
+      - pin
+    PinCreateRequest:
+      type: object
+      properties:
+        multi_use:
+          type: boolean
+          default: false
+        minutes:
+          $ref: '#/components/schemas/MinutesEnum'
+      required:
+      - minutes
+    PublicRoom:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rows:
+          type: integer
+        cols:
+          type: integer
+        aisle_after:
+          type: integer
+          nullable: true
+      required:
+      - aisle_after
+      - cols
+      - id
+      - name
+      - rows
+    PublicRoomDetail:
+      type: object
+      properties:
+        room:
+          $ref: '#/components/schemas/PublicRoom'
+        seats:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicSeat'
+      required:
+      - room
+      - seats
+    PublicSeat:
+      type: object
+      properties:
+        row:
+          type: integer
+        col:
+          type: integer
+        label:
+          type: string
+        online:
+          type: boolean
+      required:
+      - col
+      - label
+      - online
+      - row
+    Room:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 50
+        rows:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        cols:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        aisle_after:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        sort_order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - id
+      - name
+    RoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        rows:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        cols:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        aisle_after:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        sort_order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - name
+    Seat:
+      type: object
+      properties:
+        row:
+          type: integer
+          minimum: 0
+        col:
+          type: integer
+          minimum: 0
+        pc:
+          type: integer
+      required:
+      - col
+      - pc
+      - row
+    SeatRequest:
+      type: object
+      properties:
+        row:
+          type: integer
+          minimum: 0
+        col:
+          type: integer
+          minimum: 0
+        pc:
+          type: integer
+      required:
+      - col
+      - pc
+      - row
+    Seats:
+      type: object
+      properties:
+        seats:
+          type: array
+          items:
+            $ref: '#/components/schemas/Seat'
+      required:
+      - seats
+    SeatsRequest:
+      type: object
+      properties:
+        seats:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeatRequest'
+      required:
+      - seats
+    SessionEnum:
+      enum:
+      - active
+      - locked
+      - none
+      type: string
+      description: |-
+        * `active` - active
+        * `locked` - locked
+        * `none` - none
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+      required:
+      - id
+      - username
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
