@@ -1,0 +1,29 @@
+{% load static %}<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}WCMS{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'web/app.css' %}">
+</head>
+<body>
+<div class="shell">
+<nav class="side" aria-label="주 메뉴">
+<div class="brand"><span class="brand-name">WCMS</span><span class="brand-ver">{{ wcms_version }}</span></div>
+<div class="nav-links"></div>
+<div class="side-foot">
+{% if user.is_authenticated and user.is_staff %}
+<span>{{ user.get_username }}</span>
+<form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit" class="linklike">로그아웃</button></form>
+{% else %}
+<a href="{% url 'accounts:login' %}">관리자 로그인</a>
+{% endif %}
+</div>
+</nav>
+<main class="content">
+{% block content %}{% endblock %}
+</main>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>
