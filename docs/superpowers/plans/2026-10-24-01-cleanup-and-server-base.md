@@ -3291,3 +3291,43 @@ uv run pytest
 git add server/tools/fake_client.py README.md
 git commit -m "feat(server): fake client for local development"
 ```
+
+---
+
+## 실행 결과 및 다음 계획으로 넘기는 항목
+
+계획 1은 완료됐다 (`1689eb2..970cfc0`, 테스트 74개 통과). 실행 중 계획과 달라진 점:
+
+- 클라이언트가 JSON이 아니거나 바이너리 프레임을 보내면 `{"type": "error", "error": "bad_json"}`로 답하고 연결을 유지한다 (`docs/protocol.md` 반영).
+- 비로그인용 payload의 `label`은 자리가 없는 PC면 빈 문자열이다 (호스트 이름 노출 방지).
+- 관리자 로그인 시도 제한은 세션이 아니라 캐시에 둔다: TOTP는 사용자별 5회/15분, 비밀번호는 아이디별 10회/15분.
+- `clean_status`는 유한한 숫자만 받는다. TOTP 코드와 자리 배치 입력은 ASCII 숫자만 받는다.
+
+### 계획 2에서 처리
+
+- 클라이언트 status 전송 빈도 제한 (같은 연결에서 약 5초 이내 재전송은 버림)
+- 재등록하거나 PC를 삭제하면 기존 소켓을 끊기
+- `_save_status`를 `connection=channel`로 한정 (밀려난 소켓의 늦은 status가 덮어쓰지 않게)
+- 동시 접속 경합으로 `connection`이 닫힌 소켓을 가리키는 문제
+- `/ws/live` 연결 시 현재 상태 스냅샷 전송, 자리 배치 변경 시 브로드캐스트, 재접속 후 재동기화
+- `docs/protocol.md` 보강: 재등록 시 기존 토큰 무효화, close 4409 처리법(인증 실패로 취급하지 말 것), ping은 온라인 갱신에 안 쓰임
+- `register`와 `ClientConsumer.receive`에서 `RecursionError`도 잡기
+- `clean_status`에서 문자열이 아닌 값은 `str()` 변환 대신 버리기, 숫자 상한
+- 로그아웃하거나 관리자 권한이 사라지면 열린 `/ws/live`도 비로그인 수준으로 내리기
+
+### 계획 7에서 처리
+
+- 접속 IP 헤더 규약: nginx `X-Real-IP` 또는 Cloudflare `CF-Connecting-IP`. `X-Forwarded-For`의 맨 왼쪽 값은 쓰지 않는다
+- 비밀번호 시도 제한을 (아이디, IP) 기준으로 바꾸기 (지금은 아무나 관리자 아이디를 잠글 수 있음)
+- `/client/*`는 내부용 server 블록에서만 열기
+- `SECURE_PROXY_SSL_HEADER` 또는 `CSRF_TRUSTED_ORIGINS`, HSTS
+- `DEBUG=0`인데 기본 `SECRET_KEY`면 시작 실패
+- Redis 필수 (메모리 캐시는 프로세스별이라 시도 제한과 연결 교체가 깨짐)
+- `manage.py reset_totp <username>` (인증 앱 분실 대응)
+- 이미지에 `VERSION` 복사, collectstatic
+- 소켓은 살아 있는데 status가 30초 끊긴 PC를 오프라인으로 내려 보내는 정리 작업
+- TOTP 재사용 검사를 조건부 update로 원자화, 대기 중 로그인 만료 시간, `never_cache`
+
+### 계획 4 전에 결정
+
+- 설계 문서는 썸네일을 브라우저가 HTTP로 1초마다 받아가게 했는데, 전체 제약은 "폴링 금지"다. 둘 중 무엇을 따를지 정해야 한다.
