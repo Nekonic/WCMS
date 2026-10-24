@@ -4,6 +4,7 @@
 	import { errorMessage, fieldErrors } from '$lib/api/errors';
 	import ConfirmButton from '$lib/components/ConfirmButton.svelte';
 	import SeatGrid from '$lib/components/SeatGrid.svelte';
+	import { seatsOutside } from '$lib/grid';
 	import { seatKey } from '$lib/live/merge';
 	import type { PageData } from './$types';
 
@@ -17,6 +18,9 @@
 	let error = $state('');
 	let fields = $state<Record<string, string>>({});
 	let saved = $state('');
+	let shrinkDialog: HTMLDialogElement | undefined = $state();
+	let unseated = $state(0);
+	let sizeBusy = $state(false);
 
 	$effect.pre(() => {
 		name = data.room.name;
@@ -42,8 +46,29 @@
 
 	async function saveSize(event: SubmitEvent) {
 		event.preventDefault();
+		// 서버는 새 크기 밖에 앉은 PC의 자리 배정을 모두 푼다. 그런 PC가 있으면 먼저 확인받는다
+		unseated = seatsOutside(data.seats, rows, cols);
+		if (unseated > 0) {
+			shrinkDialog?.showModal();
+			return;
+		}
+		await patchSize();
+	}
+
+	async function confirmShrink() {
+		sizeBusy = true;
+		try {
+			await patchSize();
+		} finally {
+			sizeBusy = false;
+			shrinkDialog?.close();
+		}
+	}
+
+	async function patchSize() {
 		error = '';
 		fields = {};
+		saved = '';
 		const { error: failure } = await api.PATCH('/api/rooms/{id}', {
 			params: { path: { id: data.room.id } },
 			body: { name, rows, cols, aisle_after: aisle || null }
@@ -130,6 +155,16 @@
 		<p class="mt-2 text-[13px] text-danger">{message}</p>
 	{/each}
 </section>
+
+<dialog bind:this={shrinkDialog} class="m-auto w-[min(420px,calc(100%-32px))] rounded-[14px] p-0 backdrop:bg-black/40">
+	<div class="flex flex-col gap-4 p-5">
+		<p>줄이면 {unseated}대의 자리 배정이 풀립니다.</p>
+		<div class="flex justify-end gap-2">
+			<button type="button" class="btn" onclick={() => shrinkDialog?.close()}>취소</button>
+			<button type="button" class="btn btn-danger" disabled={sizeBusy} onclick={confirmShrink}>줄이기</button>
+		</div>
+	</div>
+</dialog>
 
 <section class="card">
 	<div class="mb-3 flex items-center justify-between">

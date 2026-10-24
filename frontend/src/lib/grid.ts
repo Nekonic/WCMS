@@ -21,3 +21,8 @@ export function gridColumns(cols: number, aisleAfter: number | null): string {
 	}
 	return `repeat(${cols}, minmax(0, 1fr))`;
 }
+
+/** 새 크기(rows × cols)로 줄이면 자리 배정이 풀리는 좌석 수. 행·열은 0부터 센다 */
+export function seatsOutside(seats: { row: number; col: number }[], rows: number, cols: number): number {
+	return seats.filter((seat) => seat.row >= rows || seat.col >= cols).length;
+}
