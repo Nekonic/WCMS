@@ -68,3 +68,21 @@ textarea { padding: 12px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 .plain { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+.front { display: flex; justify-content: center; margin-bottom: 16px; }
+.front span { font-size: 12px; color: var(--muted); padding: 4px 40px; border: 1px dashed #C4C9D2; border-radius: 6px; }
+.seat-scroll { overflow-x: auto; }
+.seat-grid { display: grid; gap: 12px; min-width: 960px; }
+.tile { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-height: 120px; }
+.screen { aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center; background: #2F5C7A; color: #FFFFFF; font-size: 12px; }
+.tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px; }
+.tile-name { font-size: 13px; font-weight: 600; }
+.tile-state { font-size: 12px; color: var(--muted); }
+.tile-detail { display: flex; flex-direction: column; gap: 2px; padding: 0 10px 8px; font-size: 12px; color: var(--muted); overflow: hidden; }
+.tile-detail span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-offline .screen { background: #2A2D34; color: #A9AFBB; }
+.st-no_user .screen, .st-available .screen { background: #3B4A5A; }
+.st-locked .screen { background: #4A3F2A; }
+.st-active .tile-state, .st-in_use .tile-state { color: var(--ok); font-weight: 600; }
+.st-empty { align-items: center; justify-content: center; background: transparent; border-style: dashed; color: var(--muted); }
+.aisle { min-height: 1px; }

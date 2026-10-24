@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ room.name }} · WCMS{% endblock %}
+{% block content %}
+<header class="page-head">
+<div>
+<h1>실습실 {{ room.name }}</h1>
+<p class="meta">온라인 {{ online_count }} / {{ total }}</p>
+</div>
+</header>
+<nav class="tabs" aria-label="실습실">
+{% for r in rooms %}<a class="tab{% if r.id == room.id %} on{% endif %}" href="{% url 'web:room' r.id %}"{% if r.id == room.id %} aria-current="page"{% endif %}>{{ r.name }}</a>{% endfor %}
+</nav>
+<section class="card" aria-label="좌석 배치">
+<div class="front"><span>교탁</span></div>
+<div class="seat-scroll">
+<div class="seat-grid" data-live-grid style="grid-template-columns: {{ grid_columns }}">
+{% for cell in cells %}
+{% if cell.kind == "aisle" %}<div class="aisle" aria-hidden="true"></div>
+{% elif cell.pc %}{% include "web/tile.html" with pc=cell.pc %}
+{% else %}<div class="tile st-empty"><span class="tile-name">{{ cell.number }}</span></div>
+{% endif %}
+{% endfor %}
+</div>
+</div>
+</section>
+{% if is_admin and unassigned %}
+<section class="card">
+<h2>자리 미배정 PC</h2>
+<ul class="plain">{% for pc in unassigned %}<li>{{ pc.hostname }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'web/grid.js' %}" defer></script>{% endblock %}
