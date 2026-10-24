@@ -4,7 +4,7 @@
 	import SeatGrid from '$lib/components/SeatGrid.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import type { LivePC, PublicSeat } from '$lib/api/types';
-	import { live } from '$lib/live';
+	import { live, type LiveStatus } from '$lib/live';
 	import { adminRoomReducer, publicRoomReducer, seatKey } from '$lib/live/merge';
 	import type { PageData } from './$types';
 
@@ -16,6 +16,8 @@
 	let pcs = $state(new Map<number, LivePC>());
 	let seats = $state(new Map<string, PublicSeat>());
 	let problem = $state('');
+	let status = $state<LiveStatus>('connecting');
+	let connectedOnce = $state(false);
 
 	$effect(() => {
 		const current = topic;
@@ -23,7 +25,9 @@
 		pcs = new Map();
 		seats = new Map();
 		problem = '';
-		return live().subscribe(current, (message) => {
+		connectedOnce = false;
+		const socket = live();
+		const unsubscribe = socket.subscribe(current, (message) => {
 			if (message.type === 'room_changed') {
 				// 크기, 이름, 통로가 바뀌었거나 지워졌을 수 있다. 좌석은 LiveSocket이 다시 구독해 받는다
 				void invalidateAll();
@@ -44,6 +48,14 @@
 				seats = publicRoomReducer(seats, message);
 			}
 		});
+		const stopStatus = socket.onStatus((next) => {
+			status = next;
+			if (next === 'open') connectedOnce = true;
+		});
+		return () => {
+			stopStatus();
+			unsubscribe();
+		};
 	});
 
 	const pcBySeat = $derived(
@@ -81,6 +93,11 @@
 </nav>
 
 {#if problem}<p class="error-box" role="alert">{problem}</p>{/if}
+{#if status !== 'open'}
+	<p class="notice-box" role="status">
+		{connectedOnce ? '실시간 연결이 끊겼습니다. 다시 연결하는 중…' : '실시간 연결 중…'}
+	</p>
+{/if}
 
 <section class="card" aria-label="좌석 배치">
 	<div class="mb-4 flex justify-center">
