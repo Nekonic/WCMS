@@ -2,7 +2,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,6 +19,9 @@ def unseat(queryset) -> None:
     queryset.update(room=None, row=None, col=None)
 
 
+@extend_schema_view(
+    post=extend_schema(responses={201: RoomSerializer, **error_responses(400)}),
+)
 class RoomList(generics.ListCreateAPIView):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
@@ -28,6 +31,12 @@ class RoomList(generics.ListCreateAPIView):
         record(self.request.user, "room.create", f"room:{room.id}", name=room.name)
 
 
+@extend_schema_view(
+    get=extend_schema(responses={200: RoomSerializer, **error_responses(404)}),
+    put=extend_schema(responses={200: RoomSerializer, **error_responses(400, 404)}),
+    patch=extend_schema(responses={200: RoomSerializer, **error_responses(400, 404)}),
+    delete=extend_schema(responses={204: None, **error_responses(404)}),
+)
 class RoomDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
@@ -54,11 +63,11 @@ def seats_payload(room: Room) -> dict:
 
 
 class RoomSeats(APIView):
-    @extend_schema(responses={200: SeatsSerializer})
+    @extend_schema(responses={200: SeatsSerializer, **error_responses(404)})
     def get(self, request, pk: int):
         return Response(seats_payload(get_object_or_404(Room, pk=pk)))
 
-    @extend_schema(request=SeatsSerializer, responses={200: SeatsSerializer, **error_responses(400)})
+    @extend_schema(request=SeatsSerializer, responses={200: SeatsSerializer, **error_responses(400, 404)})
     def put(self, request, pk: int):
         room = get_object_or_404(Room, pk=pk)
         serializer = SeatsSerializer(data=request.data, context={"room": room})
@@ -85,6 +94,9 @@ class PCList(generics.ListAPIView):
     serializer_class = PCSerializer
 
 
+@extend_schema_view(
+    delete=extend_schema(responses={204: None, **error_responses(404)}),
+)
 class PCDetail(generics.DestroyAPIView):
     queryset = PC.objects.select_related("room")
     serializer_class = PCSerializer

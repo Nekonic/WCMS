@@ -132,4 +132,8 @@ SPECTACULAR_SETTINGS = {
     "VERSION": WCMS_VERSION,
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "wcms.schema.postprocess_responses",
+    ],
 }

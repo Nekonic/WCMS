@@ -19,6 +19,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/Admin'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     post:
       operationId: api_admins_create
       tags:
@@ -44,6 +56,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/admins/{id}:
     delete:
       operationId: api_admins_destroy
@@ -72,6 +96,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/admins/{id}/reset:
     post:
       operationId: api_admins_reset_create
@@ -98,6 +134,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/audit:
     get:
       operationId: api_audit_list
@@ -119,6 +167,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedAuditLogList'
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/auth/enroll/{token}:
     get:
       operationId: api_auth_enroll_retrieve
@@ -186,6 +252,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/auth/login:
     post:
       operationId: api_auth_login_create
@@ -236,6 +308,12 @@ paths:
       responses:
         '204':
           description: No response body
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/auth/me:
     get:
       operationId: api_auth_me_retrieve
@@ -290,6 +368,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/pcs:
     get:
       operationId: api_pcs_list
@@ -306,6 +390,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/PC'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/pcs/{id}:
     delete:
       operationId: api_pcs_destroy
@@ -322,6 +418,24 @@ paths:
       responses:
         '204':
           description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/pcs/{id}/live:
     get:
       operationId: api_pcs_live_retrieve
@@ -348,6 +462,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/pins:
     get:
       operationId: api_pins_list
@@ -364,6 +490,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/Pin'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     post:
       operationId: api_pins_create
       tags:
@@ -389,6 +527,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/pins/{id}:
     delete:
       operationId: api_pins_destroy
@@ -411,6 +561,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/public/rooms:
     get:
       operationId: api_public_rooms_list
@@ -471,6 +633,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/Room'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     post:
       operationId: api_rooms_create
       tags:
@@ -490,6 +664,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Room'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/rooms/{id}:
     get:
       operationId: api_rooms_retrieve
@@ -510,6 +702,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Room'
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     put:
       operationId: api_rooms_update
       parameters:
@@ -535,6 +745,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Room'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     patch:
       operationId: api_rooms_partial_update
       parameters:
@@ -559,6 +793,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Room'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     delete:
       operationId: api_rooms_destroy
       parameters:
@@ -574,6 +832,24 @@ paths:
       responses:
         '204':
           description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/rooms/{id}/pcs:
     get:
       operationId: api_rooms_pcs_list
@@ -602,6 +878,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
   /api/rooms/{id}/seats:
     get:
       operationId: api_rooms_seats_retrieve
@@ -622,6 +910,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Seats'
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
     put:
       operationId: api_rooms_seats_update
       parameters:
@@ -653,6 +959,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 인증 필요
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 권한 없음 또는 CSRF 실패
 components:
   schemas:
     Admin:
@@ -720,7 +1044,9 @@ components:
       - action
       - actor
       - created_at
+      - detail
       - id
+      - target
     CodeRequest:
       type: object
       properties:
@@ -947,10 +1273,15 @@ components:
           format: date-time
           readOnly: true
       required:
+      - client_version
+      - col
       - hostname
       - id
       - label
       - registered_at
+      - room
+      - row
+      - specs
     PaginatedAuditLogList:
       type: object
       required:
@@ -1025,7 +1356,9 @@ components:
       - created_at
       - expires_at
       - id
+      - multi_use
       - pin
+      - used_count
     PinCreateRequest:
       type: object
       properties:
@@ -1115,8 +1448,12 @@ components:
           minimum: 0
           format: int64
       required:
+      - aisle_after
+      - cols
       - id
       - name
+      - rows
+      - sort_order
     RoomRequest:
       type: object
       properties:

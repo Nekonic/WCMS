@@ -24,3 +24,16 @@ def test_schema_contents(tmp_path):
     assert "/client/register" not in schema["paths"]
     assert "/api/public/rooms/{id}" in schema["paths"]
     assert set(components["PublicSeat"]["properties"]) == {"row", "col", "label", "online"}
+
+
+def test_schema_accuracy(tmp_path):
+    schema = yaml.safe_load(generate(tmp_path))
+    components = schema["components"]["schemas"]
+    paths = schema["paths"]
+    assert {"rows", "cols", "aisle_after", "sort_order"} <= set(components["Room"]["required"])
+    assert {"room", "row", "col", "client_version", "specs"} <= set(components["PC"]["required"])
+    assert "fields" not in components["Error"]["required"]
+    assert "400" in paths["/api/rooms"]["post"]["responses"]
+    assert {"401", "403"} <= set(paths["/api/rooms"]["get"]["responses"])
+    assert "403" in paths["/api/auth/logout"]["post"]["responses"]
+    assert "401" not in paths["/api/public/rooms"]["get"]["responses"]
