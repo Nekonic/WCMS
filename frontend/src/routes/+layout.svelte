@@ -1,9 +1,10 @@
 <script lang="ts">
 	import '../app.css';
 	import type { Snippet } from 'svelte';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api } from '$lib/api/client';
+	import { errorMessage } from '$lib/api/errors';
 	import { resetLive } from '$lib/live';
 	import type { LayoutData } from './$types';
 
@@ -24,10 +25,24 @@
 		return page.url.pathname === '/' ? prefix === '/rooms' : page.url.pathname.startsWith(prefix);
 	}
 
+	let logoutError = $state('');
+	// 바꾸면 본문을 다시 그린다. 로그아웃이 실패했을 때 끊어 둔 실시간 구독을 다시 만들려고 쓴다
+	let mountKey = $state(0);
+
+	afterNavigate(() => {
+		logoutError = '';
+	});
+
 	async function logout() {
+		logoutError = '';
 		// 서버는 로그아웃할 때 열린 소켓을 4401로 닫는다. 먼저 끊어야 세션 종료 처리(/login 이동)가 돌지 않는다
 		resetLive();
-		await api.POST('/api/auth/logout');
+		const { error } = await api.POST('/api/auth/logout');
+		if (error) {
+			logoutError = `로그아웃하지 못했습니다. ${errorMessage(error)}`;
+			mountKey += 1;
+			return;
+		}
 		await invalidateAll();
 		await goto('/');
 	}
@@ -63,6 +78,9 @@
 		</div>
 	</nav>
 	<main class="flex min-w-0 flex-[999_1_560px] flex-col gap-5 px-8 pt-7 pb-10">
-		{@render children()}
+		{#if logoutError}<p class="error-box" role="alert">{logoutError}</p>{/if}
+		{#key mountKey}
+			{@render children()}
+		{/key}
 	</main>
 </div>
