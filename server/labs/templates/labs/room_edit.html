@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ room.name }} 자리 배치 · WCMS{% endblock %}
+{% block content %}
+<header class="page-head">
+<div><h1>{{ room.name }} 자리 배치</h1><p class="meta"><a href="{% url 'labs:rooms_manage' %}">실습실 관리</a></p></div>
+<form method="post" action="{% url 'labs:room_delete' room.id %}">{% csrf_token %}<button type="submit" class="btn dng">실습실 삭제</button></form>
+</header>
+<form method="post" class="stack">
+{% csrf_token %}
+<section class="card">
+<h2>크기</h2>
+<div class="form-row">
+{% for field in form %}
+<div class="stack">
+<label for="{{ field.id_for_label }}">{{ field.label }}</label>
+{{ field }}
+{% for error in field.errors %}<p class="error">{{ error }}</p>{% endfor %}
+</div>
+{% endfor %}
+</div>
+</section>
+<section class="card">
+<h2>자리</h2>
+{% if seat_error %}<p class="error" role="alert">{{ seat_error }}</p>{% endif %}
+<div class="seat-scroll">
+{% for row in seat_rows %}
+<div class="seat-edit-row">
+{% for seat in row %}
+<div class="seat-edit">
+<label for="{{ seat.name }}">{{ seat.number }}</label>
+<select id="{{ seat.name }}" name="{{ seat.name }}">
+<option value="">비움</option>
+{% for pc in pc_choices %}<option value="{{ pc.id }}"{% if pc.id == seat.current %} selected{% endif %}>{{ pc.text }}</option>{% endfor %}
+</select>
+</div>
+{% endfor %}
+</div>
+{% endfor %}
+</div>
+</section>
+<div><button type="submit" class="btn pri">저장</button></div>
+</form>
+{% endblock %}
