@@ -1,0 +1,70 @@
+@import 'tailwindcss';
+
+@theme {
+	--font-sans: 'IBM Plex Sans KR', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+	--color-ground: #f4f5f7;
+	--color-surface: #ffffff;
+	--color-ink: #15171c;
+	--color-muted: #5b616e;
+	--color-line: #e1e4ea;
+	--color-line-soft: #eef0f3;
+	--color-side: #111318;
+	--color-side-ink: #c9cdd6;
+	--color-side-muted: #8b919e;
+	--color-side-hover: #1c1f26;
+	--color-side-on: #262a36;
+	--color-accent: #2449d8;
+	--color-accent-dark: #1a36a8;
+	--color-ok: #13804a;
+	--color-danger: #b42318;
+	--color-danger-soft: #fce9e7;
+	--color-warn: #8a3a00;
+	--color-warn-soft: #fff4e5;
+}
+
+@layer base {
+	body {
+		@apply bg-ground font-sans text-sm text-ink;
+	}
+	a {
+		@apply text-accent hover:text-accent-dark;
+	}
+}
+
+@layer components {
+	.btn {
+		@apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[#d5d9e0] bg-surface px-4 font-medium whitespace-nowrap text-ink hover:bg-[#f1f3f6] disabled:cursor-not-allowed disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply border-accent bg-accent text-white hover:bg-accent-dark;
+	}
+	.btn-danger {
+		@apply border-[#ebc3bf] text-danger;
+	}
+	.btn-sm {
+		@apply min-h-9 px-3 text-[13px];
+	}
+	.card {
+		@apply rounded-[14px] border border-line bg-surface p-5;
+	}
+	.field {
+		@apply min-h-11 rounded-lg border border-[#d5d9e0] bg-surface px-3;
+	}
+	.label {
+		@apply text-[13px] font-semibold text-[#3d424d];
+	}
+	.error-box {
+		@apply rounded-lg bg-danger-soft px-3 py-2.5 text-[#a3211a];
+	}
+	.notice-box {
+		@apply rounded-lg bg-[#e6ecfb] px-3 py-2.5 text-accent-dark;
+	}
+	.page-title {
+		@apply text-[26px] font-bold;
+	}
+	.meta {
+		@apply text-muted;
+	}
+}
