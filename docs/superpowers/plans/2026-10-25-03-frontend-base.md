@@ -106,11 +106,12 @@ frontend/
 
 ```bash
 cd frontend
-pnpm add -D @sveltejs/kit @sveltejs/adapter-static @sveltejs/vite-plugin-svelte svelte svelte-check typescript vite tailwindcss @tailwindcss/vite vitest openapi-typescript
+pnpm add -D @sveltejs/kit@^2 @sveltejs/adapter-static@^3 @sveltejs/vite-plugin-svelte svelte@^5 svelte-check typescript@^5 vite tailwindcss@^4 @tailwindcss/vite@^4 vitest openapi-typescript@^7
 pnpm add openapi-fetch
+pnpm peers check
 ```
 
-Expected: `pnpm-lock.yaml` 생성. svelte가 5.x, @sveltejs/kit가 2.x, tailwindcss가 4.x인지 `pnpm list --depth 0`으로 확인한다. 다른 메이저가 깔렸으면 `@^5`, `@^2`, `@^4`로 다시 설치한다.
+Expected: `pnpm-lock.yaml` 생성, `pnpm peers check`에 맞지 않는 peer가 없다. 남으면 그 패키지를 peer 범위에 맞는 메이저로 고정해 다시 설치한다 (kit 3, adapter-static 4, TypeScript 7은 쓰지 않는다).
 
 - [ ] **Step 2: 설정 파일**
 
@@ -397,6 +398,11 @@ describe('fieldErrors', () => {
 	it('returns empty object without fields', () => {
 		expect(fieldErrors({ error: 'x', detail: 'y' })).toEqual({});
 	});
+	it('uses a generic message for nested item errors', () => {
+		expect(fieldErrors({ error: 'invalid', detail: 'x', fields: { seats: [{}, { pc: ['없는 PC'] }] } })).toEqual({
+			seats: '입력값을 확인하세요.'
+		});
+	});
 });
 ```
 
@@ -411,7 +417,7 @@ describe('safeNext', () => {
 		expect(safeNext('/settings/pins?x=1')).toBe('/settings/pins?x=1');
 	});
 	it('rejects external or missing targets', () => {
-		for (const value of [null, '', 'https://evil.example', '//evil.example', 'settings']) {
+		for (const value of [null, '', 'https://evil.example', '//evil.example', '/\\evil.example', 'settings']) {
 			expect(safeNext(value)).toBe('/');
 		}
 	});
@@ -496,7 +502,9 @@ export function fieldErrors(error: unknown): Record<string, string> {
 	}
 	const result: Record<string, string> = {};
 	for (const [field, value] of Object.entries(error.fields)) {
-		result[field] = Array.isArray(value) ? value.map(String).join(' ') : String(value);
+		const texts = (Array.isArray(value) ? value : [value]).filter((item): item is string => typeof item === 'string');
+		// 좌석 목록처럼 항목별 오류가 중첩되면 문자열이 없다. 그때는 일반 문구를 쓴다
+		result[field] = texts.length ? texts.join(' ') : '입력값을 확인하세요.';
 	}
 	return result;
 }
@@ -506,7 +514,7 @@ export function fieldErrors(error: unknown): Record<string, string> {
 
 ```ts
 export function safeNext(value: string | null): string {
-	if (value && value.startsWith('/') && !value.startsWith('//')) {
+	if (value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')) {
 		return value;
 	}
 	return '/';
@@ -713,6 +721,17 @@ describe('LiveSocket', () => {
 		expect(sockets[0].sent).toHaveLength(2);
 	});
 
+	it('close does not report a session end', () => {
+		const onEnd = vi.fn();
+		const live = new LiveSocket('ws://x/ws/live', create, onEnd);
+		live.subscribe('room:1', () => {});
+		sockets[0].open();
+		const socket = sockets[0];
+		live.close();
+		socket.drop(SESSION_ENDED);
+		expect(onEnd).not.toHaveBeenCalled();
+	});
+
 	it('ignores malformed messages', () => {
 		const live = new LiveSocket('ws://x/ws/live', create);
 		const handler = vi.fn();
@@ -888,7 +907,11 @@ export class LiveSocket {
 		this.stopped = true;
 		if (this.timer) clearTimeout(this.timer);
 		this.stopPing();
-		this.socket?.close();
+		if (this.socket) {
+			this.socket.onclose = null;
+			this.socket.onmessage = null;
+			this.socket.close();
+		}
 		this.socket = null;
 	}
 
@@ -942,6 +965,7 @@ export class LiveSocket {
 		} catch {
 			return;
 		}
+		if (typeof message !== 'object' || message === null) return;
 		const topic = 'topic' in message ? message.topic : undefined;
 		if (typeof topic !== 'string') return;
 		if (message.type === 'room_changed') {
@@ -991,7 +1015,7 @@ export function publicRoomReducer(
 `frontend/src/lib/live/index.ts`:
 
 ```ts
-import { goto } from '$app/navigation';
+import { goto, invalidateAll } from '$app/navigation';
 import { LiveSocket } from './socket';
 
 let shared: LiveSocket | null = null;
@@ -999,9 +1023,11 @@ let shared: LiveSocket | null = null;
 export function live(): LiveSocket {
 	if (!shared) {
 		const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-		shared = new LiveSocket(`${scheme}://${location.host}/ws/live`, undefined, () => {
+		shared = new LiveSocket(`${scheme}://${location.host}/ws/live`, undefined, async () => {
 			shared = null;
-			void goto('/login');
+			// 레이아웃의 me를 다시 읽어야 관리자 메뉴가 사라진다
+			await invalidateAll();
+			await goto('/login');
 		});
 	}
 	return shared;
@@ -1143,8 +1169,9 @@ export const load: LayoutLoad = async () => {
 	}
 
 	async function logout() {
-		await api.POST('/api/auth/logout');
+		// 서버는 로그아웃할 때 열린 소켓을 4401로 닫는다. 먼저 끊어야 세션 종료 처리(/login 이동)가 돌지 않는다
 		resetLive();
+		await api.POST('/api/auth/logout');
 		await invalidateAll();
 		await goto('/');
 	}
@@ -1610,6 +1637,7 @@ export const load: PageLoad = async ({ params }) => {
 	import AdminTile from '$lib/components/AdminTile.svelte';
 	import PublicTile from '$lib/components/PublicTile.svelte';
 	import SeatGrid from '$lib/components/SeatGrid.svelte';
+	import { invalidateAll } from '$app/navigation';
 	import type { LivePC, PublicSeat } from '$lib/api/types';
 	import { live } from '$lib/live';
 	import { adminRoomReducer, publicRoomReducer, seatKey } from '$lib/live/merge';
@@ -1631,7 +1659,17 @@ export const load: PageLoad = async ({ params }) => {
 		seats = new Map();
 		problem = '';
 		return live().subscribe(current, (message) => {
+			if (message.type === 'room_changed') {
+				// 크기, 이름, 통로가 바뀌었거나 지워졌을 수 있다. 좌석은 LiveSocket이 다시 구독해 받는다
+				void invalidateAll();
+				return;
+			}
 			if (message.type === 'error') {
+				if (message.error === 'forbidden_topic') {
+					// 서버 재시작 등으로 로그인이 풀렸다. me를 다시 읽으면 비로그인 토픽으로 바뀐다
+					void invalidateAll();
+					return;
+				}
 				problem = '실시간 정보를 불러오지 못했습니다.';
 				return;
 			}
@@ -2496,6 +2534,8 @@ pnpm dev
 ```
 
 `http://localhost:5173`. `/api`, `/ws`, `/client`는 `localhost:8000`의 서버로 넘긴다. 서버 API가 바뀌면 `pnpm gen:api`로 타입을 다시 만든다.
+
+`localhost`가 아닌 주소(같은 망의 다른 PC 등)로 열려면 서버에 `WCMS_ALLOWED_HOSTS`와 `WCMS_CSRF_TRUSTED_ORIGINS`를 맞춰 준다. 개발 서버는 세션을 프로세스 메모리에 두므로 서버를 다시 켜면 다시 로그인해야 한다.
 
 화면 테스트: `pnpm check && pnpm test`
 ````
