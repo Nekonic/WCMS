@@ -25,6 +25,20 @@ uv run uvicorn wcms.asgi:application --port 8000 --reload
 
 가짜 클라이언트: `uv run python tools/fake_client.py --pin <PIN> --count 8`
 
+## 화면 실행 (개발)
+
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+`http://localhost:5173`. `/api`, `/ws`, `/client`는 `localhost:8000`의 서버로 넘긴다. 서버 API가 바뀌면 `pnpm gen:api`로 타입을 다시 만든다.
+
+`localhost`가 아닌 주소(같은 망의 다른 PC 등)로 열려면 서버에 `WCMS_ALLOWED_HOSTS`와 `WCMS_CSRF_TRUSTED_ORIGINS`를 맞춰 준다. 개발 서버는 세션을 프로세스 메모리에 두므로 서버를 다시 켜면 다시 로그인해야 한다.
+
+화면 테스트: `pnpm check && pnpm test`
+
 ## 테스트
 
 ```bash
