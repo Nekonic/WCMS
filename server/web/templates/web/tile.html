@@ -1,7 +1,0 @@
-<article class="tile st-{{ pc.state }}" data-pc-id="{{ pc.id }}">
-<div class="screen"><span data-field="screen">{{ pc.state_label }}</span></div>
-<div class="tile-foot"><span class="tile-name">{{ pc.label }}</span><span class="tile-state" data-field="state">{{ pc.state_label }}</span></div>
-{% if is_admin %}
-<div class="tile-detail"><span data-field="user">{{ pc.user }}</span><span data-field="foreground">{% if pc.foreground %}{{ pc.foreground.process }}{% if pc.foreground.title %} · {{ pc.foreground.title }}{% endif %}{% endif %}</span></div>
-{% endif %}
-</article>

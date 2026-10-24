@@ -1,11 +1,11 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 
+from wcms.api import api_not_found
 from wcms.views import healthz
 
 urlpatterns = [
     path("healthz", healthz),
-    path("client/", include("clientapi.urls")),
-    path("", include("accounts.urls")),
-    path("", include("labs.urls")),
-    path("", include("web.urls")),
+    path("api/", include("wcms.api_urls")),
+    re_path(r"^api/", api_not_found),
+    path("client/", include("agent.urls")),
 ]
