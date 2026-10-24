@@ -91,3 +91,43 @@ def test_malformed_pins_do_not_count_toward_lockout(api):
         assert post(api, body(123456)).status_code == 400
         assert post(api, body("١٢٣٤٥٦")).status_code == 400
     assert post(api, body(new_pin())).status_code == 201
+
+
+def post_raw(api, text: str):
+    # APIClient의 JSON 렌더러는 짝 없는 서로게이트를 인코딩하지 못하므로 이스케이프된 JSON을 직접 보낸다
+    return api.post("/client/register", text, content_type="application/json")
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"hostname": "LAB\ud800"},
+        {"machine_guid": "g\udc00"},
+        {"version": "\ud800"},
+        {"specs": {"cpu": "i5\ud800"}},
+        {"specs": {"disks": [{"model": ["x", "\udfff"]}]}},
+        {"specs": {"key\ud800": 1}},
+    ],
+)
+def test_unencodable_strings_rejected(api, override):
+    response = post_raw(api, json.dumps(body(new_pin(), **override)))
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid"
+    assert not PC.objects.exists()
+
+
+def test_specs_size_is_measured_in_utf8_bytes(api):
+    # 한글 한 글자는 UTF-8로 3바이트, ASCII 이스케이프로는 6자. 기준은 바이트다
+    fits = {"x": "한" * 5400}
+    assert post(api, body(new_pin(), specs=fits)).status_code == 201
+    too_big = {"x": "한" * 5500}
+    assert post(api, body(new_pin(), specs=too_big, machine_guid="other")).status_code == 400
+
+
+def test_non_ascii_specs_render_in_pc_list(api, admin_api):
+    specs = {"cpu": "인텔 코어 i5", "os": "Windows 11 교육용"}
+    assert post(api, body(new_pin(), hostname="실습실-01", specs=specs)).status_code == 201
+    response = admin_api.get("/api/pcs")
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["specs"] == specs and row["hostname"] == "실습실-01"

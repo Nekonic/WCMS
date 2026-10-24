@@ -36,7 +36,10 @@ def _number(value, maximum: float) -> bool:
 
 
 def _text(value, limit: int) -> str | None:
-    return value[:limit] if isinstance(value, str) else None
+    """코드 포인트 기준으로 자르고, UTF-8로 표현할 수 없는 문자(짝 없는 서로게이트)는 ?로 바꾼다."""
+    if not isinstance(value, str):
+        return None
+    return value[:limit].encode("utf-8", "replace").decode("utf-8")
 
 
 def clean_status(message: dict) -> dict:

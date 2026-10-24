@@ -113,6 +113,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": ["wcms.api.SafeJSONParser"],
     "EXCEPTION_HANDLER": "wcms.api.exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # 학생이 보낸 문자열에 짝 없는 서로게이트가 섞여 있어도 응답이 500이 되지 않도록 ASCII 이스케이프로 출력한다
+    "UNICODE_JSON": False,
 }
 
 LANGUAGE_CODE = "ko-kr"

@@ -40,7 +40,11 @@ class RegisterSerializer(serializers.Serializer):
     def validate_specs(self, value) -> dict:
         if not isinstance(value, dict):
             raise serializers.ValidationError("객체여야 합니다.")
-        if len(json.dumps(value)) > MAX_SPECS_BYTES:
+        try:
+            encoded = json.dumps(value, ensure_ascii=False).encode("utf-8")
+        except UnicodeEncodeError:
+            raise serializers.ValidationError("UTF-8로 표현할 수 없는 문자열이 있습니다.")
+        if len(encoded) > MAX_SPECS_BYTES:
             raise serializers.ValidationError("너무 큽니다.")
         return value
 
