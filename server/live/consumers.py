@@ -1,8 +1,11 @@
 import logging
 import re
+from importlib import import_module
 
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from live.snapshots import pc_snapshot, public_room_snapshot, room_snapshot
@@ -18,6 +21,13 @@ CLOSE_SESSION_ENDED = 4401
 @database_sync_to_async
 def _still_admin(user_id: int) -> bool:
     return get_user_model().objects.filter(pk=user_id, is_active=True, is_staff=True).exists()
+
+
+@sync_to_async
+def _session_alive(session) -> bool:
+    """로그아웃(flush)이나 만료로 세션이 사라졌는지 세션 저장소에서 확인한다."""
+    key = getattr(session, "session_key", None) if session is not None else None
+    return bool(key) and import_module(settings.SESSION_ENGINE).SessionStore().exists(key)
 
 
 @database_sync_to_async
@@ -72,8 +82,8 @@ class LiveConsumer(AsyncJsonWebsocketConsumer):
         elif kind == "unsubscribe":
             await self.unsubscribe(message.get("topic"))
         elif kind == "ping":
-            await self.refresh_groups()
-            await self.send_json({"type": "pong"})
+            if await self.refresh_groups():
+                await self.send_json({"type": "pong"})
         else:
             await self.send_json({"type": "error", "error": "unknown_type"})
 
@@ -102,12 +112,20 @@ class LiveConsumer(AsyncJsonWebsocketConsumer):
             return
         await self.send_json({"type": "snapshot", "topic": topic, key: snapshot})
 
-    async def refresh_groups(self) -> None:
-        """그룹 구독은 채널 레이어에서 만료된다(24시간, Redis 재시작). ping마다 다시 넣어 연결이 조용히 끊기지 않게 한다."""
+    async def refresh_groups(self) -> bool:
+        """그룹 구독은 채널 레이어에서 만료된다(24시간, Redis 재시작). ping마다 다시 넣어 연결이 조용히 끊기지 않게 한다.
+
+        사용자 그룹이 만료된 사이에 로그아웃 알림(session.end)을 놓쳤을 수 있으므로, 관리자 연결은
+        다시 넣기 전에 권한과 세션을 확인하고 없으면 4401로 닫는다. 닫았으면 False.
+        """
+        if self.admin and not (await _still_admin(self.user.pk) and await _session_alive(self.scope.get("session"))):
+            await self.close(code=CLOSE_SESSION_ENDED)
+            return False
         for group in self.topics.values():
             await self.channel_layer.group_add(group, self.channel_name)
         if self.admin:
             await self.channel_layer.group_add(user_group(self.user.pk), self.channel_name)
+        return True
 
     async def unsubscribe(self, topic) -> None:
         group = self.topics.pop(topic, None) if isinstance(topic, str) else None

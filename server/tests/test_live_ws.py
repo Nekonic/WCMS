@@ -5,6 +5,7 @@ from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.contrib.sessions.backends.cache import SessionStore
 
 from agent import consumers, protocol, state
 from labs.models import PC, Room
@@ -42,9 +43,18 @@ def make_staff(is_staff: bool = True):
     return get_user_model().objects.create_user("staff", password="pw-very-long-123", is_staff=is_staff)
 
 
-async def live_as(user) -> WebsocketCommunicator:
+@sync_to_async
+def new_session() -> SessionStore:
+    session = SessionStore()
+    session.create()
+    return session
+
+
+async def live_as(user, session: SessionStore | None = None) -> WebsocketCommunicator:
     ws = WebsocketCommunicator(LiveConsumer.as_asgi(), "/ws/live")
     ws.scope["user"] = user
+    # AuthMiddlewareStack처럼 쿠키의 세션을 scope에 넣는다
+    ws.scope["session"] = session or await new_session()
     connected, _ = await ws.connect()
     assert connected
     return ws
@@ -375,4 +385,57 @@ async def test_unseated_pc_reaches_pc_topic_only():
     update = await ws.receive_json_from(timeout=1)
     assert update["topic"] == f"pc:{pc.id}" and update["pc"]["online"] is True
     assert await ws.receive_nothing(timeout=0.3)
+    await ws.disconnect()
+
+
+async def test_admin_ping_with_live_session_gets_pong():
+    ws = await live_as(await make_staff())
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
+    await ws.disconnect()
+
+
+async def test_admin_ping_after_session_flushed_closes_4401():
+    # 로그아웃 알림(session.end)을 놓친 연결도 다음 ping에서 끊긴다
+    session = await new_session()
+    ws = await live_as(await make_staff(), session)
+    await sync_to_async(session.flush)()
+    await ws.send_json_to({"type": "ping"})
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == 4401
+
+
+async def test_admin_ping_without_session_closes_4401():
+    ws = WebsocketCommunicator(LiveConsumer.as_asgi(), "/ws/live")
+    ws.scope["user"] = await make_staff()
+    assert (await ws.connect())[0]
+    await ws.send_json_to({"type": "ping"})
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == 4401
+
+
+async def test_admin_ping_after_demotion_closes_4401():
+    user = await make_staff()
+    ws = await live_as(user)
+    await database_sync_to_async(get_user_model().objects.filter(pk=user.pk).update)(is_staff=False)
+    await ws.send_json_to({"type": "ping"})
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == 4401
+
+
+async def test_admin_ping_after_deactivation_closes_4401():
+    user = await make_staff()
+    ws = await live_as(user)
+    await database_sync_to_async(get_user_model().objects.filter(pk=user.pk).update)(is_active=False)
+    await ws.send_json_to({"type": "ping"})
+    closed = await ws.receive_output(timeout=1)
+    assert closed["type"] == "websocket.close" and closed["code"] == 4401
+
+
+async def test_anonymous_ping_ignores_session():
+    session = await new_session()
+    ws = await live_as(AnonymousUser(), session)
+    await sync_to_async(session.flush)()
+    await ws.send_json_to({"type": "ping"})
+    assert await ws.receive_json_from() == {"type": "pong"}
     await ws.disconnect()
