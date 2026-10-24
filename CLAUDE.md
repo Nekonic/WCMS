@@ -7,6 +7,8 @@
 
 - server/: Django + DRF + Channels. 명령은 server/ 에서 `uv run ...`. 패키지 추가는 `uv add` (pip 직접 사용 금지)
 - frontend/: SvelteKit SPA. 명령은 frontend/ 에서 pnpm. API 타입은 `pnpm gen:api`로 생성 (손으로 쓰지 않음). `{@html}` 금지 (등록 QR만 예외)
-- 테스트: `cd server && uv run pytest`
+- deploy/: Docker compose (nginx, 서버, Redis). 운영 웹 443, 실습실 PC 8889. 8888은 개발 서버 전용. 확인은 `deploy/smoke.sh`
+- 테스트: `cd server && uv run pytest`, `cd frontend && pnpm check && pnpm test`
+- 브랜치: main(릴리스), dev(개발), 작업은 dev에서 `feat/<주제>`. PR 없이 로컬 병합
 - 버전: 루트 VERSION 파일 (형식 2026.1)
 - 학생이 조작할 수 있는 값(창 제목, 프로세스 이름, 사용자 이름, 호스트 이름, 명령 출력)은 신뢰하지 않는다. 비로그인 응답에는 좌석 라벨과 켜짐/꺼짐만
