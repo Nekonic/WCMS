@@ -1,0 +1,12 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.sqlite3*
+frontend/.svelte-kit
+frontend/build
+server/tools/.fake_clients.json
+deploy/.env
+.git
+.superpowers
+.claude
