@@ -1,0 +1,7 @@
+{
+  "pin": "123456",
+  "hostname": "LAB301-13",
+  "machine_guid": "3f2a9c4e-1b7d-4e8a-9c2f-5d6e7f8a9b0c",
+  "specs": {"cpu": "Intel Core i5-12400", "ram_gb": 16, "os": "Windows 11 Pro 24H2"},
+  "version": "2026.1"
+}

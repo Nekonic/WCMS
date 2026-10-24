@@ -1,0 +1,11 @@
+{
+  "type": "status",
+  "cpu": 12.5,
+  "mem_used": 8123456789,
+  "mem_total": 17179869184,
+  "disk_used": 246000000000,
+  "disk_total": 512000000000,
+  "user": "Student",
+  "session": "active",
+  "foreground": {"process": "chrome.exe", "title": "자료구조 3주차 - Google Docs - Chrome"}
+}
